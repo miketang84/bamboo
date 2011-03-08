@@ -27,5 +27,16 @@ module('bamboo', package.seeall)
 -- 一些辅助函数
 ------------------------
 
+------------------------------------------------------------------------
+-- 创建全局插件列表结构
+PLUGIN_LIST = {}
 
-
+registerPlugin = function (name, func)
+	checkType(name, func, 'string', 'function')
+	assert( name ~= '', 'Plugin name must not be blank.' )
+	
+	PLUGIN_LIST[name] = func
+	print(name, PLUGIN_LIST[name])
+	return true
+end
+------------------------------------------------------------------------

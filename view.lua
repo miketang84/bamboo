@@ -1,6 +1,7 @@
 module(..., package.seeall)
 
-local TEMPLATES = APP_DIR + "views/"
+local PLUGIN_LIST = bamboo.PLUGIN_LIST
+local tmpl_dir = './'
 
 -- 模板渲染指令
 local VIEW_ACTIONS = {
@@ -10,19 +11,36 @@ local VIEW_ACTIONS = {
     end,
     -- 标记中嵌入lua变量
     ['{{'] = function(code)
-        -- 如果要找的变量不存在，则渲染为空字符串
-        if not code then code = "" end
+        -- 如果要找的变量不存在，则渲染为空字符串，这只一句目前只能处理{{}}
+        -- 这样的情况，而并不能处理变量不存在的情况
+        -- 可以通过执行pcall(loadstring())来检查一个变量是否存在
+        if not code then code = '""' end
         return ('_result[#_result+1] = %s'):format(code)
     end,
     -- 标记中嵌入文件名字符串，用于包含其它文件
     ['{('] = function(code)
-        return ([[             
+        return ([[       
             if not _children[%s] then
                 local View = require 'bamboo.view'
                 _children[%s] = View(%s)
             end
-
-            _result[#_result+1] = _children[%s](getfenv())
+            -- getfenv()，用于传递当前函数所在环境，默认即全局变量
+            local env = getfenv()
+            -- 6和7只是经验值，目前还无法找出一个更好的办法来将局部变量（不同情况下名字不同）扩充到
+            -- 全局环境中去。这里这几个语句主要是抽取泛型for中的暴露出来的局部变量
+            local kstr, kstr_val = debug.getlocal(1, 6)
+            local vstr, vstr_val = debug.getlocal(1, 7)
+            --print(kstr, kstr_val)
+            --print(vstr, vstr_val)
+            if kstr and vstr then 
+                if type(kstr_val) == 'number' or type(kstr_val) == 'string' then
+                    if type(vstr_val) == 'string' or type(vstr_val) == 'table' then
+                        env[kstr] = kstr_val
+                        env[vstr] = vstr_val
+                    end
+                end
+            end
+            _result[#_result+1] = _children[%s](env)
         ]]):format(code, code, code, code)
     end,
     -- 标记中嵌入转义后的html代码，安全措施
@@ -36,7 +54,7 @@ local VIEW_ACTIONS = {
     end,
     -- 在这个函数中，传进来的code就是被继承的基页名称
     ['{:'] = function(code, this_page)
-        local base_page = io.loadFile(TEMPLATES, unseri(code))
+        local base_page = io.loadFile(tmpl_dir, unseri(code))
         local new_page = base_page
         for block in new_page:gmatch("({%[[%s_%w%.%-\'\"]+%]})") do
             -- 获取到里面的内容
@@ -55,6 +73,41 @@ local VIEW_ACTIONS = {
         return new_page
     end,
     
+    -- {^ 插件名称  参数1=值1, 参数2=值2, ....^}
+    ['{^'] = function (code)
+        local code = code:trim()
+        assert( code ~= '', 'Plugin name must not be blank.')
+        local divider_loc = code:find(' ')
+        local plugin_name = nil
+        local param_str = nil
+        local params = {}
+        
+        if divider_loc then
+            -- 如果找到了
+            plugin_name = code:sub(1, divider_loc - 1)
+            param_str = code:sub(divider_loc + 1)
+            
+            local tlist = param_str:trim():split(',')
+            for i, v in ipairs(tlist) do
+                local v = v:trim()
+                local var, val = v:splitOut('=')
+                var = var:trim()
+                val = val:trim()
+                assert( var ~= '' )
+                assert( val ~= '' )
+                
+                params[var] = val
+            end
+            
+            return ('_result[#_result+1] = [[%s]]'):format(PLUGIN_LIST[plugin_name](params))
+        else
+            -- 如果divider_loc是nil, 表明插件不带参数
+            plugin_name = code
+            -- 注：下面那个%s中的引号必不可少，因为要被认成字符串
+            return ('_result[#_result+1] = [[%s]]'):format(PLUGIN_LIST[plugin_name]())
+        end
+    end,
+    
 }
 
 
@@ -70,16 +123,28 @@ local View = Object:extend {
     -- @return 一个函数 这个函数在后面的使用中接收一个table作为参数，以完成最终的模板渲染
     ------------------------------------------------------------------------
     init = function (self, name) 
-        assert(posix.access(TEMPLATES + name), "Template " + TEMPLATES + name + " does not exist or wrong permissions.")
+        -- 首先，找用户指定路径
+        if USERDEFINED_VIEWS and posix.access(USERDEFINED_VIEWS + name) then
+            tmpl_dir = USERDEFINED_VIEWS
+        -- 第二，找工程下的views目录
+        elseif posix.access( APP_DIR + "views/" + name) then
+            tmpl_dir = APP_DIR + "views/"
+        -- 第三，找工程下的plugins目录
+        elseif posix.access( APP_DIR + "plugins/" + name) then
+            tmpl_dir = APP_DIR + "plugins/"
+        else
+            error("Template " + tmpl_dir + name + " does not exist or wrong permissions.")
+        end
+        -- print('Template file dir:', tmpl_dir, name)
 
         if os.getenv('PROD') then
-            local tmpf = io.loadFile(TEMPLATES, name)
+            local tmpf = io.loadFile(tmpl_dir, name)
             tmpf = self.preprocess(tmpf)
             return self.compileView(tmpf, name)
         else
             return function (params)
-                local tmpf = io.loadFile(TEMPLATES, name)
-                assert(tmpf, "Template " + TEMPLATES + name + " does not exist.")
+                local tmpf = io.loadFile(tmpl_dir, name)
+                assert(tmpf, "Template " + tmpl_dir + name + " does not exist.")
                 tmpf = self.preprocess(tmpf)
                 return self.compileView(tmpf, name)(params)
             end
@@ -94,7 +159,7 @@ local View = Object:extend {
             local headtwo = block:sub(1,2)
             local block_content = block:sub(3, -3)
             assert(headtwo == '{:', 'The inheriate tag must be put in front of the page.') 
-            
+
             local act = VIEW_ACTIONS[headtwo]
             return act(block_content, tmpl)
         -- 如果页面没有继承，则直接返回
@@ -132,6 +197,7 @@ local View = Object:extend {
         code[#code+1] = 'return table.concat(_result)'
 
         code = table.concat(code, '\n')
+        --print(code:sub(1, 3000))
         local func, err = loadstring(code, name)
 
         if err then

@@ -40,18 +40,11 @@ end
 -- @return 新创建的连接
 ------------------------------------------------------------------------
 function connect(config)
-    -- 检查是否有全局变量APP_DIR
-    local flag = false
-    if APP_DIR then
-        if APP_DIR ~= './' then
-            flag = true
-        end
-    end
     -- 如果存在非默认目录的全局应用路径，则对之前定义的zmp信息通道的路径做相应修改
     local sub_addr, pub_addr = config.sub_addr, config.pub_addr
-    if flag then
-        sub_addr = sub_addr:sub(1,6) + APP_DIR + sub_addr:sub(7)
-        pub_addr = pub_addr:sub(1,6) + APP_DIR + pub_addr:sub(7)
+    if config.monserver_dir then
+        sub_addr = sub_addr:sub(1,6) + config.monserver_dir + sub_addr:sub(7)
+        pub_addr = pub_addr:sub(1,6) + config.monserver_dir + pub_addr:sub(7)
     end
     print("CONNECTING", config.route, config.sender_id, sub_addr, pub_addr)
   

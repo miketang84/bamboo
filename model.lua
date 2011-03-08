@@ -161,8 +161,8 @@ local Model = Object:extend {
 		local model_key = self.__name + ':' + name
 		local index = db:get(model_key)
 		if not index then
-			-- 如果不存在NameIndex，就返回name本身，因为name通常就表示这个index
-			return name
+			-- 如果不存在NameIndex，就返回nil, 以示区别
+			return nil
 		end
 		
 		return index
@@ -187,7 +187,8 @@ local Model = Object:extend {
 			data = db:hgetall(model_key) 
 		else
 			model_idkey = self.__name + ':' + tostring(id)
-			data = db:hgetall(model_idkey) 
+			data = db:hgetall(model_idkey)
+			-- 注意，这里要判断是否获取到了值，返回值有可能是一张空表 
 		end
 		
 		table.update(obj, data)

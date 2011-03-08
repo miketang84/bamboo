@@ -7,6 +7,11 @@ local PROCESS_DIR = posix.getcwd()
 
 require 'lglib'
 require 'bamboo'
+
+-- 要传递给插件的渲染函数中去的全局变量
+web = nil
+req = nil
+
 ------------------------------------------------------------------------
 -- 把应用路径放在这里，并且声明为全局变量，主要就是将其传递给bamboo的子模块使用
 APP_DIR = arg[1]
@@ -16,7 +21,7 @@ local handler_file = arg[2]
 local errors = require 'bamboo.errors'
 local redis = require 'bamboo.redis'
 
-local CONFIG_FILE = APP_DIR + "app/settings.lua"
+local CONFIG_FILE = APP_DIR + "conf/settings.lua"
 -- 工程目录完整路径
 local PROJECT_DIR = PROCESS_DIR + '/' + APP_DIR
 -- 将工程目录也加入到搜索路径中去，以实现工程目录中的模块相互调用
@@ -46,11 +51,13 @@ local WHICH_DB = config.WHICH_DB or 0
 -- 全局对象。由于bamboo的同一个应用可能会有很多子进程。把这一句也在这里的话，
 -- 我们会为每一个子进程生成一个数据库连接（从redis方面看，这也是无关紧要的）。
 BAMBOO_DB = redis.connect {host=DB_HOST, port=DB_PORT, which = WHICH_DB}
+--ptable(BAMBOO_DB)
 
 local Web = require 'bamboo.web'
 local Session = require 'bamboo.session'
 local User = require 'bamboo.user'
 
+------------------------------------------------------------------------
 -- 定义一个新环境
 local childenv = {}
 -- 加载目标handler_xxx.lua文件，将其环境设为childenv，
@@ -60,8 +67,12 @@ setfenv(assert(loadfile(handler_file)), setmetatable(childenv, {__index=_G}))()
 print('------------ URL Settings --------------')
 ptable(childenv.URLS)
 print('----------------------------------------')
-
 local URLS = childenv.URLS
+------------------------------------------------------------------------
+
+USERDEFINED_VIEWS = './views/'
+
+
 
 -- 检查URLS的结构
 local function checkURLS(urls)
@@ -236,6 +247,7 @@ local function runCoro(conn, main, req, conn_id, path, before, after)
     if not state then
 		-- 创建一个Web对象实例，命名为state
         state = Web(conn, main, req, true)
+		_G['web'] = state
         -- 在状态机中记录下这个对象实例，以连接编码为key
 		STATE[path] = {}
 		STATE[path][conn_id] = state
@@ -277,7 +289,8 @@ end
 ------------------------------------------------------------------------
 local function runStateless(conn, main, req, before, after)
     local state = Web(conn, main, req, false)
-
+	_G['web'] = state
+	
     local good, err = execState(state, req, before, after, function(s,r)
         return pcall(s.controller, s, r)
     end)
@@ -307,6 +320,7 @@ function run(conn, config)
         -- Get a message from the Mongrel2 server
 		-- 从Mongrel2 server那获得一条消息，没有的话就阻塞等待
         req, err = conn:recv()
+		_G['req'] = req
 
         if req and not err then
 			-- 如果HTTP指令不在限制范围内，直接报错
@@ -337,6 +351,9 @@ function run(conn, config)
 					-- req.session = {}
 					-- METHOD
 					req.METHOD = req.headers.METHOD
+					if req.headers['x-requested-with'] == 'XMLHttpRequest' then
+						req['ajax'] = true
+					end
 					-- 经过这里定义后，req中能直接获得的属性有：
 					-- conn_id		连接唯一编码，如：5
 					-- path			访问路径，如：/arc
@@ -351,9 +368,9 @@ function run(conn, config)
 					-- 数据库的session记录
 					-- 这句使进来的请求的req.session表的内容，总是与数据库中的数据同步的
 					-- 经过这一步后，req中会获得如下属性
-					-- session 当前session表
-					-- user 当前用户，如果登录了，就是一个User对象；如果没登录，就为nil。
+					-- session 当前session表					
 					Session:set(req)
+					-- 这一句执行后，req中会带一个user属性，如果Session中有user_id这个键值的话
 					User:set(req)
 					
 					-- 状态保护，如果在一个系列状态中途执行其它操作，则清空这个状态，重新开始
@@ -435,8 +452,15 @@ function start(config)
     -- allowed_methods_header字段是一个字符串
 	config.allowed_methods_header = table.concat(allowed, ' ')
 	
-	config.config_db = APP_DIR + config.config_db
-	config.views = APP_DIR + config.views
+	if config.monserver_dir then
+		config.config_db = config.monserver_dir + config.config_db
+	end
+	
+	if not isFalse(config.views) then
+		config.views = APP_DIR + config.views
+		_G['USERDEFINED_VIEWS'] = config.views
+	end
+	
 	
 	
 	-- 加载sqlite3中的配置
