@@ -71,6 +71,17 @@ end
 local Upload = Model:extend {
 	__tag = 'Bamboo.Model.Upload';
 	__name = 'Upload';
+	__desc = 'User\'s upload files.';
+	__fields = {
+		'name', 		-- 此文件的名字
+		'fullname', 	-- 此文件的可访问URI
+		'size', 		-- 此文件大小，以字节计算
+		'timestamp', 	-- 上传成功的时间戳
+		'desc',			-- 此文件的描述
+		
+		'page',			-- 此文件依附于哪一个页面，可省略
+		'user',			-- 此文件由哪个用户上传
+	};
 	
 	init = function (self, t)
 		if not t then return self end

@@ -4,6 +4,15 @@ module(..., package.seeall)
 local db = BAMBOO_DB
 local model_counter = 0;
 
+
+local getkey = function (pattern)
+	local keytable = db:keys(pattern)
+	if #keytable == 0 then return nil end
+	if #keytable > 1 then error('Instances suitable is more than one.') end
+	-- 只有一个实例的key了
+	return keytable[1]
+end
+
 ------------------------------------------------------------------------
 -- 数据库检索的限制函数集
 -- 由于使用的时候希望不再做导入工作，所以在加载Model模块的时候直接导入到全局环境中
@@ -119,16 +128,17 @@ local Model = Object:extend {
 	-- __name和__tag的最后一个单词不一定要保持一致
 	__name = 'Model';
     -- nothing to do
+    -- 生成模型实例的id
 	init = function (self)
 		self.id = self:getCounter() + 1
 		return self 
 	end;
     
-    -- 在数据库中创建一个hash表项，保存模型实例
+    -- 实例函数。在数据库中创建一个hash表项，保存模型实例
     save = function (self)
-        local model_key = self.__name + ':' + tostring(self.id)
+        local model_key = self.__name + ':' + tostring(self.id) + ':' + self.name
 		-- 如果之前数据库中没有这个对象，即是新创建的情况
-		if not db:hget(model_key, 'id') then
+		if not db:exists(model_key) then
 			-- 对象类别的总数计数器就加1
 			db:incr(self.__name + ':__counter')
 		end
@@ -136,7 +146,7 @@ local Model = Object:extend {
 		for k, v in pairs(self) do
 			-- 保存的时候序列化一下。跟Django一样，每一个save时，
 			-- 所有字段都全部保存，包括id
-			-- 只保存正常数据，不保存函数和继承自父类的私有属性
+			-- 只保存正常数据，不保存函数和继承自父类的私有属性，以及自带的函数
 			if not k:startsWith('_') and type(v) ~= 'function' then
 				db:hset(model_key, k, seri(v))
 			end
@@ -145,51 +155,81 @@ local Model = Object:extend {
         return true
     end;
     
-    -- 
-    saveName = function (self)
-		local model_key = self.__name + ':' + self.name
-		-- 如果之前数据库中没有这个对象，即是新创建的情况
-		if not db:exists(model_key) then
-			-- 确保只有在这个key值不存在的情况下才写
-			db:setnx(model_key, tostring(self.id))
-		end
-		return true
-    end;
-    
-    -- 类函数。由类对象访问
-    getNameIndex = function (self, name)
-		local model_key = self.__name + ':' + name
-		local index = db:get(model_key)
-		if not index then
-			-- 如果不存在NameIndex，就返回nil, 以示区别
-			return nil
+    -- 实例函数。判断实例对象是不是空的。即数据库中的没有符合要求的对象。
+    -- 下面是我们的规则
+    isEmpty = function (self)
+		local flag = false
+		for k, _ in pairs(self) do
+			if not k:startsWith('_') 		-- 去掉_parent
+			and type(v) ~= 'function' 		-- 去掉new, extend两个函数
+			and k ~= 'id'					-- 去掉id字段
+			and k ~= 'name'					-- 去掉name字段
+			then
+				return true
+			end
 		end
 		
-		return index
+		return false
     end;
+    
+    -- 不再需要saveName函数
+    --saveName = function (self)
+		--local model_key = self.__name + ':' + self.name
+		---- 如果之前数据库中没有这个对象，即是新创建的情况
+		--if not db:exists(model_key) then
+			---- 确保只有在这个key值不存在的情况下才写
+			--db:setnx(model_key, tostring(self.id))
+		--end
+		--return true
+    --end;
+    
+    -- 类函数。由类对象访问
+    -- 根据名字返回相应的id
+    getIdByName = function (self, name)
+		local model_key = self.__name + ':[0-9]*:' + name
+		local key = getkey(model_key)
+		-- 如果不存在id index，就返回nil, 以示区别
+		if not key then return nil	end
+		
+		-- 只找第一个，限制一个结果
+		return index[1]:match('^%w+:(%d+):[%w%_%.%-]+$')
+    end;
+    -- 类函数。由类对象访问
+    -- 根据id返回相应的名字
+    getNameById = function (self, id)
+		local model_key = self.__name + ':' + tostring(id) + ':*'
+		local key = getkey(model_key)
+		-- 如果不存在id index，就返回nil, 以示区别
+		if not key then return nil	end
+		
+		-- 只找第一个，限制一个结果
+		return key:match('^%w+:%d+:([%w%_%.%-]+)$')
+    end;
+    
+    
 	-- 类函数。由类对象访问
 	getById = function (self, id)
 		local obj = self()
-		local model_key = self.__name + ':' + tostring(id)
-		local data = db:hgetall(model_key)
+		local model_key = self.__name + ':' + tostring(id) + ':*'
+		local key = getkey(model_key)
+		-- 如果没找到，就直接返回一个空表
+		if not key then print('Can\'t find any object by', model_key); return {} end
+		local data = db:hgetall(key)
+		if isFalse(data) then print('Can\'t get object by', key); return {} end
+		
 		table.update(obj, data)
 		return obj
 	end;
 	-- 类函数。由类对象访问
 	-- 返回实例对象，此对象的数据由数据库中的数据更新
 	getByName = function (self, name)
-		local data
 		local obj = self()
-		local model_key = self.__name + ':' + tostring(name)
-		
-		local id = db:get(model_key) 
-		if not id then
-			data = db:hgetall(model_key) 
-		else
-			model_idkey = self.__name + ':' + tostring(id)
-			data = db:hgetall(model_idkey)
-			-- 注意，这里要判断是否获取到了值，返回值有可能是一张空表 
-		end
+		local model_key = self.__name + ':[0-9]*:' + name
+		local key = getkey(model_key)
+		-- 如果没找到，就直接返回一个空表
+		if not key then return {} end
+		local data = db:hgetall(key)
+		if isFalse(data) then print('Can\'t get object by', key); return {} end
 		
 		table.update(obj, data)
 		return obj
@@ -198,12 +238,19 @@ local Model = Object:extend {
 	-- 返回此类中所有的成员
 	all = function (self)
 		local all_instaces = {}
-		local all_keys = db:keys(self.__name + ':*')
+		local all_keys = db:keys(self.__name + ':[0-9]*:*')
 		for _, key in ipairs(all_keys) do
 			table.insert(all_instaces, db:hgetall(key))
 		end
 		return all_instaces
 	end;
+	
+	-- 返回此类中实例实际个数
+	number = function (self)
+		local all_keys = db:keys(self.__name + ':[0-9]*:*')
+		return #all_keys
+	end;
+	
 	
     -- 返回第一个查询对象，
     get = function (self, query)

@@ -40,6 +40,7 @@ local VIEW_ACTIONS = {
                     end
                 end
             end
+            
             _result[#_result+1] = _children[%s](env)
         ]]):format(code, code, code, code)
     end,
@@ -64,12 +65,15 @@ local VIEW_ACTIONS = {
             local this_part = this_page:match('{%[%s*======*%s*' + block_content + '%s*======*%s+(.+)%s*%]}')
             -- 如果this_part有值
             if this_part then
+                -- gsub的第二个参数，将会识别模式匹配，所以要将%变成%%才行。
+                -- gsub应该提供一个附加参数，以判断是否识别模式匹配，不然一点都不方便
+                this_part = this_part:gsub('%%', '%%%%')
                 new_page = new_page:gsub('{%[ *' + block_content + ' *%]}', this_part)
             else
                 new_page = new_page:gsub('{%[ *' + block_content + ' *%]}', "")
             end
-            
         end
+        
         return new_page
     end,
     
