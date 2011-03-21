@@ -374,6 +374,31 @@ local Model = Object:extend {
 		return tonumber(db:get(model_name + ':__counter') or 0)
     end;
 
+	--------------------------------------------------------------------
+	-- 一些辅助函数
+	--------------------------------------------------------------------
+	recordMany = function (self, field, new_id)
+		checkType(field, 'string')
+		self[field] = ('%s %s'):format((self[field] or ''), new_id)
+		return self
+	end;
+	
+	parseMany = function (self, liststr, link_model)
+		local model = link_model
+		local obj_list = {}
+		if isFalse(liststr) then return obj_list end
+		local list = liststr:trim():split(' ')
+		for i, v in ipairs(list) do
+			local obj = model:getById(v)
+			-- 这里，要检查返回的obj是不是空对象，而不仅仅是不是空表
+			if not isFalse(obj) then
+				table.insert(obj_list, obj)
+			end
+		end
+		
+		return obj_list
+	end;
+
 }
 
 return Model
