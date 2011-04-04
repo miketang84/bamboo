@@ -131,6 +131,7 @@ local Model = Object:extend {
     -- 生成模型实例的id
 	init = function (self)
 		self.id = self:getCounter() + 1
+		self.name = self.id
 		return self 
 	end;
     
@@ -239,10 +240,18 @@ local Model = Object:extend {
 	all = function (self)
 		local all_instaces = {}
 		local all_keys = db:keys(self.__name + ':[0-9]*:*')
+		local obj, data
 		for _, key in ipairs(all_keys) do
-			table.insert(all_instaces, db:hgetall(key))
+			obj = self()
+			data = db:hgetall(key)
+			table.update(obj, data)
+			table.insert(all_instaces, obj)
 		end
 		return all_instaces
+	end;
+	
+	allKeys = function (self)
+		return db:keys(self.__name + ':[0-9]*:*')
 	end;
 	
 	-- 返回此类中实例实际个数
@@ -388,6 +397,7 @@ local Model = Object:extend {
 		local obj_list = {}
 		if isFalse(liststr) then return obj_list end
 		local list = liststr:trim():split(' ')
+		if isFalse(list) then return obj_list end
 		for i, v in ipairs(list) do
 			local obj = model:getById(v)
 			-- 这里，要检查返回的obj是不是空对象，而不仅仅是不是空表

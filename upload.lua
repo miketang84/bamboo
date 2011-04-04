@@ -67,6 +67,22 @@ local function savefile(t)
 	return fullname, newname
 end
 
+local function computeNewFilename(oldname)
+	-- 分离文件的文件名和扩展名
+	local main, ext = oldname:match('^(.+)(%.%w+)$')
+	-- 计算是否存在同名文件
+	local tstr = ''
+	local i = 0
+	while posix.stat( main + tstr + ext ) do
+		i = i + 1
+		tstr = '_' + tostring(i)
+	end
+	-- 得出新的文件名
+	local newname = main + tstr + ext
+
+	return newname
+end
+
 
 local Upload = Model:extend {
 	__tag = 'Bamboo.Model.Upload';
@@ -147,6 +163,7 @@ local Upload = Model:extend {
 	
 	process = function (self, web, req, dest_dir, prefix, postfix)
 	    if req.headers['x-requested-with'] then
+			-- 如果是html5上传
 			local file_instance = self { web = web, req = req, dest_dir = dest_dir, prefix = prefix, postfix = postfix}
 			if file_instance then
 				file_instance:save()
@@ -156,6 +173,7 @@ local Upload = Model:extend {
 				return nil
 			end
 		else
+			-- 如果是html4上传，单文件也会放到一个list中返回
 			-- ptable(req)
 			-- ptable(req.headers)
 			local params = Form:parse(req)
@@ -169,7 +187,9 @@ local Upload = Model:extend {
 	
 	end;
 	
-
+	computeNewFilename = function (self, oldname)
+		return computeNewFilename(oldname)
+	end;
 }
 
 return Upload

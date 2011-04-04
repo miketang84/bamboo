@@ -107,8 +107,8 @@ local VIEW_ACTIONS = {
         else
             -- 如果divider_loc是nil, 表明插件不带参数
             plugin_name = code
-            -- 注：下面那个%s中的引号必不可少，因为要被认成字符串
-            return ('_result[#_result+1] = [[%s]]'):format(PLUGIN_LIST[plugin_name]())
+            -- 注：下面那个%s两边的引号必不可少，因为要被认成字符串
+            return ('_result[#_result+1] = [[%s]]'):format(PLUGIN_LIST[plugin_name]({}))
         end
     end,
     
