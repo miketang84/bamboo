@@ -3,7 +3,9 @@
 require 'posix'
 require 'signal'
 
+local env = {}
 SCRIPT_PIDS = {}
+
 
 signal.signal("SIGINT", function (...)
     for script, pid in pairs(SCRIPT_PIDS) do
@@ -262,6 +264,29 @@ COMMANDS = {
         print(('[OK] Successfully created plugin %s.'):format(plugin_name))  
     end;
     
+    createmodel = function(settings)
+        -- 要求，此命令必须在工程目录下执行，不然没有效果
+        local model_name = settings[1] or 'bamboomodel'
+        local bamboo_dir = env.bamboo_dir or '/usr/local/share/lua/5.1/bamboo/'
+        
+        local newfile = ('./%s.lua'):format(model_name:lower())
+        -- 拷贝文件
+        local cmdstr = ('cp -rf %s/cmd_tmpls/createmodel/newmodel.lua %s'):format(bamboo_dir, newfile)
+        os.execute(cmdstr)
+
+        -- 修改appname/app/settings.lua中的md5字串
+        local fd = io.open(newfile, 'r')
+		local ctx = fd:read('*all')
+		fd:close()
+		ctx = ctx:gsub('%$MODEL', model_name)
+
+		local fd = io.open(newfile, 'w')
+		fd:write(ctx)
+		fd:close()
+        
+        print(('[OK] Successfully created model %s.'):format(model_name))  
+    end;
+    
     initdb = function (settings)
         local data_file = settings[1] or 'initialdata.lua'
         -- 加载并运行这个文件，释放数据到env中
@@ -309,6 +334,10 @@ end
 
 
 local cmd, settings = parse_args(arg)
+
+-- 将全局的一个配置加载进来
+setfenv(assert(loadfile('/etc/monserver.lua')), env)()
+
 if not cmd then print('No cmd input.'); return  end
 --for i, v in pairs(settings) do
 --	print(i, v)
