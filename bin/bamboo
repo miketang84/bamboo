@@ -199,7 +199,7 @@ COMMANDS = {
         local monserver_dir = env.monserver_dir or '/root/workspace/monserver/'  -- temp
         -- 创建目录
 		-- 确保没有同名目录存在
-        assert(posix.stat(appname) == nil, '[Error] Some file or directory has this name already！')
+        assert(posix.stat(appname) == nil, '[Error] Some file or directory of this name exists！')
         posix.mkdir(appname)
         -- 拷贝文件
         local cmdstr = ('cp -rf %s/cmd_tmpls/createapp/* ./%s/'):format(bamboo_dir, appname)
