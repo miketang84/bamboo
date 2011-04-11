@@ -64,10 +64,13 @@ local childenv = {}
 -- 目的是将那个文件中定义的全局变量释放到childenv来
 setfenv(assert(loadfile(handler_file)), setmetatable(childenv, {__index=_G}))()
 
+-- 将主URLS定义融合到全局的URLS中来
+table.update(bamboo.URLS, childenv.URLS)
+local URLS = bamboo.URLS
 print('------------ URL Settings --------------')
-ptable(childenv.URLS)
+ptable(URLS)
 print('----------------------------------------')
-local URLS = childenv.URLS
+
 ------------------------------------------------------------------------
 
 USERDEFINED_VIEWS = './views/'
@@ -452,6 +455,7 @@ function start(config)
     -- allowed_methods_header字段是一个字符串
 	config.allowed_methods_header = table.concat(allowed, ' ')
 	
+	setfenv(assert(loadfile('/etc/monserver.lua')), config)()
 	if config.monserver_dir then
 		config.config_db = config.monserver_dir + config.config_db
 	end

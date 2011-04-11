@@ -1,7 +1,7 @@
 module(..., package.seeall)
 
 local PLUGIN_LIST = bamboo.PLUGIN_LIST
-local tmpl_dir = './'
+local G_TMPL_DIR = 'views/'
 
 -- 模板渲染指令
 local VIEW_ACTIONS = {
@@ -55,7 +55,7 @@ local VIEW_ACTIONS = {
     end,
     -- 在这个函数中，传进来的code就是被继承的基页名称
     ['{:'] = function(code, this_page)
-        local base_page = io.loadFile(tmpl_dir, unseri(code))
+        local base_page = io.loadFile(G_TMPL_DIR, unseri(code))
         local new_page = base_page
         for block in new_page:gmatch("({%[[%s_%w%.%-\'\"]+%]})") do
             -- 获取到里面的内容
@@ -127,6 +127,7 @@ local View = Object:extend {
     -- @return 一个函数 这个函数在后面的使用中接收一个table作为参数，以完成最终的模板渲染
     ------------------------------------------------------------------------
     init = function (self, name) 
+        local tmpl_dir = './'
         -- 首先，找用户指定路径
         if USERDEFINED_VIEWS and posix.access(USERDEFINED_VIEWS + name) then
             tmpl_dir = USERDEFINED_VIEWS
@@ -140,7 +141,7 @@ local View = Object:extend {
             error("Template " + tmpl_dir + name + " does not exist or wrong permissions.")
         end
         -- print('Template file dir:', tmpl_dir, name)
-
+        
         if os.getenv('PROD') then
             local tmpf = io.loadFile(tmpl_dir, name)
             tmpf = self.preprocess(tmpf)

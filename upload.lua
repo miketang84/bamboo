@@ -13,6 +13,23 @@ local Form = require 'bamboo.form'
 -- 同样，在后面的扩展模型中，数据库的名字都还是用Upload
 ------------------------------------------------------------------------
 
+
+local function computeNewFilename(oldname)
+	-- 分离文件的文件名和扩展名
+	local main, ext = oldname:match('^(.+)(%.%w+)$')
+	-- 计算是否存在同名文件
+	local tstr = ''
+	local i = 0
+	while posix.stat( main + tstr + ext ) do
+		i = i + 1
+		tstr = '_' + tostring(i)
+	end
+	-- 得出新的文件名
+	local newname = main + tstr + ext
+
+	return newname
+end
+
 ------------------------------------------------------------------------
 -- 暂只考虑上传文件全部小于4M（在monglre2.conf中设定）的情况
 -- 这种情况下，全部文件数据会通过0mq传输到handler中来，并经过form的解析
@@ -21,7 +38,7 @@ local Form = require 'bamboo.form'
 ------------------------------------------------------------------------
 local function savefile(t)
 	local req, file_obj = t.req, t.file_obj
-	local dest_dir = t.dest_dir or 'media/uploads/'
+	local dest_dir = (t.dest_dir and 'media/uploads/' + t.dest_dir) or 'media/uploads/'
 	local prefix = t.prefix or ''
 	local postfix = t.postfix or ''
 	local filename = ''
@@ -58,30 +75,15 @@ local function savefile(t)
 	end
 	-- 得出新的文件名
 	local newname = prefix + main + tstr + postfix + ext
-	local fullname = dest_dir + newname
+	local path = dest_dir + newname
 	-- 写文件到磁盘上
-	local fd = io.open(fullname, "wb")
+	local fd = io.open(path, "wb")
 	fd:write(body)
 	fd:close()
 	
-	return fullname, newname
+	return path, newname
 end
 
-local function computeNewFilename(oldname)
-	-- 分离文件的文件名和扩展名
-	local main, ext = oldname:match('^(.+)(%.%w+)$')
-	-- 计算是否存在同名文件
-	local tstr = ''
-	local i = 0
-	while posix.stat( main + tstr + ext ) do
-		i = i + 1
-		tstr = '_' + tostring(i)
-	end
-	-- 得出新的文件名
-	local newname = main + tstr + ext
-
-	return newname
-end
 
 
 local Upload = Model:extend {
@@ -90,7 +92,7 @@ local Upload = Model:extend {
 	__desc = 'User\'s upload files.';
 	__fields = {
 		{ 'name', 'text', false },				-- 此文件的名字
-		{ 'fullname', 'text', false },			-- 此文件的可访问URI
+		{ 'path', 'text', false },			-- 此文件的可访问URI
 		{ 'size', 'text', false },				-- 此文件大小，以字节计算
 		{ 'timestamp', 'date', false }, 			-- 上传成功的时间戳
 		{ 'desc', 'textarea', true },			-- 此文件的描述
@@ -101,31 +103,14 @@ local Upload = Model:extend {
 	
 	init = function (self, t)
 		if not t then return self end
-		-- if isFalse(t) then error('Upload input parameters must be not blank.'); return false end
-		if not t.web then error('Upload input parameter: "web" must be not nil.'); return false end
-		if not t.req then error('Upload input parameter: "req" must be not nil.'); return false end
-		
-		local req = t.req
-		-- 目前的方案，对大于预定义值的文件上传，立即给予中止
-		if req.headers['x-mongrel2-upload-start'] then
-			print('return blank to abort upload.')
-			-- 发送中止信息，这里web如何引入？
-			t.web.conn:reply(req, '')
-			-- 返回错误信息
-			return nil, 'Uploading file is too large.'
-		end
-		
-		-- 存储文件到磁盘上
-		local fullname, name = savefile(t)
 		
 		-- 默认的几个文件属性，其它属性也可以在这里添加
-		self.name = name
-		self.fullname = fullname
-		self.size = posix.stat(fullname).size
+		self.name = t.name
+		self.path = t.path
+		self.size = posix.stat(t.path).size
 		self.timestamp = os.time()
 		-- 按照目前的做法，上传的时候，是没有备注信息的，这里写这一句只是为了表示可能会扩展
 		self.desc = t.desc or ''
-		
 		
 		return self
 	end;
@@ -133,20 +118,12 @@ local Upload = Model:extend {
 	-- 类方法，params中为文件数据，由Form.parse解析后的内容
 	-- batch只适合存储传统表单文件数据，使用xhr时不能用这个函数处理
 	-- 因为xhr上传总是一个一个上传，不会出现多个合在一起的情况
-	batch = function (self, t)
-		local params = t.params
+	batch = function (self, req, params, dest_dir, prefix, postfix)
 		local file_objs = {}
-		--local files = savefiles(params, dest_dir, prefix, postfix)
 		for i, v in ipairs(params) do
+			local path, name = savefile { req = req, file_obj = v, dest_dir = dest_dir, prefix = prefix, postfix = postfix }
 			-- 创建各个文件对象实例
-			local file_instance = self {
-				web = t.web,
-				req = t.req,
-				file_obj = v,
-				dest_dir = t.dest_dir,
-				prefix = t.prefix,
-				postfix = t.postfix,
-			}
+			local file_instance = self { name = name, path = path }
 			if file_instance then
 				-- 保存到数据库
 				file_instance:save()
@@ -162,9 +139,22 @@ local Upload = Model:extend {
 	end;
 	
 	process = function (self, web, req, dest_dir, prefix, postfix)
+		if not web then error('Upload input parameter: "web" must be not nil.'); return false end
+		if not req then error('Upload input parameter: "req" must be not nil.'); return false end
+		-- 目前的方案，对大于预定义值的文件上传，立即给予中止
+		if req.headers['x-mongrel2-upload-start'] then
+			print('return blank to abort upload.')
+			-- 发送中止信息，这里web如何引入？
+			web.conn:reply(req, '')
+			-- 返回错误信息
+			return nil, 'Uploading file is too large.'
+		end
+
+	    -- 如果是html5上传
 	    if req.headers['x-requested-with'] then
-			-- 如果是html5上传
-			local file_instance = self { web = web, req = req, dest_dir = dest_dir, prefix = prefix, postfix = postfix}
+			-- 存储文件到磁盘上
+			local path, name = savefile { req = req, dest_dir = dest_dir, prefix = prefix, postfix = postfix }    
+			local file_instance = self { name = name, path = path }
 			if file_instance then
 				file_instance:save()
 				return file_instance, 'single'
@@ -174,14 +164,8 @@ local Upload = Model:extend {
 			end
 		else
 			-- 如果是html4上传，单文件也会放到一个list中返回
-			-- ptable(req)
-			-- ptable(req.headers)
 			local params = Form:parse(req)
-			local files = self:batch { web = web, req = req, params = params,  dest_dir = dest_dir, prefix = prefix, postfix = postfix }
-			-- 或只保存一个文件
-			-- local file_obj = Form.parse(req)[1]
-			-- local file_instance = Upload { req = req, file_obj = file_obj }
-			-- file_instance:save()
+			local files = self:batch ( req, params, dest_dir, prefix, postfix )
 			return files, 'list'
 		end
 	
@@ -189,6 +173,15 @@ local Upload = Model:extend {
 	
 	computeNewFilename = function (self, oldname)
 		return computeNewFilename(oldname)
+	end;
+	
+	-- 当使用Html5 POST上传时，process过程不会顾虑到放在URL中的query参数，
+	-- 这个时候，就调用这个函数来获取这些额外参数
+	-- 上传的时候，不应该调用 Form:parse() 函数来处理文件，而应该使用
+	-- process和getURLParams两个函数来获取
+	getURLParams = function (self, req)
+		I_AM_CLASS(self)
+		return http.parseURL(req.headers.QUERY)
 	end;
 }
 

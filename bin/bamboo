@@ -1,0 +1,318 @@
+#!/usr/bin/env lua
+
+require 'posix'
+require 'signal'
+
+SCRIPT_PIDS = {}
+
+signal.signal("SIGINT", function (...)
+    for script, pid in pairs(SCRIPT_PIDS) do
+        posix.kill(pid)
+    end
+end)
+
+function parse_args(arg)
+    if #arg == 0 then return nil end
+
+	-- if has only command
+	if #arg == 1 then return arg[1], {} end
+	-- arg[1] is the command name
+    local cmd = table.remove(arg, 1)
+    local settings = {}
+    local last_opt = nil
+
+
+    -- all command options are allowed in two style: -xx yy -foo bar or xx yy zz
+	-- now, arg[1] is the options
+	if arg[1]:sub(1, 1) == '-' then 
+		for i, opt in ipairs(arg) do
+		    local token = opt:match("\-+([a-z\-]+)")
+
+		    if token then
+		        last_opt = token
+		    else
+		        settings[last_opt] = opt
+		    end
+		end
+	else
+		-- if arg[1] doesn't start with -, 
+		if #arg >= 2 then
+			-- if the lenght of arg is larger than 2, check the following args
+			for i = 2, #arg do
+				if arg[i]:sub(1,1) == '-' then
+					error('[ERROR] Options format is not correct.')
+				end
+			end 
+		end
+
+		-- push the following args into settings linearly
+		for i, v in ipairs(arg) do
+			settings[#settings + 1] = v
+		end
+		
+    end
+
+    return cmd, settings
+end
+
+
+local function run_script(app_dir, script)
+    pid = posix.fork()
+
+    if pid == 0 then
+        -- in pid, run the script
+        --posix.execp("lua", script)
+        -- 这里，这个script就是要执行的handler文件名
+        posix.execp("bamboo_handler", app_dir, script)
+    else
+        print("Started " .. script .. " PID " .. pid)
+        SCRIPT_PIDS[script] = pid
+    end
+
+    return pid
+end
+
+
+local function run_app(app_dir, targets)
+    local pid
+    local running = {}
+
+    for script, pid in pairs(SCRIPT_PIDS) do
+        running[script] = posix.kill(pid, 0) == 0
+    end
+
+    for _, script in ipairs(targets) do
+        if not running[script] then
+            run_script(app_dir, script)
+        end
+    end
+end
+
+local function run_tests(test_dir, full)
+    print("\n---------------- TESTS -----------------")
+    local tests = posix.glob(test_dir .. "/**/*_tests.lua")
+
+    if tests then
+        local cmd = "tsc "
+        if full then cmd = cmd .. "-f " end
+
+        os.execute(cmd .. table.concat(tests, ' '))
+    else
+        print("\n-------------- NO TESTS ----------------")
+        print("  You must work at a startup.")
+    end
+end
+
+local function wait_on_children()
+    local dead_count = 0
+    local child_count = 0
+    local p, msg, ret
+
+    repeat
+        p, msg, ret = posix.wait(-1)
+    until p
+
+    for script, pid in pairs(SCRIPT_PIDS) do
+        if p == pid then
+            print("CHILD DIED " .. script .. " PID " .. p ..":", msg)
+            SCRIPT_PIDS[pid] = nil
+            return script, pid
+        end
+    end
+end
+
+local function makemd5()
+    require 'md5'
+
+    math.randomseed(os.time())
+    local num = math.random(1000000, 10000000)
+    local md5_str = md5.sumhexa(num)
+    local result = ('%s-%s-%s-%s-%s'):format(md5_str:sub(1, 8), md5_str:sub(9, 12), md5_str:sub(13, 16), md5_str:sub(17, 20), md5_str:sub(21, 32))
+    -- print(result)
+    return result
+end
+
+
+COMMANDS = {
+    test = function(settings)
+        local target = settings.from or "tests"
+        if not os.getenv('PROD') then
+            run_tests(target, settings.full ~= nil)
+        else
+            print "Running in PROD mode, won't run tests."
+        end
+    end,
+
+    start = function(settings)
+        --for i,v in pairs(settings) do print(i,v) end
+        -- 这里，这个app是一个搜索文件的一个模式匹配字符串，给glob用的
+        -- 按我的理解，settings.app应该是应用的路径更好
+        local app_dir = settings.app or './'
+        local app = ('%s%s'):format((settings.app or "./"), 'app/handler_*.lua')
+        local script_times = {}
+
+
+        while true do
+            local targets = assert(posix.glob(app))
+
+            for _, script in ipairs(targets) do
+                if not script_times[script] then
+                    script_times[script] = os.time() 
+                end
+            end
+
+            run_app(app_dir, targets)
+            script, pid = wait_on_children()
+            local tick = os.time()
+
+            if tick - script_times[script] < 1 then
+                print("SCRIPT " .. script .. " RESTARTING TOO FAST. Pausing while you fix stuff.")
+                posix.sleep(10)
+                tick = os.time()
+            end
+
+            script_times[script] = tick
+        end
+    end,
+
+    help = function(settings)
+        print("AVAILABLE COMMANDS:")
+        for k,v in pairs(COMMANDS) do
+            print(k)
+        end
+    end,
+    
+    createapp = function(settings)
+        -- 原型开发
+        -- 这里要进行appname参数的判断
+        -- 还要做的几件事情：
+        -- 1. 对appname的解析；
+        -- 2. 对cmd_tmpls路径的读取；
+        -- 3. 对monserver_dir的读取；
+        -- 4. 对app/settings/中的md5码的填充；
+        local appname = settings[1] or 'bambooapp'
+        
+        local env = {}
+        -- 将全局的一个配置加载进来
+        setfenv(assert(loadfile('/etc/monserver.lua')), env)()
+        local bamboo_dir = env.bamboo_dir or '/usr/local/share/lua/5.1/bamboo/'
+        local monserver_dir = env.monserver_dir or '/root/workspace/monserver/'  -- temp
+        -- 创建目录
+		-- 确保没有同名目录存在
+        assert(posix.stat(appname) == nil, '[Error] Some file or directory has this name already！')
+        posix.mkdir(appname)
+        -- 拷贝文件
+        local cmdstr = ('cp -rf %s/cmd_tmpls/createapp/* ./%s/'):format(bamboo_dir, appname)
+        os.execute(cmdstr)
+        -- 创建资源目录
+        local mediadir = ('%s/sites/%s'):format(monserver_dir, appname)
+        --posix.mkdir(mediadir)
+        os.execute(('mkdir -p %s'):format(mediadir))
+        local cmdstr = ('cp -rf %s/cmd_tmpls/media/*  %s/'):format(bamboo_dir, mediadir)
+        os.execute(cmdstr)
+        -- 制作链接
+        os.execute(('ln -sdf %s %s/media'):format(mediadir, appname))        
+
+        -- 修改appname/app/settings.lua中的md5字串
+        local fd = io.open(('%s/app/settings.lua'):format(appname), 'r')
+		local ctx = fd:read('*all')
+		fd:close()
+		local md5str = makemd5()
+		ctx = ctx:gsub('####', md5str)
+
+		local fd = io.open(('%s/app/settings.lua'):format(appname), 'w')
+		fd:write(ctx)
+		fd:close()
+		
+        print(('[OK] Successfully created application %s.'):format(appname))
+    end;
+    
+    createplugin = function(settings)
+        -- 要求，此命令必须在工程目录下执行，不然没有效果
+        local plugin_name = settings[1] or 'bambooplugin'
+        
+        local env = {}
+        -- 将全局的一个配置加载进来
+        setfenv(assert(loadfile('/etc/monserver.lua')), env)()
+        local bamboo_dir = env.bamboo_dir or '/usr/local/share/lua/5.1/bamboo/'
+        local monserver_dir = env.monserver_dir or '/root/workspace/monserver/'  -- temp
+        -- 获取工程名字
+        local appdir = posix.getcwd()
+        --print(appdir)
+        local appname = appdir:match('/([%w_%-]+)$')
+        --print(appname)
+        
+        -- 创建目录
+		-- 确保没有同名目录存在
+        assert(posix.stat('plugins/' .. plugin_name) == nil, '[Error] Some file or directory has this name already！')
+        posix.mkdir('plugins/' .. plugin_name)
+        -- 拷贝文件
+        local cmdstr = ('cp -rf %s/cmd_tmpls/createplugin/* ./plugins/%s/'):format(bamboo_dir, plugin_name)
+        os.execute(cmdstr)
+        -- 创建资源目录
+        local mediadir = ('%s/sites/%s/plugins/%s/'):format(monserver_dir, appname, plugin_name)
+        --posix.mkdir(mediadir)
+        os.execute(('mkdir -p %s'):format(mediadir))
+        
+        local cmdstr = ('cp -rf %s/cmd_tmpls/pluginmedia/*  %s'):format(bamboo_dir, mediadir)
+        os.execute(cmdstr)
+        -- 制作链接
+        os.execute(('ln -sdf %s plugins/%s/media'):format(mediadir, plugin_name)) 
+        
+        print(('[OK] Successfully created plugin %s.'):format(plugin_name))  
+    end;
+    
+    initdb = function (settings)
+        local data_file = settings[1] or 'initialdata.lua'
+        -- 加载并运行这个文件，释放数据到env中
+        local env = setmetatable({}, {__index=_G})
+        setfenv(assert(loadfile(data_file)), env)()
+        assert(env['DATA'], '[ERROR] There must be DATA variable in initial data file.')
+
+        require 'redis'
+        require 'lglib'
+        local params = {
+            host = env.DB_HOST or '127.0.0.1',
+            port = env.DB_PORT or 6379,
+        }
+        local which = env.WHICH_DB or 0
+
+        local redis_db = Redis.connect(params)
+        redis_db:select(which)
+
+        for k, v in pairs(env.DATA) do
+            if type(v) ~= 'table' then
+                redis_db:setnx(tostring(k), tostring(v))
+            else
+                for kk, vv in pairs(v) do
+                    redis_db:hsetnx(tostring(k), tostring(kk), seri(vv))
+                end
+            end
+        end
+
+        print('OK')
+    end;
+}
+
+
+function run(cmd, settings)
+    local cmd_to_run = COMMANDS[cmd]
+
+    if cmd_to_run then
+        cmd_to_run(settings)
+    else
+        print("ERROR: that's not a valid command")
+        print("USAGE: bamboo <command> <options>")
+        print("Please input 'bamboo help' to list all available commands.")
+    end
+end
+
+
+local cmd, settings = parse_args(arg)
+if not cmd then print('No cmd input.'); return  end
+--for i, v in pairs(settings) do
+--	print(i, v)
+--end
+
+run(cmd, settings)
+
