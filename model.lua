@@ -127,6 +127,8 @@ Model = Object:extend {
 	__tag = 'Bamboo.Model';
 	-- __name和__tag的最后一个单词不一定要保持一致
 	__name = 'Model';
+	__desc = 'Model is the base of all models.';
+	__fields = {};
     -- 生成模型实例的id和name，这里这个self是Model本身
 	init = function (self)
 		self.id = self:getCounter() + 1
@@ -406,11 +408,19 @@ Model = Object:extend {
 	end;
 
 	-- 向数据库中存入自定义键值对，灵活性比较高，也比较危险
-	set = function (self, key, val)
+	setCustom = function (self, key, val)
 		I_AM_CLASS(self)
 		local one_key = self.__name + ':' + key
-		return db:setnx(one_key, seri(val))
+		return db:set(one_key, seri(val))
 	end;
+
+	-- 向数据库中取出自定义键值对
+	getCustom = function (self, key)
+		I_AM_CLASS(self)
+		local one_key = self.__name + ':' + key
+		return db:get(one_key)
+	end;
+
 
     --------------------------------------------------------------------
 	-- 实例函数。由类的实例访问
@@ -428,7 +438,8 @@ Model = Object:extend {
 			-- 保存的时候序列化一下。
 			-- 跟Django一样，每一个save时，所有字段都全部保存，包括id
 			-- 只保存正常数据，不保存函数和继承自父类的私有属性，以及自带的函数
-			if not k:startsWith('_') and type(v) ~= 'function' then
+			-- 对于在程序中任意写的字段名也不予保存，要进行类定义时字段的检查
+			if (not k:startsWith('_')) and type(v) ~= 'function' and self.__fields[k] then
 				db:hset(model_key, k, seri(v))
 			end
 		end

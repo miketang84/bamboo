@@ -91,14 +91,14 @@ local Upload = Model:extend {
 	__name = 'Upload';
 	__desc = 'User\'s upload files.';
 	__fields = {
-		{ 'name', 'text', false },				-- 此文件的名字
-		{ 'path', 'text', false },			-- 此文件的可访问URI
-		{ 'size', 'text', false },				-- 此文件大小，以字节计算
-		{ 'timestamp', 'date', false }, 			-- 上传成功的时间戳
-		{ 'desc', 'textarea', true },			-- 此文件的描述
+		['name'] = {},				-- 此文件的名字
+		['path'] = {},			-- 此文件的可访问URI
+		['size'] = {},				-- 此文件大小，以字节计算
+		['timestamp'] = {}, 			-- 上传成功的时间戳
+		['desc'] = {},			-- 此文件的描述
 		
-		{ 'page', 'text', true },				-- 此文件依附于哪一个页面，可省略
-		{ 'user', 'text', false },				-- 此文件由哪个用户上传
+		['page'] = {},				-- 此文件依附于哪一个页面，可省略
+		['user'] = {},				-- 此文件由哪个用户上传
 	};
 	
 	init = function (self, t)
@@ -166,7 +166,11 @@ local Upload = Model:extend {
 			-- 如果是html4上传，单文件也会放到一个list中返回
 			local params = Form:parse(req)
 			local files = self:batch ( req, params, dest_dir, prefix, postfix )
-			return files, 'list'
+			if #files == 1 then
+				return files[1], 'single'
+			else
+				return files, 'multiple'
+			end
 		end
 	
 	end;

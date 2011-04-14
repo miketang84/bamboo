@@ -12,15 +12,15 @@ local User = Model:extend {
 	__name = 'User';
 	__desc = 'Basic user definition.';
 	__fields = {
-		{ 'username', 'text', false },				-- 必须（这个内容可以为email, 在某些场合下喜欢这样）
-		{ 'password', 'text', false },				-- 必须
-		{ 'email', 'text', true },					-- 必须
-		{ 'is_manager', 'checkbox', true },			-- 指明用户是否具有网站的管理权限（可能是部分权限）
-		{ 'is_active', 'checkbox', true },			-- 是否是活动用户，代替删除
-		{ 'created_date', 'date', false },			-- 帐号创建的时间日期
-		{ 'lastlogin_date',	'date', false }, 		-- 上次登录的时间日期
-		{ 'perms', 'select', true },				-- 权限集合
-		{ 'groups', 'select', true }				-- 用户所属组集合
+		['username'] = {},				-- 必须（这个内容可以为email, 在某些场合下喜欢这样）
+		['password'] = {},				-- 必须
+		['email'] = {},					-- 必须
+		['is_manager'] = {},			-- 指明用户是否具有网站的管理权限（可能是部分权限）
+		['is_active'] = {},			-- 是否是活动用户，代替删除
+		['created_date'] = {},			-- 帐号创建的时间日期
+		['lastlogin_date'] = {}, 		-- 上次登录的时间日期
+		['perms'] = {},				-- 权限集合
+		['groups'] = {}				-- 用户所属组集合
 	};
 
 	init = function (self, t)
