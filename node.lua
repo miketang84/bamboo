@@ -58,12 +58,12 @@ local Node = Model:extend {
 	
 	-- 实例函数。返回comments对象列表
 	getComments = function (self)
-		local Message = require 'legecms.models.message'
+		local Message = require 'bamboo.message'
 		return self:extractField(self.comments, Message)
 	end;
 	
 	getPartialComments = function (self, start, ended)
-		local Message = require 'legecms.models.message'
+		local Message = require 'bamboo.message'
 		return self:extractFieldSlice (self.comments, Message, start, ended)
 	end;
 	

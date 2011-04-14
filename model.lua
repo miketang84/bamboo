@@ -421,6 +421,30 @@ Model = Object:extend {
 		return db:get(one_key)
 	end;
 
+	-- 直接从模型入手，在获知id的情况下，更新此对象的某一个域
+	updateById = function (self, id, field, new_value)
+		I_AM_CLASS(self)
+		checkType(field, new_value, 'string', 'string')
+		
+		local model_key = self.__name + ':' + tostring(id) + ':*'
+		local key = getkey(model_key)
+		assert(key and db:exists(key), ("[ERROR] Key %s does't exist! Can't apply update."):format(model_key))
+		
+		db:hset(key, field, new_value)
+	end;
+	
+	-- 直接从模型入手，在获知name的情况下，更新此对象的某一个域
+	updateByName = function (self, name, field, new_value)
+		I_AM_CLASS(self)
+		checkType(name, field, new_value, 'string', 'string', 'string')
+		
+		local model_key = self.__name + ':[0-9]*:' + name
+		local key = getkey(model_key)
+		assert(key and db:exists(key), ("[ERROR] Key %s does't exist! Can't apply update."):format(model_key))
+		
+		db:hset(key, field, new_value)
+	end;
+	
 
     --------------------------------------------------------------------
 	-- 实例函数。由类的实例访问
@@ -444,6 +468,17 @@ Model = Object:extend {
 			end
 		end
     end;
+    
+    -- 这是当实例取出来后，进行部分更新的函数
+    update = function (self, field, new_value)
+		checkType(new_value, 'string')
+		checkType(field, 'string')
+		assert(self.__fields[field], ("[ERROR] Field %s doesn't exist!"):format(field))
+		local model_key = self.__name + ':' + tostring(self.id) + ':' + self.name
+		assert(db:exists(model_key), ("[ERROR] Key %s does't exist! Can't apply update."):format(model_key))
+		db:hset(model_key, field, new_value)
+    end;
+    
     
     -- 获取模型的counter值
     getCounter = function (self)
