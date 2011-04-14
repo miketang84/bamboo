@@ -106,10 +106,6 @@ local Form = Object:extend {
         end
     end;
 
-    parse = function (self, req)
-        return self.parseForm(req)
-    end;
-
     ---------------------------------------------------
     -- 类全局函数
     ---------------------------------------------------
@@ -120,6 +116,7 @@ local Form = Object:extend {
     -- @return result	table字典，head头信息
     ------------------------------------------------------------------------
     parse = function (self, req)
+        I_AM_CLASS(self)
         local headers = req.headers
         local params = {}
 
@@ -152,9 +149,25 @@ local Form = Object:extend {
 
         return params
     end;
+
+    
+    -- 当使用Html5 POST上传时，Upload:process过程不会顾虑到放在URL中的query参数，
+	-- 这个时候，就调用这个函数来获取这些额外参数
+	-- 上传的时候，不应该调用 Form:parse() 函数来处理文件，而应该使用
+	-- process和getURLParams两个函数来获取
+	parseQuery = function (self, req)
+		I_AM_CLASS(self)
+		if req.headers.QUERY then
+            return http.parseURL(req.headers.QUERY)
+        else
+            return nil
+        end
+	end;
+
     
     -- 对form中的数据进行编码，一般用在testing中
     encode = function (self, data, sep)
+        I_AM_CLASS(self)
         local result = {}
 
         for k,v in pairs(data) do

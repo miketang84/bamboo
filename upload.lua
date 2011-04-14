@@ -105,7 +105,7 @@ local Upload = Model:extend {
 		if not t then return self end
 		
 		-- 默认的几个文件属性，其它属性也可以在这里添加
-		self.name = t.name
+		self.name = t.name or self.name
 		self.path = t.path
 		self.size = posix.stat(t.path).size
 		self.timestamp = os.time()
@@ -175,14 +175,6 @@ local Upload = Model:extend {
 		return computeNewFilename(oldname)
 	end;
 	
-	-- 当使用Html5 POST上传时，process过程不会顾虑到放在URL中的query参数，
-	-- 这个时候，就调用这个函数来获取这些额外参数
-	-- 上传的时候，不应该调用 Form:parse() 函数来处理文件，而应该使用
-	-- process和getURLParams两个函数来获取
-	getURLParams = function (self, req)
-		I_AM_CLASS(self)
-		return http.parseURL(req.headers.QUERY)
-	end;
 }
 
 return Upload

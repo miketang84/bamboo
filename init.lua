@@ -62,28 +62,33 @@ registerModel = function (name, model)
 
 end
 
+getModelByName = function (name)
+	assert(MODEL_MANAGEMENT[name], ('[ERROR] This model %s is not registered!'):format(name))
+	return MODEL_MANAGEMENT[name]
+end
+
 ------------------------------------------------------------------------
 
 ------------------------------------------------------------------------
 -- 创建全局模型注册列表结构
 -- MENUS是一个list，而不是一个dict。每一个list item下面则是dict
-MENUS = {}
+--MENUS = {}
 
--- 这里，menu_item有可能是一个item，也有可能是一个item列表
-registerMenu = function (menu_item)
-	checkType(menu_item, 'table')
+---- 这里，menu_item有可能是一个item，也有可能是一个item列表
+--registerMenu = function (menu_item)
+	--checkType(menu_item, 'table')
 	
-	-- 如果是单个item
-	if menu_item['name'] then
-		-- 这里，把新定义的menu item添加到总的menu列表中去
-		table.append(MENUS, menu_item)
-	else
-	-- 如果是一个item列表
-		for i, v in ipairs(menu_item) do
-			table.append(MENUS, v)
-		end
-	end
-end
+	---- 如果是单个item
+	--if menu_item['name'] then
+		---- 这里，把新定义的menu item添加到总的menu列表中去
+		--table.append(MENUS, menu_item)
+	--else
+	---- 如果是一个item列表
+		--for i, v in ipairs(menu_item) do
+			--table.append(MENUS, v)
+		--end
+	--end
+--end
 
 -- 菜单注册，应该有一个生成器，从lua表直接生成若干对象到数据库去
 -- 放在bamboo的启动脚本里面去服务启动时自动生成

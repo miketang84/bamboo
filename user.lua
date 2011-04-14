@@ -26,8 +26,8 @@ local User = Model:extend {
 	init = function (self, t)
 		if not t then return self end
 		
+		self.name = t.username or self.name		-- 每个模型必须有这个字段
 		self.username = t.username
-		self.name = self.username		-- 每个模型必须有这个字段
 		self.password = md5.sumhexa(t.password)
 		self.email = t.email
 		self.is_manager = t.is_manager

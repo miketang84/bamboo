@@ -12,12 +12,6 @@ local getkey = function (pattern)
 	return keytable[1]
 end
 
-
-
-
-_G['I_AM_CLASS'] = function (self)
-	assert(self:isClass(), 'This function is only allowed to be called by class singleton.')
-end
 ------------------------------------------------------------------------
 -- 数据库检索的限制函数集
 -- 由于使用的时候希望不再做导入工作，所以在加载Model模块的时候直接导入到全局环境中
@@ -346,10 +340,20 @@ Model = Object:extend {
 		return true
     end;
     
-	-- 获取模型的counter值
-    getCounter = function (self)
-		return tonumber(db:get(self.__name + ':__counter') or 0)
+    -- 将模型的counter值归零
+    clearCounter = function (self)
+		I_AM_CLASS(self)
+		db:set(self.__name + ':__counter', 0)
     end;
+	
+	clearAll = function (self)
+		I_AM_CLASS(self)
+		local all_objs = self:all()
+		for i, v in ipairs(all_objs) do
+			v:del()
+		end
+		self:clearCounter ()
+	end;
 	
 	-- 判断模型中的缓存（如果有的话），是否已经是脏的了，即已经不反映最新的状态了
 	isDirty = function (self)
@@ -383,9 +387,22 @@ Model = Object:extend {
 			table.insert(id_list, idpart)
 		end 
 		table.sort(id_list)
-		local constr = table.concat(id_list)
+		local constr = table.concat(id_list, ' ')
 		db:set(model_key, constr)
 		db:set(dirty_key, 'false')
+		-- 返回所有id的list
+		local keystr = db:get(model_key)
+		if not keystr then return {} end
+		return keystr:split(' ')
+	end;
+
+	getCache = function (self)
+		I_AM_CLASS(self)
+		local model_key = self.__name + ':__cache'
+		local keystr = db:get(model_key)
+		if not keystr then return {} end
+		-- 返回所有id的list
+		return keystr:split(' ')
 	end;
 
 	-- 向数据库中存入自定义键值对，灵活性比较高，也比较危险
@@ -415,8 +432,11 @@ Model = Object:extend {
 				db:hset(model_key, k, seri(v))
 			end
 		end
-		
-        return true
+    end;
+    
+    -- 获取模型的counter值
+    getCounter = function (self)
+		return tonumber(db:get(self.__name + ':__counter') or 0)
     end;
     
     -- 删除数据库中的一个对象数据
@@ -434,7 +454,6 @@ Model = Object:extend {
 				db:del(model_name + ':' + v.id + ':' + v.name)
 			end
 		end
-		return true
     end;
 
 	--recordMany 实例调用
@@ -493,7 +512,6 @@ Model = Object:extend {
 	end;
 
 
-	
 
 }
 
