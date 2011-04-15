@@ -2,14 +2,79 @@ module(..., package.seeall)
 
 local db = BAMBOO_DB
 
+local rdlist = require 'bamboo.redis.rdlist'
 
-local getkey = function (pattern)
-	local keytable = db:keys(pattern)
-	if #keytable == 0 then return nil end
-	if #keytable > 1 then error('Instances suitable is more than one.') end
-	-- 只有一个实例的key了，后面希望在redis里面添加一条指令，
-	-- 通过匹配找到第一个key，就立即返回
-	return keytable[1]
+-- 由实例调用
+local saveFieldToRedis = function (self, model_key, field_key, field_val)
+	local its_type = type(field_val)
+	local def_type = self.__fields[field_key]
+	-- 如果是数据或字符的话
+	if its_type == 'string' or its_type == 'number' then
+		db:hset(model_key, field_key, field_val)
+	-- 如果是列表的话（这里，table只限定为列表list）
+	elseif its_type == 'table' and def_type and def_type.st then
+		-- 在这里设置一个ON，表明这个链接已经存在了
+		db:hset(model_key, field_key, 'ON')
+		
+		local st = def_type.st
+		if st == 'LIST' then
+			rdlist.updateList(model_key + ':' + field_key, field_val)
+		elseif st == 'SET' then
+
+		elseif st == 'ZSET' then
+
+		end
+	end
+
+end
+
+-- 由模型调用
+local getFromRedis = function (self, model_key)
+	-- 先从数据库中取出来
+	local data = db:hgetall(key)
+	if isEmpty(data) then print("WARNING: Can't get object by", key); return nil end
+
+	local fields = self.__fields
+	for k, _ in pairs(data) do
+		-- 这里面这个k是从数据库取出来的，肯定保证是满足fields[k]存在的
+		if fields[k].st then
+			local st = fields[k].st
+			if st == 'LIST' then
+				-- 对于类型是LIST的情况，就把lua中的表对象的这一项替换成取出的列表
+				data[k] = rdlist.retrieveList(model_key + ':' + k)
+				
+			elseif st == 'SET' then
+
+			elseif st == 'ZSET' then
+			
+			end
+		end
+	end
+	
+	local obj = self()
+	table.update(obj, data)
+	return obj
+end 
+
+-- 可以从实例调用，也可以从模型调用
+-- 从实例调用时，不要写第二个参数id
+-- 从模型调用时，要写第二个参数id
+local delFromRedis = function (self, id)
+	local model_name = self.__name
+	local index_name = model_name + ':__index'
+	local id = id or self.id
+	
+	db:del(model_name + ':' + id)
+	
+	-- 模型没有这个属性
+	if self.name then
+		db:zrem(index_name, self.name)
+	else
+		local t = db:zrangebyscore(index_name, id, id)
+		if #t > 0 then
+			db:zrem(index_name, t[1])
+		end
+	end
 end
 
 ------------------------------------------------------------------------
@@ -144,63 +209,49 @@ Model = Object:extend {
     -- 根据名字返回相应的id
     getIdByName = function (self, name)
 		I_AM_CLASS(self)
-		local model_key = self.__name + ':[0-9]*:' + name
-		local key = getkey(model_key)
-		-- 如果不存在id index，就返回nil, 以示区别
-		if not key then return nil	end
+		checkType(name, 'string')
 		
-		-- 只找第一个，限制一个结果
-		return index[1]:match('^%w+:(%d+):[%w%_%.%-]+$')
+		local idstr = db:zscore(self.__name + ':__index', name)
+		return tonumber(idstr)
     end;
     -- 根据id返回相应的名字
     getNameById = function (self, id)
 		I_AM_CLASS(self)
-		local model_key = self.__name + ':' + tostring(id) + ':*'
-		local key = getkey(model_key)
-		-- 如果不存在id index，就返回nil, 以示区别
-		if not key then return nil	end
+		checkType(tonumber(id), 'number')
 		
-		-- 只找第一个，限制一个结果
-		return key:match('^%w+:%d+:([%w%_%.%-]+)$')
+		-- range本身返回一个列表，这里限定只返回一个元素的列表
+		local name = db:zrangebyscore(self.__name + ':__index', id, id)[1]
+		
+		if isFalse(name) then return nil end
+		return name
     end;
     -- 根据id返回对象
 	getById = function (self, id)
 		I_AM_CLASS(self)
-		local model_key = self.__name + ':' + tostring(id) + ':*'
-		local key = getkey(model_key)
-		-- 如果没找到，就直接返回一个空表
-		if not key then print('WARNING: Can\'t find any object by', model_key); return {} end
-		local data = db:hgetall(key)
-		if isEmpty(data) then print('WARNING: Can\'t get object by', key); return {} end
-		local obj = self()
-		table.update(obj, data)
-		return obj
+		checkType(tonumber(id), 'number')
+		
+		local key = self.__name + ':' + tostring(id)
+		if not db:exists(key) then return nil end
+		
+		return getFromRedis(key)
 	end;
 	-- 返回实例对象，此对象的数据由数据库中的数据更新
 	getByName = function (self, name)
 		I_AM_CLASS(self)
-		local model_key = self.__name + ':[0-9]*:' + name
-		local key = getkey(model_key)
-		-- 如果没找到，就直接返回一个空表
-		if not key then return {} end
-		local data = db:hgetall(key)
-		if isEmpty(data) then print('WARNING: Can\'t get object by', key); return {} end
-		local obj = self()
-		table.update(obj, data)
-		return obj
+		local id = self:getIdByName(name)
+		if not id then return nil end
+		return self:getById (id)
 	end;
 	
 	-- 返回此类中所有的成员
 	all = function (self)
 		I_AM_CLASS(self)
 		local all_instaces = {}
-		local all_keys = db:keys(self.__name + ':[0-9]*:*')
+		local all_keys = db:keys(self.__name + ':[0-9]*')
 		local obj, data
 		for _, key in ipairs(all_keys) do
-			data = db:hgetall(key)
-			if not isEmpty(data) then
-				obj = self()
-				table.update(obj, data)
+			local obj = getFromRedis(key)
+			if not obj then
 				table.insert(all_instaces, obj)
 			end
 		end
@@ -210,14 +261,15 @@ Model = Object:extend {
 	-- 返回此类中所有的key，返回一个列表
 	allKeys = function (self)
 		I_AM_CLASS(self)
-		return db:keys(self.__name + ':[0-9]*:*')
+		return db:keys(self.__name + ':[0-9]*')
 	end;
 	
 	-- 返回此类中实例实际个数
 	number = function (self)
 		I_AM_CLASS(self)
-		local all_keys = db:keys(self.__name + ':[0-9]*:*')
-		return #all_keys
+		--local all_keys = db:keys(self.__name + ':[0-9]*')
+		--return #all_keys
+		return db:zcard(self.__name + ':__index')
 	end;
 	
     -- 返回第一个查询对象，
@@ -230,12 +282,13 @@ Model = Object:extend {
 		if id then
 			local vv = nil
 			query_args['id'] = nil
-			local query_key = self.__name + ':' + tonumber(id)
+			local query_key = self.__name + ':' + tostring(id)
 			-- 判断数据库中有无此key存在
 			local flag = db:exists(query_key)
 			if not flag then return nil end
 			-- 把这个key下的内容整个取出来
-			vv = db:hgetall(query_key)
+			vv = getFromRedis(query_key)
+			if not vv then return nil end
 			
 			for k, v in pairs(query_args) do
 				if not vv[k] then return nil end
@@ -256,13 +309,13 @@ Model = Object:extend {
 		-- 如果查询要求中没有id
 		else
 			-- 取得所有关于这个模型的实例keys
-			local all_keys = db:keys(self.__name + ':*')
+			local all_keys = db:keys(self.__name + ':[0-9]*')
 			for _, kk in ipairs(all_keys) do
 				-- 根据key获得一个实例的内容，返回一个表
-				local vv = db:hgetall(kk)
+				local vv = getFromRedis(kk)
 				local flag = true
 				for k, v in pairs(query_args) do
-					if not vv[k] then flag=false; break end
+					if not vv or not vv[k] then flag=false; break end
 					-- 目前为止，还只能处理条件式为等于的情况
 					if type(v) == 'function' then
 						-- 进入函数v进行比较的，总是单个字段
@@ -294,14 +347,14 @@ Model = Object:extend {
 		local query_set = setProto({}, Model)
 	
 		-- 取得所有关于这个模型的实例keys
-		local all_keys = db:keys(self.__name + ':*')
+		local all_keys = db:keys(self.__name + ':[0-9]*')
 		for _, kk in ipairs(all_keys) do
 			-- 根据key获得一个实例的内容，返回一个表
-			local vv = db:hgetall(kk)
+			local vv = getFromRedis(kk)
 			local flag = true	
 			for k, v in pairs(query_args) do
 				-- 对于多余的查询条件，一经发现，直接跳出
-				if not vv[k] then flag=false; break end
+				if not vv or not vv[k] then flag=false; break end
 				-- 处理条件式为外调函数的情况
 				if type(v) == 'function' then
 					-- 进入函数v进行比较的，总是单个字段
@@ -325,10 +378,14 @@ Model = Object:extend {
     -- 知道一个实例id的情况下，删除这个实例
     delById = function (self, id)
 		I_AM_CLASS(self)
-		assert( type(id) == 'number' or type(id) == 'string' )
-		local model_key = self.__name + ':' + tostring(id) + ':*'
-		local key = getkey(model_key)
-		if key then	db:del(key)	end
+		checkType(tonumber(id), 'number')
+		
+		if not db:exists(self.__name + ':' + id) then 
+			print(("[WARNING] Key %s doesn't exist!"):format(key)) 
+			return nil 
+		end
+		
+		delFromRedis(self, id)
 		return true
     end;
     
@@ -336,10 +393,8 @@ Model = Object:extend {
     delByName = function (self, name)
 		I_AM_CLASS(self)
 		checkType(name, 'string')
-		local model_key = self.__name + ':[0-9]*:' + name
-		local key = getkey(model_key)
-		if key then	db:del(key)	end
-		return true
+		local id = self:getIdByName (name)
+		return self:delById (id)
     end;
     
     -- 将模型的counter值归零
@@ -410,6 +465,7 @@ Model = Object:extend {
 	-- 向数据库中存入自定义键值对，灵活性比较高，也比较危险
 	setCustom = function (self, key, val)
 		I_AM_CLASS(self)
+		checkType(key, val, 'string', 'string')
 		local one_key = self.__name + ':' + key
 		return db:set(one_key, seri(val))
 	end;
@@ -417,7 +473,10 @@ Model = Object:extend {
 	-- 向数据库中取出自定义键值对
 	getCustom = function (self, key)
 		I_AM_CLASS(self)
+		checkType(key, 'string')
+		
 		local one_key = self.__name + ':' + key
+		if not db:exists(one_key) then print(("[WARNING] Key %s doesn't exist!"):format(one_key)); return nil end
 		return db:get(one_key)
 	end;
 
@@ -426,9 +485,8 @@ Model = Object:extend {
 		I_AM_CLASS(self)
 		checkType(field, new_value, 'string', 'string')
 		
-		local model_key = self.__name + ':' + tostring(id) + ':*'
-		local key = getkey(model_key)
-		assert(key and db:exists(key), ("[ERROR] Key %s does't exist! Can't apply update."):format(model_key))
+		local key = self.__name + ':' + tostring(id)
+		assert(db:exists(key), ("[ERROR] Key %s does't exist! Can't apply update."):format(key))
 		
 		db:hset(key, field, new_value)
 	end;
@@ -438,11 +496,9 @@ Model = Object:extend {
 		I_AM_CLASS(self)
 		checkType(name, field, new_value, 'string', 'string', 'string')
 		
-		local model_key = self.__name + ':[0-9]*:' + name
-		local key = getkey(model_key)
-		assert(key and db:exists(key), ("[ERROR] Key %s does't exist! Can't apply update."):format(model_key))
-		
-		db:hset(key, field, new_value)
+		local id = self:getIdByName (name)
+		assert(id, ("[ERROR] Name %s does't exist!"):format(name))
+		self:updateById (id, field, new_value)
 	end;
 	
 
@@ -451,7 +507,8 @@ Model = Object:extend {
 	--------------------------------------------------------------------
     -- 在数据库中创建一个hash表项，保存模型实例
     save = function (self)
-        local model_key = self.__name + ':' + tostring(self.id) + ':' + self.name
+        assert(self.name, "[ERROR] The name field doesn't exist!"))
+        local model_key = self.__name + ':' + tostring(self.id)
 		-- 如果之前数据库中没有这个对象，即是新创建的情况
 		if not db:exists(model_key) then
 			-- 对象类别的总数计数器就加1
@@ -464,19 +521,26 @@ Model = Object:extend {
 			-- 只保存正常数据，不保存函数和继承自父类的私有属性，以及自带的函数
 			-- 对于在程序中任意写的字段名也不予保存，要进行类定义时字段的检查
 			if (not k:startsWith('_')) and type(v) ~= 'function' and self.__fields[k] then
-				db:hset(model_key, k, seri(v))
+				--db:hset(model_key, k, seri(v))
+				saveFieldToRedis(self, model_key, k, v)
 			end
 		end
+		
+		-- 将记录添加到Model:__index中去
+		local index_key = self.__name + ':__index'
+		assert(db:exists(index_key), ("[ERROR] %s doesn't exist!"):format(index_key))
+		db:zadd(index_key, tonumber(self.id), self.name)
+		
     end;
     
     -- 这是当实例取出来后，进行部分更新的函数
     update = function (self, field, new_value)
-		checkType(new_value, 'string')
-		checkType(field, 'string')
-		assert(self.__fields[field], ("[ERROR] Field %s doesn't exist!"):format(field))
-		local model_key = self.__name + ':' + tostring(self.id) + ':' + self.name
+		checkType(field, new_value, 'string', 'string')
+		assert(self.__fields[field], ("[ERROR] Field %s doesn't be defined!"):format(field))
+		local model_key = self.__name + ':' + tostring(self.id)
 		assert(db:exists(model_key), ("[ERROR] Key %s does't exist! Can't apply update."):format(model_key))
-		db:hset(model_key, field, new_value)
+		-- db:hset(model_key, field, new_value)
+		saveFieldToRedis(self, model_key, field, new_value)
     end;
     
     
@@ -491,36 +555,51 @@ Model = Object:extend {
 		-- 如果self是单个对象
 		if self['id'] then
 			-- 在数据库中删除这个对象的内容
-			db:del(model_name + ':' + self.id + ':' + self.name)
-			self = nil
+			delFromRedis(self)
 		-- 如果self是一个对象列表
 		else
 			-- 一个一个挨着删除
 			for _, v in ipairs(self) do
-				db:del(model_name + ':' + v.id + ':' + v.name)
+				delFromRedis(v)
+				v = nil
 			end
 		end
+		
+		self = nil
     end;
 
-	--recordMany 实例调用
+	-- 实例调用
 	-- 添加一个外链模型的实例的id到本对象的一个域中来
 	-- 返回本对象
-	appendToField = function (self, field, new_id)
+	appendToField = function (self, field, new_obj)
 		checkType(field, 'string')
-		assert( type(new_id) == 'number' or type(new_id) == 'string' )
-		self[field] = ('%s %s'):format((self[field] or ''), new_id)
+		checkType(tonumber(new_id), 'number')
+		local def_type = self.__fields[field]
+		assert( def_type == 'LIST', ("[ERROR] This field %s doesn't accept appending."):format(field))
+		assert( new_obj.id, "[ERROR] This object doesn't contain id!")
+
+		local new_id = new_obj.id
+		local key = self.__name + ':' + self.id + ':' + field
+		-- 将新值更新到数据库中去，因此，后面不用用户再写self:save()了
+		rdlist.appendToList(key, new_id)
+		if not self[field] then self[field] == {} end
+		-- 给本对象添加更新值
+		table.insert(self[field], new_id)
+		
+		--self[field] = ('%s %s'):format((self[field] or ''), new_id)
 		return self
 	end;
 	
-	-- parseMany
+	-- liststr的处理算法
 	-- 释放本对象的一个域中所存储的外链模型的实例
 	-- 返回那些实例的对象列表
 	extractField = function (self, field, link_model)
-		checkType(field, 'string')
-		checkType(link_model, 'table')
-		if isFalse(self[field]) then return nil end
-		local list = self[field]:trim():split(' ')
+		checkType(field, link_model, 'string', 'table')
+		if not self[field] then return nil end
+
+		local list = self[field]
 		if isFalse(list) then return {} end
+		
 		local obj_list = {}
 		for _, v in ipairs(list) do
 			local obj = link_model:getById(v)
@@ -533,17 +612,13 @@ Model = Object:extend {
 		return obj_list
 	end;    
 
-	-- getPartial
 	-- 释放本对象的一个域中所存储的外链模型的部分实例
 	-- 返回那些实例的对象列表
 	extractFieldSlice = function (self, field, link_model, start, ended)
-		checkType(field, 'string')
-		checkType(link_model, 'table')
-		checkType(start, ended, 'number', 'number')
-		if isFalse(self[field]) then return nil end
-		local strpart = self[field]:findpart(start, ended)
-		if isFalse(strpart) then return {} end
-		local list = strpart:trim():split(' ')
+		checkType(field, link_model, start, ended, 'string', 'table', 'number', 'number')
+		if not self[field] then return nil end
+
+		local list = table.slice(self[field], start, ended)
 		if isFalse(list) then return {} end
 		
 		local obj_list = {}

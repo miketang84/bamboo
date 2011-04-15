@@ -16,8 +16,8 @@ local Node = Model:extend {
 
 		['is_category'] = {},			-- 标明此节点是否是一个类别节点，即是否可接子节点
 		['parent'] 		= {},						-- 节点的父页面id，如果为空，则表明本节点为顶级节点
-		['children'] 	= {},					-- 此节点的子节点id列表字符串，受is_category控制
-		['groups'] 		= {},						-- 此节点可以所属的组，近似就是它们所说的tag
+		['children'] 	= { st = 'LIST' },					-- 此节点的子节点id列表字符串，受is_category控制
+		['groups'] 		= { st = 'LIST' },						-- 此节点可以所属的组，近似就是它们所说的tag
 
 		['comments'] 	= {},					-- 对此节点的评论id列表字符串
 		['attachments'] = {},				-- 附着在此节点上的文件
