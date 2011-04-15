@@ -31,13 +31,13 @@ end
 -- 由模型调用
 local getFromRedis = function (self, model_key)
 	-- 先从数据库中取出来
-	local data = db:hgetall(key)
-	if isEmpty(data) then print("WARNING: Can't get object by", key); return nil end
+	local data = db:hgetall(model_key)
+	if isEmpty(data) then print("WARNING: Can't get object by", model_key); return nil end
 
 	local fields = self.__fields
 	for k, _ in pairs(data) do
 		-- 这里面这个k是从数据库取出来的，肯定保证是满足fields[k]存在的
-		if fields[k].st then
+		if fields[k] and fields[k].st then
 			local st = fields[k].st
 			if st == 'LIST' then
 				-- 对于类型是LIST的情况，就把lua中的表对象的这一项替换成取出的列表
@@ -232,8 +232,7 @@ Model = Object:extend {
 		
 		local key = self.__name + ':' + tostring(id)
 		if not db:exists(key) then return nil end
-		
-		return getFromRedis(key)
+		return getFromRedis(self, key)
 	end;
 	-- 返回实例对象，此对象的数据由数据库中的数据更新
 	getByName = function (self, name)
@@ -250,7 +249,7 @@ Model = Object:extend {
 		local all_keys = db:keys(self.__name + ':[0-9]*')
 		local obj, data
 		for _, key in ipairs(all_keys) do
-			local obj = getFromRedis(key)
+			local obj = getFromRedis(self, key)
 			if not obj then
 				table.insert(all_instaces, obj)
 			end
@@ -287,7 +286,7 @@ Model = Object:extend {
 			local flag = db:exists(query_key)
 			if not flag then return nil end
 			-- 把这个key下的内容整个取出来
-			vv = getFromRedis(query_key)
+			vv = getFromRedis(self, query_key)
 			if not vv then return nil end
 			
 			for k, v in pairs(query_args) do
@@ -312,7 +311,7 @@ Model = Object:extend {
 			local all_keys = db:keys(self.__name + ':[0-9]*')
 			for _, kk in ipairs(all_keys) do
 				-- 根据key获得一个实例的内容，返回一个表
-				local vv = getFromRedis(kk)
+				local vv = getFromRedis(self, kk)
 				local flag = true
 				for k, v in pairs(query_args) do
 					if not vv or not vv[k] then flag=false; break end
@@ -350,7 +349,7 @@ Model = Object:extend {
 		local all_keys = db:keys(self.__name + ':[0-9]*')
 		for _, kk in ipairs(all_keys) do
 			-- 根据key获得一个实例的内容，返回一个表
-			local vv = getFromRedis(kk)
+			local vv = getFromRedis(self, kk)
 			local flag = true	
 			for k, v in pairs(query_args) do
 				-- 对于多余的查询条件，一经发现，直接跳出
@@ -381,7 +380,7 @@ Model = Object:extend {
 		checkType(tonumber(id), 'number')
 		
 		if not db:exists(self.__name + ':' + id) then 
-			print(("[WARNING] Key %s doesn't exist!"):format(key)) 
+			print(("[WARNING] Key %s doesn't exist!"):format(self.__name + ':' + id)) 
 			return nil 
 		end
 		
@@ -507,7 +506,7 @@ Model = Object:extend {
 	--------------------------------------------------------------------
     -- 在数据库中创建一个hash表项，保存模型实例
     save = function (self)
-        assert(self.name, "[ERROR] The name field doesn't exist!"))
+        assert(self.name, "[ERROR] The name field doesn't exist!")
         local model_key = self.__name + ':' + tostring(self.id)
 		-- 如果之前数据库中没有这个对象，即是新创建的情况
 		if not db:exists(model_key) then
@@ -528,7 +527,7 @@ Model = Object:extend {
 		
 		-- 将记录添加到Model:__index中去
 		local index_key = self.__name + ':__index'
-		assert(db:exists(index_key), ("[ERROR] %s doesn't exist!"):format(index_key))
+		--assert(db:exists(index_key), ("[ERROR] %s doesn't exist!"):format(index_key))
 		db:zadd(index_key, tonumber(self.id), self.name)
 		
     end;
@@ -582,7 +581,7 @@ Model = Object:extend {
 		local key = self.__name + ':' + self.id + ':' + field
 		-- 将新值更新到数据库中去，因此，后面不用用户再写self:save()了
 		rdlist.appendToList(key, new_id)
-		if not self[field] then self[field] == {} end
+		if not self[field] then self[field] = {} end
 		-- 给本对象添加更新值
 		table.insert(self[field], new_id)
 		

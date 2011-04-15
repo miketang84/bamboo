@@ -55,7 +55,7 @@ BAMBOO_DB = redis.connect {host=DB_HOST, port=DB_PORT, which = WHICH_DB}
 
 local Web = require 'bamboo.web'
 local Session = require 'bamboo.session'
-local User = require 'bamboo.user'
+local User = require 'bamboo.models.user'
 
 ------------------------------------------------------------------------
 -- 定义一个新环境

@@ -1,7 +1,7 @@
 module(..., package.seeall)
 
 local http = require 'lglib.http'
-local Node = require 'bamboo.node'
+local Node = require 'bamboo.models.node'
 
 -- 记录当前最新的项
 local ptr = 0
