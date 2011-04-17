@@ -53,16 +53,17 @@ end
 -- 创建全局模型注册列表结构
 MODEL_MANAGEMENT = {}
 
-registerModel = function (name, model)
-	checkType(name, model, 'string', 'table')
-	assert( name ~= '', 'Registed model name must not be blank.' )
+registerModel = function (model)
+	checkType(model, 'table')
+	assert( model.__name, 'Registered model __name must not be missing.' )
 	
-	MODEL_MANAGEMENT[name] = model
-	print(name, MODEL_MANAGEMENT[name])
+	MODEL_MANAGEMENT[model.__name] = model
+	print(model.__name, MODEL_MANAGEMENT[model.__name])
 
 end
 
 getModelByName = function (name)
+	checkType(name, 'string')
 	assert(MODEL_MANAGEMENT[name], ('[ERROR] This model %s is not registered!'):format(name))
 	return MODEL_MANAGEMENT[name]
 end

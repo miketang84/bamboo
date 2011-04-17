@@ -66,5 +66,14 @@ function retrieveList( key )
 	return db:lrange(listkey, 0, -1)
 end
 
+function removeFromList( key, val )
+	local listkey = 'LIST:' + key
+	
+	return db:lrem(listkey, 1, val)
+end
 
-
+function delList( key )
+	local listkey = 'LIST:' + key
+	
+	return db:del(listkey)
+end

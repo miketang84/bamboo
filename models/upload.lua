@@ -97,8 +97,6 @@ local Upload = Model:extend {
 		['timestamp'] = {}, 			-- 上传成功的时间戳
 		['desc'] = {},			-- 此文件的描述
 		
-		['page'] = {},				-- 此文件依附于哪一个页面，可省略
-		['user'] = {},				-- 此文件由哪个用户上传
 	};
 	
 	init = function (self, t)

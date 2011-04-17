@@ -4,7 +4,8 @@ local Model = require 'bamboo.model'
 
 local getModelByName = bamboo.getModelByName 
 
-local Node = Model:extend {
+local Node 
+Node = Model:extend {
     __tag = 'Bamboo.Model.Node';
 	__name = 'Node';
 	__desc = 'Node is the basic tree like model';
@@ -15,18 +16,18 @@ local Node = Model:extend {
 		['content'] = 	{},				-- 节点内容
 
 		['is_category'] = {},			-- 标明此节点是否是一个类别节点，即是否可接子节点
-		['parent'] 		= {},						-- 节点的父页面id，如果为空，则表明本节点为顶级节点
-		['children'] 	= { st = 'LIST' },					-- 此节点的子节点id列表字符串，受is_category控制
-		['groups'] 		= { st = 'LIST' },						-- 此节点可以所属的组，近似就是它们所说的tag
+		['parent'] 		= { st='MONO', foreign='Node'},						-- 节点的父页面id，如果为空，则表明本节点为顶级节点
+		['children'] 	= { st='LIST', foreign='Node' },					-- 此节点的子节点id列表字符串，受is_category控制
+		['groups'] 		= { st='LIST', foreign='Node' },						-- 此节点可以所属的组，近似就是它们所说的tag
 
-		['comments'] 	= {},					-- 对此节点的评论id列表字符串
-		['attachments'] = {},				-- 附着在此节点上的文件
+		['comments'] 	= { st='LIST', foreign='Message' },					-- 对此节点的评论id列表字符串
+		['attachments'] = { st='LIST', foreign='Upload' },				-- 附着在此节点上的文件
 
 		['created_date'] 	= {},				-- 本节点创建的日期
 		['lastmodified_date'] 	= {},		-- 最后一次修改的日期
-		['creator'] 		= {},					-- 本节点的创建者
-		['owner'] 			= {},					-- 本节点的拥有者
-		['lastmodifier'] 	= {},				-- 最后一次本节点的修改者
+		['creator'] 		= { st='LIST', foreign='User' },					-- 本节点的创建者
+		['owner'] 			= { st='LIST', foreign='User' },					-- 本节点的拥有者
+		['lastmodifier'] 	= { st='LIST', foreign='User' },				-- 最后一次本节点的修改者
 	
 	};
 	
