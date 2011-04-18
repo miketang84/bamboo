@@ -10,24 +10,24 @@ Node = Model:extend {
 	__name = 'Node';
 	__desc = 'Node is the basic tree like model';
 	__fields = {
-		['name'] 	= 	{},						-- 节点的内部名称
-		['rank'] 	= 	{},						-- 节点在整个节点树中的级别，为字符串
-		['title'] 	= 	{},						-- 节点标题
-		['content'] = 	{},				-- 节点内容
+		['name'] 	= 	{  newfield=true},						-- 节点的内部名称
+		['rank'] 	= 	{  newfield=true},						-- 节点在整个节点树中的级别，为字符串
+		['title'] 	= 	{  required=true, newfield=true},						-- 节点标题
+		['content'] = 	{  required=true, newfield=true},				-- 节点内容
 
-		['is_category'] = {},			-- 标明此节点是否是一个类别节点，即是否可接子节点
-		['parent'] 		= { st='MONO', foreign='Node'},						-- 节点的父页面id，如果为空，则表明本节点为顶级节点
-		['children'] 	= { st='LIST', foreign='Node' },					-- 此节点的子节点id列表字符串，受is_category控制
-		['groups'] 		= { st='LIST', foreign='Node' },						-- 此节点可以所属的组，近似就是它们所说的tag
+		['is_category'] = {  newfield=true},			-- 标明此节点是否是一个类别节点，即是否可接子节点
+		['parent'] 		= { st='ONE', foreign='Node', newfield=true},						-- 节点的父页面id，如果为空，则表明本节点为顶级节点
+		['children'] 	= { st='MANY', foreign='Node', newfield=true},					-- 此节点的子节点id列表字符串，受is_category控制
+		['groups'] 		= { st='MANY', foreign='Node', newfield=true},						-- 此节点可以所属的组，近似就是它们所说的tag
 
-		['comments'] 	= { st='LIST', foreign='Message' },					-- 对此节点的评论id列表字符串
-		['attachments'] = { st='LIST', foreign='Upload' },				-- 附着在此节点上的文件
+		['comments'] 	= { st='MANY', foreign='Message', newfield=true},					-- 对此节点的评论id列表字符串
+		['attachments'] = { st='MANY', foreign='Upload', newfield=true},				-- 附着在此节点上的文件
 
-		['created_date'] 	= {},				-- 本节点创建的日期
-		['lastmodified_date'] 	= {},		-- 最后一次修改的日期
-		['creator'] 		= { st='LIST', foreign='User' },					-- 本节点的创建者
-		['owner'] 			= { st='LIST', foreign='User' },					-- 本节点的拥有者
-		['lastmodifier'] 	= { st='LIST', foreign='User' },				-- 最后一次本节点的修改者
+		['created_date'] 	= {  newfield=true},				-- 本节点创建的日期
+		['lastmodified_date'] 	= {  newfield=true},		-- 最后一次修改的日期
+		['creator'] 		= { st='ONE', foreign='User', newfield=true},					-- 本节点的创建者
+		['owner'] 			= { st='ONE', foreign='User', newfield=true},					-- 本节点的拥有者
+		['lastmodifier'] 	= { st='ONE', foreign='User', newfield=true},				-- 最后一次本节点的修改者
 	
 	};
 	
@@ -59,33 +59,28 @@ Node = Model:extend {
 	
 	-- 实例函数。返回comments对象列表
 	getComments = function (self)
-		local Message = require 'bamboo.message'
-		return self:extractField(self.comments, Message)
+		return self:getForeign ('comments')
 	end;
 	
-	getPartialComments = function (self, start, ended)
-		local Message = require 'bamboo.message'
-		return self:extractFieldSlice (self.comments, Message, start, ended)
+	getPartialComments = function (self, start, stop)
+		return self:getForeign ('comments', start, stop)
 	end;
 	
 	-- 实例函数。返回attachments对象列表
 	getAttachments = function (self)
-		local Upload = require 'bamboo.upload'
-		return self:extractField(self.attachments, Upload)
+		return self:getForeign ('attachments')
 	end;
 	
 	-- 实例函数。返回孩子对象列表
 	getChildren = function (self)
 		if isFalse(self.children) then return {} end
-		local model = getModelByName(self.__name)
-		return self:extractField(self.children, model)
+		return self:getForeign ('children')
 	end;
 	
 	-- 实例函数。返回父对象
 	getParent = function (self)
 		if self.parent == '' then return nil end
-		local model = getModelByName(self.__name)
-		return model:getById(self.parent)
+		return self:getForeign('parent')
 	end;
 
 }

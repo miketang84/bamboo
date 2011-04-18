@@ -17,37 +17,12 @@ local function checkUnfixed(fld, item)
 	else 
 		link_model = getModelByName(foreign)
 		assert(link_model, ("[ERROR] The foreign part (%s) of this field is not a valid model."):format(foreign))	
-		-- 当没有写st属性，或st属性为MONO时，即为单外链时
+		-- 当没有写st属性，或st属性为ONE时，即为单外链时
 		linked_id = item
 	end
 
 	return link_model, linked_id
 end
-
-
----- 由实例调用
---local saveFieldToRedis = function (self, model_key, field_key, field_val)
-	--local its_type = type(field_val)
-	--local def_type = self.__fields[field_key]
-	---- 如果是数据或字符的话
-	--if its_type == 'string' or its_type == 'number' then
-		--db:hset(model_key, field_key, field_val)
-	---- 如果是列表的话（这里，table只限定为列表list）
-	--elseif its_type == 'table' and def_type and def_type.st then
-		---- 在这里设置一个ON，表明这个链接已经存在了
-		--db:hset(model_key, field_key, 'ON')
-		
-		--local st = def_type.st
-		--if st == 'LIST' then
-			--rdlist.updateList(model_key + ':' + field_key, field_val)
-		--elseif st == 'SET' then
-
-		--elseif st == 'ZSET' then
-
-		--end
-	--end
-
---end
 
 -- 由模型调用
 local getFromRedis = function (self, model_key)
@@ -62,14 +37,8 @@ local getFromRedis = function (self, model_key)
 		checkType(fld, 'table')
 		if fld.foreign then
 			local st = fld.st
-			if st == 'LIST' then
+			if st == 'MANY' then
 				data[k] = rdlist.retrieveList(model_key + ':' + k)
-			elseif st == 'SET' then
-
-			elseif st == 'ZSET' then
-			
-			elseif st == 'MONO' then
-				-- do nothing now, just keep the original value
 			end
 		end
 	end
@@ -91,7 +60,7 @@ local delFromRedis = function (self)
 		local fld = fields[k]
 		if fld.foreign then
 			local key = model_name + ':' + self.id + ':' + k 
-			if fld.st == 'LIST' then
+			if fld.st == 'MANY' then
 				rdlist.delList(key)
 			end
 		end
@@ -401,33 +370,13 @@ Model = Object:extend {
 		end
 		return query_set
 	end;
-
-    ---- 知道一个实例id的情况下，删除这个实例
-    --delById = function (self, id)
-		--I_AM_CLASS(self)
-		--checkType(tonumber(id), 'number')
-		
-		--if not db:exists(self.__name + ':' + id) then 
-			--print(("[WARNING] Key %s doesn't exist!"):format(self.__name + ':' + id)) 
-			--return nil 
-		--end
-		
-		--delFromRedis(self, id)
-		--return true
-    --end;
-    
-    ---- 知道一个实例name的情况下，删除这个实例
-    --delByName = function (self, name)
-		--I_AM_CLASS(self)
-		--checkType(name, 'string')
-		--local id = self:getIdByName (name)
-		--return self:delById (id)
-    --end;
     
     -- 将模型的counter值归零
     clearCounter = function (self)
 		I_AM_CLASS(self)
 		db:set(self.__name + ':__counter', 0)
+		
+		return self
     end;
 	
 	clearAll = function (self)
@@ -437,57 +386,61 @@ Model = Object:extend {
 			v:del()
 		end
 		self:clearCounter ()
+		
+		return self
 	end;
 	
-	-- 判断模型中的缓存（如果有的话），是否已经是脏的了，即已经不反映最新的状态了
-	isDirty = function (self)
-		I_AM_CLASS(self)
-		local model_key = self.__name + ':__dirty'
-		local r = db:get(model_key)
-		if r and r == 'true' then
-			return true
-		else
-			return false
-		end
-	end;
+	---- 判断模型中的缓存（如果有的话），是否已经是脏的了，即已经不反映最新的状态了
+	--isDirty = function (self)
+		--I_AM_CLASS(self)
+		--local model_key = self.__name + ':__dirty'
+		--local r = db:get(model_key)
+		--if r and r == 'true' then
+			--return true
+		--else
+			--return false
+		--end
+	--end;
 	
-	-- 设置缓存标志为脏
-	dirty = function (self)
-		I_AM_CLASS(self)
-		local dirty_key = self.__name + ':__dirty'
-		db:set(dirty_key, 'true')
-	end;
+	---- 设置缓存标志为脏
+	--dirty = function (self)
+		--I_AM_CLASS(self)
+		--local dirty_key = self.__name + ':__dirty'
+		--db:set(dirty_key, 'true')
+		
+		--return self
+	--end;
 	
-	-- 生成一个模型中所有对象的id列表的缓存
-	cache = function (self)
-		I_AM_CLASS(self)
-		local model_key = self.__name + ':__cache'
-		local dirty_key = self.__name + ':__dirty'
-		local all_keys = self:allKeys()
-		local idpart
-		local id_list = {}
-		for i, v in ipairs(all_keys) do
-			idpart = tonumber(v:match(':(%d+):'))
-			table.insert(id_list, idpart)
-		end 
-		table.sort(id_list)
-		local constr = table.concat(id_list, ' ')
-		db:set(model_key, constr)
-		db:set(dirty_key, 'false')
-		-- 返回所有id的list
-		local keystr = db:get(model_key)
-		if not keystr then return {} end
-		return keystr:split(' ')
-	end;
+	---- 生成一个模型中所有对象的id列表的缓存
+	--cache = function (self)
+		--I_AM_CLASS(self)
+		--local model_key = self.__name + ':__cache'
+		--local dirty_key = self.__name + ':__dirty'
+		--local all_keys = self:allKeys()
+		--local idpart
+		--local id_list = {}
+		--for i, v in ipairs(all_keys) do
+			--idpart = tonumber(v:match(':(%d+):'))
+			--table.insert(id_list, idpart)
+		--end 
+		--table.sort(id_list)
+		--local constr = table.concat(id_list, ' ')
+		--db:set(model_key, constr)
+		--db:set(dirty_key, 'false')
+		---- 返回所有id的list
+		--local keystr = db:get(model_key)
+		--if not keystr then return {} end
+		--return keystr:split(' ')
+	--end;
 
-	getCache = function (self)
-		I_AM_CLASS(self)
-		local model_key = self.__name + ':__cache'
-		local keystr = db:get(model_key)
-		if not keystr then return {} end
-		-- 返回所有id的list
-		return keystr:split(' ')
-	end;
+	--getCache = function (self)
+		--I_AM_CLASS(self)
+		--local model_key = self.__name + ':__cache'
+		--local keystr = db:get(model_key)
+		--if not keystr then return {} end
+		---- 返回所有id的list
+		--return keystr:split(' ')
+	--end;
 
 	-- 向数据库中存入自定义键值对，灵活性比较高，也比较危险
 	setCustom = function (self, key, val)
@@ -561,10 +514,10 @@ Model = Object:extend {
 			if (not k:startsWith('_')) and type(v) ~= 'function' and field and (not field['foreign']) then
 				-- 由于不保存有外键的字段，故可以在这里对各种类型直接以字符串存储
 				db:hset(model_key, k, seri(v))
-				--saveFieldToRedis(self, model_key, k, v)
 			end
 		end
 		
+		return self
     end;
     
     -- 这是当实例取出来后，进行部分更新的函数
@@ -576,7 +529,8 @@ Model = Object:extend {
 		local model_key = self.__name + ':' + tostring(self.id)
 		assert(db:exists(model_key), ("[ERROR] Key %s does't exist! Can't apply update."):format(model_key))
 		db:hset(model_key, field, new_value)
-		--saveFieldToRedis(self, model_key, field, new_value)
+		
+		return self
     end;
     
     
@@ -624,11 +578,11 @@ Model = Object:extend {
 		end
 		
 		local model_key = self.__name + ':' + tostring(self.id)
-		if (not fld.st) or fld.st == 'MONO' then
-			-- 当没有写st属性，或st属性为MONO时，即为单外链时
+		if (not fld.st) or fld.st == 'ONE' then
+			-- 当没有写st属性，或st属性为ONE时，即为单外链时
 			db:hset(model_key, field, new_id)
 			self[field] = new_id
-		elseif fld.st == 'LIST' then
+		elseif fld.st == 'MANY' then
 			-- 当为多外键时
 			local key = model_key + ':' + field
 			-- 将新值更新到数据库中去，因此，后面不用用户再写self:save()了
@@ -649,11 +603,11 @@ Model = Object:extend {
 		local fld = self.__fields[field]
 		assert(fld, ("[ERROR] Field %s doesn't be defined!"):format(field))
 		assert( fld.foreign, ("[ERROR] This field %s is not a foreign field."):format(field))
-		if not self[field] then return nil end
+		if not self[field] or self[field] == '' then return nil end
 		
 		local model_key = self.__name + ':' + self.id
 		local link_model, linked_id
-		if (not fld.st) or fld.st == 'MONO' then
+		if (not fld.st) or fld.st == 'ONE' then
 			link_model, linked_id = checkUnfixed(fld, self[field])
 			-- 返回单个外键对象
 			local obj = link_model:getById (linked_id)
@@ -666,9 +620,7 @@ Model = Object:extend {
 			else
 				return obj
 			end
-			
-			
-		elseif fld.st == 'LIST' then
+		elseif fld.st == 'MANY' then
 			local list = self[field]
 			if isFalse(list) then return {} end
 			
@@ -719,8 +671,8 @@ Model = Object:extend {
 			("[ERROR] The foreign model (%s) of this field %s doesn't equal the object's model %s."):format(fld.foreign, field, link_model))
 		
 		local model_key = self.__name + ':' + tostring(self.id)
-		if (not fld.st) or fld.st == 'MONO' then
-			-- 当没有写st属性，或st属性为MONO时，即为单外链时
+		if (not fld.st) or fld.st == 'ONE' then
+			-- 当没有写st属性，或st属性为ONE时，即为单外链时
 			-- db:hget(model_key, field)
 			local linked_id = self[field]
 			-- 返回单个外键对象
@@ -729,12 +681,13 @@ Model = Object:extend {
 			db:hset(model_key, field, '')
 			self[field] = ''
 			
-		elseif fld.st == 'LIST' then
+		elseif fld.st == 'MANY' then
 			
 			rdlist.removeFromList(model_key + ':' + field, frid)
 			table.iremVal(self[field], frid)
 		end
 	
+		return self
 	end;
 
 
