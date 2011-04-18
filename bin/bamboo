@@ -246,8 +246,8 @@ COMMANDS = {
         
         -- 创建目录
 		-- 确保没有同名目录存在
-        assert(posix.stat('plugins/' .. plugin_name) == nil, '[Error] Some file or directory has this name already！')
-        posix.mkdir('plugins/' .. plugin_name)
+        assert(posix.stat(plugin_name) == nil, '[Error] Some file or directory has this name already！')
+        posix.mkdir(plugin_name)
         -- 拷贝文件
         local cmdstr = ('cp -rf %s/cmd_tmpls/createplugin/* ./plugins/%s/'):format(bamboo_dir, plugin_name)
         os.execute(cmdstr)

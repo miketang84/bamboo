@@ -71,7 +71,6 @@ local User = Model:extend {
 		if not params['username'] or not params['password'] then return nil, 101, 'less parameters.' end
 		-- 查看数据库中是否有同名用户
 		local user_id = self:getIdByName (params.username)
-		print('user_id', user_nameindex)
 		-- 如果有，就返回false
 		if user_id then return nil, 103, 'the same name user exists.' end
 		
