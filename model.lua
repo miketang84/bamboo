@@ -673,10 +673,6 @@ Model = Object:extend {
 		local model_key = self.__name + ':' + tostring(self.id)
 		if (not fld.st) or fld.st == 'ONE' then
 			-- 当没有写st属性，或st属性为ONE时，即为单外链时
-			-- db:hget(model_key, field)
-			local linked_id = self[field]
-			-- 返回单个外键对象
-			return link_model:getById (linked_id)
 			-- 将单字符串外键置空
 			db:hset(model_key, field, '')
 			self[field] = ''

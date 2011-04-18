@@ -71,15 +71,13 @@ Menu = Node:extend {
 		-- 从第一层开始，第三个参数0，表示默认的根为0
 		gmenus = makeMenuRecur (gmenus, menutable, 1, 0)
 		-- 清除menu记录
-		self:clearCounter()
+		self:clearAll ()
 		local menuobjs = {}
 		for i, v in ipairs(gmenus) do
 			local objitem = self(v)
 			if not isEmpty(objitem) then
 				table.insert(menuobjs, objitem)
 			end
-			-- 将以前的重复记录删掉
-			self:delById (objitem.id)
 			-- 保存到数据库
 			objitem:save()
 		end

@@ -12,7 +12,7 @@ Message = Model:extend {
 		-- { 字段名称, 视图, 是否允许修改 }
 		['from'] = {},				-- 消息的发送方，为用户id
 		['to'] = {},				-- 消息的接收方，为用户id，可以不止一个，多个之间用空格分开
-		['subject'] = { foreign='UNFIXED' st='ONE' },			-- 消息的主题，里面的内容是：Page:1, Upload:3, Message: 4等
+		['subject'] = { foreign='UNFIXED', st='ONE' },			-- 消息的主题，里面的内容是：Page:1, Upload:3, Message: 4等
 		['type'] = {},				-- 消息的类型
 		['uuid'] = {},				-- 消息的唯一标识符
 		['author'] = {},			-- 消息的发送方的显示名称
