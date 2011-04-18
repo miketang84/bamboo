@@ -247,7 +247,7 @@ Model = Object:extend {
 		local obj, data
 		for _, key in ipairs(all_keys) do
 			local obj = getFromRedis(self, key)
-			if not obj then
+			if obj then
 				table.insert(all_instaces, obj)
 			end
 		end
@@ -603,7 +603,7 @@ Model = Object:extend {
 		local fld = self.__fields[field]
 		assert(fld, ("[ERROR] Field %s doesn't be defined!"):format(field))
 		assert( fld.foreign, ("[ERROR] This field %s is not a foreign field."):format(field))
-		if not self[field] or self[field] == '' then return nil end
+		if isFalse(self[field]) then return nil end
 		
 		local model_key = self.__name + ':' + self.id
 		local link_model, linked_id

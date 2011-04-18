@@ -12,9 +12,10 @@ local User = Model:extend {
 	__name = 'User';
 	__desc = 'Basic user definition.';
 	__fields = {
-		['username'] = {},				-- 必须（这个内容可以为email, 在某些场合下喜欢这样）
-		['password'] = {},				-- 必须
-		['email'] = {},					-- 必须
+		['name'] = {},
+		['username'] = { required=true },				-- 必须（这个内容可以为email, 在某些场合下喜欢这样）
+		['password'] = { required=true },				-- 必须
+		['email'] = { required=true },					-- 必须
 		['is_manager'] = {},			-- 指明用户是否具有网站的管理权限（可能是部分权限）
 		['is_active'] = {},			-- 是否是活动用户，代替删除
 		['created_date'] = {},			-- 帐号创建的时间日期
