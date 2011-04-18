@@ -69,7 +69,7 @@ end
 function removeFromList( key, val )
 	local listkey = 'LIST:' + key
 	
-	return db:lrem(listkey, 1, val)
+	return db:lrem(listkey, 0, val)
 end
 
 function delList( key )

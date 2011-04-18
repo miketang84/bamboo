@@ -673,9 +673,11 @@ Model = Object:extend {
 		local model_key = self.__name + ':' + tostring(self.id)
 		if (not fld.st) or fld.st == 'ONE' then
 			-- 当没有写st属性，或st属性为ONE时，即为单外链时
-			-- 将单字符串外键置空
-			db:hset(model_key, field, '')
-			self[field] = ''
+			-- 将单字符串外键置空，要在指定的对象与记录的外键id是同一个时才执行删除操作
+			if self[field] == frid then
+				db:hset(model_key, field, '')
+				self[field] = ''
+			end
 			
 		elseif fld.st == 'MANY' then
 			

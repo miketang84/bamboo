@@ -309,8 +309,22 @@ COMMANDS = {
             if type(v) ~= 'table' then
                 redis_db:setnx(tostring(k), tostring(v))
             else
-                for kk, vv in pairs(v) do
-                    redis_db:hsetnx(tostring(k), tostring(kk), seri(vv))
+                if k ~= 'ZSETS' then
+                    for kk, vv in pairs(v) do
+                        redis_db:hsetnx(tostring(k), tostring(kk), seri(vv))
+                    end
+                end
+            end
+        end
+        
+        -- 添加zset记录
+        if DATA['ZSETS'] then
+            for _, v in ipairs(DATA['ZSETS']) do
+                local vset = db:keys(v + ':[0-9]*')
+                for _, vv in ipairs(vset) do
+                    local id = tonumber(vv:sub(#v + 2))
+                    local obj = db:hgetall(vv)
+                    db:zadd(v + ':__index', id, obj.name)
                 end
             end
         end
