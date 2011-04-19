@@ -290,16 +290,38 @@ Model = Object:extend {
 	allKeys = function (self)
 		I_AM_CLASS(self)
 		return db:keys(self.__name + ':[0-9]*')
-		
+	end;
+	
+	-- 返回与此类同类名的所有实例
+	all2 = function (self)
+		I_AM_CLASS(self)
+		local all_instaces = {}
+		local all_keys = db:keys(self.__name + ':[0-9]*')
+		local obj, data
+		for _, key in ipairs(all_keys) do
+			local obj = getFromRedis(self, key)
+			if obj then
+				table.insert(all_instaces, obj)
+			end
+		end
+		return all_instaces
 	end;
 	
 	-- 返回此类中实例实际个数
-	number = function (self)
+	numbers = function (self)
 		I_AM_CLASS(self)
 		--local all_keys = db:keys(self.__name + ':[0-9]*')
 		--return #all_keys
 		return db:zcard(getIndexName(self))
 	end;
+	
+	-- 返回与此类同类名的实例个数
+	numbers2 = function (self)
+		I_AM_CLASS(self)
+		local all_keys = db:keys(self.__name + ':[0-9]*')
+		return #all_keys
+	end;
+	
 	
     -- 返回第一个查询对象，
     get = function (self, query)
@@ -569,6 +591,10 @@ Model = Object:extend {
 		return self
     end;
     
+    fillNewField = function (self, t)
+		if not t then return self end
+		return self:init(t)
+    end;
     
     -- 获取模型的counter值
     getCounter = function (self)
