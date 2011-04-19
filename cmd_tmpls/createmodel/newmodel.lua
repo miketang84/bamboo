@@ -7,7 +7,7 @@ local $MODEL = Model:extend {
 	__name = '$MODEL';
 	__desc = 'Generitic $MODEL definition';
 	__fields = {
-		{ 'name', '', false },	
+		['name'] = {},	
 	
 	};
 	

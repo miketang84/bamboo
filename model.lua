@@ -511,7 +511,7 @@ Model = Object:extend {
 			-- 对于在程序中任意写的字段名也不予保存，要进行类定义时字段的检查
 			-- 对于有外链的字段，也不在save中保存，只能用外键相关函数处理
 			local field = self.__fields[k]
-			if (not k:startsWith('_')) and type(v) ~= 'function' and field and (not field['foreign']) then
+			if v and (not k:startsWith('_')) and type(v) ~= 'function' and field and (not field['foreign']) then
 				-- 由于不保存有外键的字段，故可以在这里对各种类型直接以字符串存储
 				db:hset(model_key, k, seri(v))
 			end
@@ -645,7 +645,11 @@ Model = Object:extend {
 				end
 			end
 			
-			return obj_list
+			if #obj_list == 1 then
+				return obj_list[1]
+			else
+				return obj_list
+			end
 		end
 		
 	end;    
