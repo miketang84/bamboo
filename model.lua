@@ -270,20 +270,27 @@ Model = Object:extend {
 		return all_instaces
 	end;
 	
-	-- 返回此类中所有的key，返回一个列表
-	allKeys = function (self)
-		I_AM_CLASS(self)
-		-- return db:keys(self.__name + ':[0-9]*')
-		local _name = self.__name + ':'
+	-- 返回此类的所有id组成的一个列表
+	allIds = function (self)
 		local index_name = getIndexName(self)
-		local all_keys = {}
 		local all_ids = db:zrange(index_name, 0, -1, 'withscores')
+		local r = {}
 		for _, v in ipairs(all_ids) do
 			-- v[2] is the id, _name is self.__name
-			table.insert(all_keys, _name + v[2])
+			table.insert(r, v[2])
 		end
 		
-		return all_keys
+		return r
+	end;
+	
+	-- 返回此类的所有的key（有可能不限于此类，
+	-- 还包含父类的key以及继承于同一父类的所有子类，如果它们的__name都是父类的名字的话）
+	-- 所以这是一个很奇妙的函数
+	-- 返回一个字符串列表
+	allKeys = function (self)
+		I_AM_CLASS(self)
+		return db:keys(self.__name + ':[0-9]*')
+		
 	end;
 	
 	-- 返回此类中实例实际个数
@@ -524,7 +531,6 @@ Model = Object:extend {
 			-- 在保存索引的时候，使用__tag中的最后一个单词作为名字，
 			-- 这是因为__name有可能会命名成与父辈同名的名字
 			local index_key = getIndexName(self)
-			print(index_key)
 			-- local index_key = self.__name + ':__index'
 			--assert(db:exists(index_key), ("[ERROR] %s doesn't exist!"):format(index_key))
 			db:zadd(index_key, tonumber(self.id), self.name)
