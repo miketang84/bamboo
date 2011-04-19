@@ -137,6 +137,7 @@ local Upload = Model:extend {
 	end;
 	
 	process = function (self, web, req, dest_dir, prefix, postfix)
+		I_AM_CLASS(self)
 		if not web then error('Upload input parameter: "web" must be not nil.'); return false end
 		if not req then error('Upload input parameter: "req" must be not nil.'); return false end
 		-- 目前的方案，对大于预定义值的文件上传，立即给予中止

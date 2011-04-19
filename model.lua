@@ -5,6 +5,10 @@ local db = BAMBOO_DB
 local rdlist = require 'bamboo.redis.rdlist'
 local getModelByName  = bamboo.getModelByName 
 
+local function getIndexName(self)
+	return self.__tag:match('%.(%w+)$')  + ':__index'
+end
+
 local function checkUnfixed(fld, item)
 	local foreign = fld.foreign
 	local link_model, linked_id
@@ -51,14 +55,14 @@ end
 -- 定义只能从实例调用
 local delFromRedis = function (self)
 	local model_name = self.__name
-	local index_name = model_name + ':__index'
+	local index_name = getIndexName(self)
 	local id = self.id
 	
 	local fields = self.__fields
 	-- 在redis里面，将对象中关联的外键key-value对删除
 	for k, v in pairs(self) do
 		local fld = fields[k]
-		if fld.foreign then
+		if fld and fld.foreign then
 			local key = model_name + ':' + self.id + ':' + k 
 			if fld.st == 'MANY' then
 				rdlist.delList(key)
@@ -208,7 +212,8 @@ Model = Object:extend {
 		I_AM_CLASS(self)
 		checkType(name, 'string')
 		
-		local idstr = db:zscore(self.__name + ':__index', name)
+		local index_name = getIndexName(self)
+		local idstr = db:zscore(index_name, name)
 		return tonumber(idstr)
     end;
     -- 根据id返回相应的名字
@@ -217,7 +222,8 @@ Model = Object:extend {
 		checkType(tonumber(id), 'number')
 		
 		-- range本身返回一个列表，这里限定只返回一个元素的列表
-		local name = db:zrangebyscore(self.__name + ':__index', id, id)[1]
+		local index_name = getIndexName(self)
+		local name = db:zrangebyscore(index_name, id, id)[1]
 		
 		if isFalse(name) then return nil end
 		return name
@@ -243,7 +249,17 @@ Model = Object:extend {
 	all = function (self)
 		I_AM_CLASS(self)
 		local all_instaces = {}
-		local all_keys = db:keys(self.__name + ':[0-9]*')
+		local _name = self.__name + ':'
+		
+		local index_name = getIndexName(self)
+		local all_keys = {}
+		local all_ids = db:zrange(index_name, 0, -1, 'withscores')
+		for _, v in ipairs(all_ids) do
+			-- v[2] is the id, _name is self.__name
+			table.insert(all_keys, _name + v[2])
+		end
+		ptable(all_keys )
+		
 		local obj, data
 		for _, key in ipairs(all_keys) do
 			local obj = getFromRedis(self, key)
@@ -257,7 +273,17 @@ Model = Object:extend {
 	-- 返回此类中所有的key，返回一个列表
 	allKeys = function (self)
 		I_AM_CLASS(self)
-		return db:keys(self.__name + ':[0-9]*')
+		-- return db:keys(self.__name + ':[0-9]*')
+		local _name = self.__name + ':'
+		local index_name = getIndexName(self)
+		local all_keys = {}
+		local all_ids = db:zrange(index_name, 0, -1, 'withscores')
+		for _, v in ipairs(all_ids) do
+			-- v[2] is the id, _name is self.__name
+			table.insert(all_keys, _name + v[2])
+		end
+		
+		return all_keys
 	end;
 	
 	-- 返回此类中实例实际个数
@@ -265,7 +291,7 @@ Model = Object:extend {
 		I_AM_CLASS(self)
 		--local all_keys = db:keys(self.__name + ':[0-9]*')
 		--return #all_keys
-		return db:zcard(self.__name + ':__index')
+		return db:zcard(getIndexName(self))
 	end;
 	
     -- 返回第一个查询对象，
@@ -495,7 +521,11 @@ Model = Object:extend {
 			-- 对象类别的总数计数器就加1
 			db:incr(self.__name + ':__counter')
 			-- 将记录添加到Model:__index中去
-			local index_key = self.__name + ':__index'
+			-- 在保存索引的时候，使用__tag中的最后一个单词作为名字，
+			-- 这是因为__name有可能会命名成与父辈同名的名字
+			local index_key = getIndexName(self)
+			print(index_key)
+			-- local index_key = self.__name + ':__index'
 			--assert(db:exists(index_key), ("[ERROR] %s doesn't exist!"):format(index_key))
 			db:zadd(index_key, tonumber(self.id), self.name)
 		end

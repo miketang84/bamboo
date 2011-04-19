@@ -118,14 +118,18 @@ local Session = Object:extend {
             db:hset(session_key, 'session_id', req.session_id)
         end
         -- 同步req中的session表
-        req.session = db:hgetall(session_key)
-        -- session是比User低一级的模块，在这里面不能引用User
-        --if req.session['user_id'] then
-            ---- 根据session中记录的用户id号，获取到真正的用户对象
-            --req['user'] = User.get{ id=tonumber(req.session['user_id']) }
-        --end
+        local session = db:hgetall(session_key)
+        -- session是比User低一级的模块，在这里面不能引用User，只能用底层redis的API
+        if session['user_id'] then
+            -- 根据session中记录的用户id号，获取到真正的用户对象
+            local id = session['user_id']
+            -- 所以，req.user不是一个真正的User对象，而只是一个包含user信息的一个表
+            req['user'] = db:hgetall('User:' + id)
+        end
         -- 让所有的session记录都在最后一次访问的一周后自动过期，这里这个数后面要换
         db:expire(session_key, SMALL_EXPIRE_TIME)
+        req['session'] = session
+        
         return true
     end;
 

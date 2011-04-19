@@ -74,8 +74,8 @@ local Web = Object:extend {
         self:page(json.encode(data), 200, "OK", {['content-type'] = ctype or 'application/json'})
     end;
 	-- 返回一个报告错误的json信息
-	json_error = function (self, data)
-		self:json { success = false, err_code = data.err_code, err_desc = data.err_desc }	
+	json_error = function (self, err_code, err_desc)
+		self:json { success = false, err_code = err_code, err_desc = err_desc }	
 	end;
 	-- 页面重定向
     redirect = function (self, url)
