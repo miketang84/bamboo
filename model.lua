@@ -331,14 +331,15 @@ Model = Object:extend {
 		
 		-- 如果查询要求中有id，就以id为主键查询。因为id是存放在总key中，所以要分开处理
 		if id then
-			local vv = nil
+
 			query_args['id'] = nil
-			local query_key = self.__name + ':' + tostring(id)
 			-- 判断数据库中有无此key存在
-			local flag = db:exists(query_key)
-			if not flag then return nil end
-			-- 把这个key下的内容整个取出来
-			vv = getFromRedis(self, query_key)
+			local index_name = getIndexName(self)
+			local r = db:zrangebyscore(index_name, id, id)
+			-- 此模型中尚无此id
+			if r == 0 then return nil end
+			-- 把这个id的整个取出来
+			local vv = self:getById( id )
 			if not vv then return nil end
 			
 			for k, v in pairs(query_args) do
@@ -360,10 +361,11 @@ Model = Object:extend {
 		-- 如果查询要求中没有id
 		else
 			-- 取得所有关于这个模型的实例keys
-			local all_keys = db:keys(self.__name + ':[0-9]*')
-			for _, kk in ipairs(all_keys) do
+			local all_ids = self:allIds()
+			local getById = self.getById 
+			for _, kk in ipairs(all_ids) do
 				-- 根据key获得一个实例的内容，返回一个表
-				local vv = getFromRedis(self, kk)
+				local vv = getById(self, kk)
 				local flag = true
 				for k, v in pairs(query_args) do
 					if not vv or not vv[k] then flag=false; break end
@@ -397,11 +399,12 @@ Model = Object:extend {
 		-- 这里让query_set（一个表）也获得Model中定义的方法，到时可用于链式操作
 		local query_set = setProto({}, Model)
 	
-		-- 取得所有关于这个模型的实例keys
-		local all_keys = db:keys(self.__name + ':[0-9]*')
-		for _, kk in ipairs(all_keys) do
+		-- 取得所有关于这个模型的例id
+		local all_ids = self:allIds()
+		local getById = self.getById 
+		for _, kk in ipairs(all_ids) do
 			-- 根据key获得一个实例的内容，返回一个表
-			local vv = getFromRedis(self, kk)
+			local vv = getById (self, kk)
 			local flag = true	
 			for k, v in pairs(query_args) do
 				-- 对于多余的查询条件，一经发现，直接跳出

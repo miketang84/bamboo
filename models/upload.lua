@@ -14,7 +14,7 @@ local Form = require 'bamboo.form'
 ------------------------------------------------------------------------
 
 
-local function computeNewFilename(oldname)
+local function calcNewFilename(oldname)
 	-- 分离文件的文件名和扩展名
 	local main, ext = oldname:match('^(.+)(%.%w+)$')
 	-- 计算是否存在同名文件
@@ -153,6 +153,7 @@ local Upload = Model:extend {
 	    if req.headers['x-requested-with'] then
 			-- 存储文件到磁盘上
 			local path, name = savefile { req = req, dest_dir = dest_dir, prefix = prefix, postfix = postfix }    
+			-- 这里，只传两个参数进去，更多的参数，需要在文件对象生成后再添加。
 			local file_instance = self { name = name, path = path }
 			if file_instance then
 				file_instance:save()
@@ -174,8 +175,8 @@ local Upload = Model:extend {
 	
 	end;
 	
-	computeNewFilename = function (self, oldname)
-		return computeNewFilename(oldname)
+	calcNewFilename = function (self, oldname)
+		return calcNewFilename(oldname)
 	end;
 	
 }
