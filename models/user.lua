@@ -21,7 +21,8 @@ local User = Model:extend {
 		['created_date'] = {},			-- 帐号创建的时间日期
 		['lastlogin_date'] = {}, 		-- 上次登录的时间日期
 		['perms'] = {},				-- 权限集合
-		['groups'] = {}				-- 用户所属组集合
+		['groups'] = {},				-- 用户所属组集合
+		['forwhat'] = {},				-- 原生于哪个网站？因为，我想做一个通用的用户登录系统，众多站点使用同个用户数据库
 	};
 
 	init = function (self, t)
@@ -36,6 +37,7 @@ local User = Model:extend {
 		self.created_date = os.time()
 		self.perms = t.perms
 		self.groups = t.groups
+		self.forwhat = t.forwhat
 		
 		return self
 	end;

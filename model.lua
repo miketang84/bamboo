@@ -6,8 +6,28 @@ local rdlist = require 'bamboo.redis.rdlist'
 local getModelByName  = bamboo.getModelByName 
 
 local function getIndexName(self)
-	return self.__tag:match('%.(%w+)$')  + ':__index'
+	--return self.__tag:match('%.(%w+)$')  + ':__index'
+	return self.__name  + ':__index'
 end
+
+local function getClassName(self)
+	return self.__tag:match('%.(%w+)$')
+end
+
+local function getStoreName(self)
+	return self.__name
+end
+
+local function checkExistanceById(self, id)
+	local index_name = getIndexName(self)
+	local r = db:zrangebyscore(index_name, id, id)
+	if #r == 0 then 
+		return false, ''
+	else
+		return true, r[1]
+	end
+end
+
 
 local function checkUnfixed(fld, item)
 	local foreign = fld.foreign
@@ -216,16 +236,16 @@ Model = Object:extend {
 		local idstr = db:zscore(index_name, name)
 		return tonumber(idstr)
     end;
+    
     -- 根据id返回相应的名字
     getNameById = function (self, id)
 		I_AM_CLASS(self)
 		checkType(tonumber(id), 'number')
 		
 		-- range本身返回一个列表，这里限定只返回一个元素的列表
-		local index_name = getIndexName(self)
-		local name = db:zrangebyscore(index_name, id, id)[1]
-		
-		if isFalse(name) then return nil end
+		local flag, name = checkExistanceById(self, id)
+		if isFalse(flag) or isFalse(name) then return nil end
+
 		return name
     end;
     -- 根据id返回对象
@@ -233,10 +253,14 @@ Model = Object:extend {
 		I_AM_CLASS(self)
 		checkType(tonumber(id), 'number')
 		
+		-- 先检查索引器里面有没
+		if not checkExistanceById(self, id) then return nil end
+		-- 再检查有没model_key
 		local key = self.__name + ':' + tostring(id)
 		if not db:exists(key) then return nil end
 		return getFromRedis(self, key)
 	end;
+	
 	-- 返回实例对象，此对象的数据由数据库中的数据更新
 	getByName = function (self, name)
 		I_AM_CLASS(self)
@@ -245,6 +269,19 @@ Model = Object:extend {
 		return self:getById (id)
 	end;
 	
+	-- 返回此类的所有id组成的一个列表
+	allIds = function (self)
+		local index_name = getIndexName(self)
+		local all_ids = db:zrange(index_name, 0, -1, 'withscores')
+		local r = {}
+		for _, v in ipairs(all_ids) do
+			-- v[2] is the id
+			table.insert(r, v[2])
+		end
+		
+		return r
+	end;	
+	
 	-- 返回此类中所有的成员
 	all = function (self)
 		I_AM_CLASS(self)
@@ -252,35 +289,17 @@ Model = Object:extend {
 		local _name = self.__name + ':'
 		
 		local index_name = getIndexName(self)
-		local all_keys = {}
-		local all_ids = db:zrange(index_name, 0, -1, 'withscores')
-		for _, v in ipairs(all_ids) do
-			-- v[2] is the id, _name is self.__name
-			table.insert(all_keys, _name + v[2])
-		end
-		ptable(all_keys )
+		local all_ids = self:allIds()
+		local getById = self.getById 
 		
 		local obj, data
-		for _, key in ipairs(all_keys) do
-			local obj = getFromRedis(self, key)
+		for _, id in ipairs(all_ids) do
+			local obj = getById(self, id)
 			if obj then
 				table.insert(all_instaces, obj)
 			end
 		end
 		return all_instaces
-	end;
-	
-	-- 返回此类的所有id组成的一个列表
-	allIds = function (self)
-		local index_name = getIndexName(self)
-		local all_ids = db:zrange(index_name, 0, -1, 'withscores')
-		local r = {}
-		for _, v in ipairs(all_ids) do
-			-- v[2] is the id, _name is self.__name
-			table.insert(r, v[2])
-		end
-		
-		return r
 	end;
 	
 	-- 返回此类的所有的key（有可能不限于此类，
@@ -292,36 +311,11 @@ Model = Object:extend {
 		return db:keys(self.__name + ':[0-9]*')
 	end;
 	
-	-- 返回与此类同类名的所有实例
-	all2 = function (self)
-		I_AM_CLASS(self)
-		local all_instaces = {}
-		local all_keys = db:keys(self.__name + ':[0-9]*')
-		local obj, data
-		for _, key in ipairs(all_keys) do
-			local obj = getFromRedis(self, key)
-			if obj then
-				table.insert(all_instaces, obj)
-			end
-		end
-		return all_instaces
-	end;
-	
 	-- 返回此类中实例实际个数
 	numbers = function (self)
 		I_AM_CLASS(self)
-		--local all_keys = db:keys(self.__name + ':[0-9]*')
-		--return #all_keys
 		return db:zcard(getIndexName(self))
 	end;
-	
-	-- 返回与此类同类名的实例个数
-	numbers2 = function (self)
-		I_AM_CLASS(self)
-		local all_keys = db:keys(self.__name + ':[0-9]*')
-		return #all_keys
-	end;
-	
 	
     -- 返回第一个查询对象，
     get = function (self, query)
@@ -333,11 +327,7 @@ Model = Object:extend {
 		if id then
 
 			query_args['id'] = nil
-			-- 判断数据库中有无此key存在
-			local index_name = getIndexName(self)
-			local r = db:zrangebyscore(index_name, id, id)
-			-- 此模型中尚无此id
-			if r == 0 then return nil end
+
 			-- 把这个id的整个取出来
 			local vv = self:getById( id )
 			if not vv then return nil end
@@ -504,7 +494,7 @@ Model = Object:extend {
 	setCustom = function (self, key, val)
 		I_AM_CLASS(self)
 		checkType(key, val, 'string', 'string')
-		local one_key = self.__name + ':' + key
+		local one_key = getClassName(self) + ':' + key
 		return db:set(one_key, seri(val))
 	end;
 
@@ -513,32 +503,10 @@ Model = Object:extend {
 		I_AM_CLASS(self)
 		checkType(key, 'string')
 		
-		local one_key = self.__name + ':' + key
+		local one_key = getClassName(self) + ':' + key
 		if not db:exists(one_key) then print(("[WARNING] Key %s doesn't exist!"):format(one_key)); return nil end
 		return db:get(one_key)
 	end;
-
-	---- 直接从模型入手，在获知id的情况下，更新此对象的某一个域
-	--updateById = function (self, id, field, new_value)
-		--I_AM_CLASS(self)
-		--checkType(field, new_value, 'string', 'string')
-		
-		--local key = self.__name + ':' + tostring(id)
-		--assert(db:exists(key), ("[ERROR] Key %s does't exist! Can't apply update."):format(key))
-		
-		--db:hset(key, field, new_value)
-	--end;
-	
-	---- 直接从模型入手，在获知name的情况下，更新此对象的某一个域
-	--updateByName = function (self, name, field, new_value)
-		--I_AM_CLASS(self)
-		--checkType(name, field, new_value, 'string', 'string', 'string')
-		
-		--local id = self:getIdByName (name)
-		--assert(id, ("[ERROR] Name %s does't exist!"):format(name))
-		--self:updateById (id, field, new_value)
-	--end;
-	
 
     --------------------------------------------------------------------
 	-- 实例函数。由类的实例访问
@@ -606,7 +574,6 @@ Model = Object:extend {
     
     -- 删除数据库中的一个对象数据
     del = function (self)
-		local model_name = self.__name
 		-- 如果self是单个对象
 		if self['id'] then
 			-- 在数据库中删除这个对象的内容
@@ -664,7 +631,7 @@ Model = Object:extend {
 	-- 释放本对象的一个域中所存储的外链模型的实例
 	-- 返回那些实例的对象列表
 	getForeign = function (self, field, start, stop)
-		checkType(field, 'string', 'table')
+		checkType(field, 'string')
 		local fld = self.__fields[field]
 		assert(fld, ("[ERROR] Field %s doesn't be defined!"):format(field))
 		assert( fld.foreign, ("[ERROR] This field %s is not a foreign field."):format(field))
@@ -727,6 +694,7 @@ Model = Object:extend {
 		assert(fld, ("[ERROR] Field %s doesn't be defined!"):format(field))
 		assert( fld.foreign, ("[ERROR] This field %s is not a foreign field."):format(field))
 		assert( frobj.id, "[ERROR] This object doesn't contain id, it's not a valid object!")
+		if isFalse(self[field]) then return end
 		
 		local frid
 		if fld.foreign == 'UNFIXED' then
