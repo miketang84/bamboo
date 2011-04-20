@@ -119,6 +119,7 @@ local Session = Object:extend {
         end
         -- 同步req中的session表
         local session = db:hgetall(session_key)
+        -- 下面这段代码的工作在后面的User:set()函数中已经做了
         -- session是比User低一级的模块，在这里面不能引用User，只能用底层redis的API
         if session['user_id'] then
             -- 根据session中记录的用户id号，获取到真正的用户对象

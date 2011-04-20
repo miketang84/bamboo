@@ -374,7 +374,8 @@ function run(conn, config)
 					-- session 当前session表					
 					Session:set(req)
 					-- 这一句执行后，req中会带一个user属性，如果Session中有user_id这个键值的话
-					User:set(req)
+					-- 禁止执行这一句，这一句就限定死了必须使用User模型，而不能用User的扩展模型
+					-- User:set(req)
 					
 					-- 状态保护，如果在一个系列状态中途执行其它操作，则清空这个状态，重新开始
 					local session_id = req.session_id

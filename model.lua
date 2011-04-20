@@ -270,9 +270,34 @@ Model = Object:extend {
 	end;
 	
 	-- 返回此类的所有id组成的一个列表
-	allIds = function (self)
+	allIds = function (self, is_rev)
 		local index_name = getIndexName(self)
-		local all_ids = db:zrange(index_name, 0, -1, 'withscores')
+		local all_ids 
+		if not is_rev then
+			all_ids = db:zrange(index_name, 0, -1, 'withscores')
+		else
+			all_ids = db:zrevrange(index_name, 0, -1, 'withscores')
+		end
+		local r = {}
+		for _, v in ipairs(all_ids) do
+			-- v[2] is the id
+			table.insert(r, v[2])
+		end
+		
+		return r
+	end;
+	
+	sliceIds = function (self, start, stop, is_rev)
+		checkType(start, stop, 'number', 'number')
+		local index_name = getIndexName(self)
+		if start > 0 then start = start - 1 end
+		if stop > 0 then stop = stop - 1 end
+		local all_ids
+		if not is_rev then
+			all_ids = db:zrange(index_name, start, stop, 'withscores')
+		else
+			all_ids = db:zrevrange(index_name, start, stop, 'withscores')
+		end
 		local r = {}
 		for _, v in ipairs(all_ids) do
 			-- v[2] is the id
@@ -281,6 +306,21 @@ Model = Object:extend {
 		
 		return r
 	end;	
+	
+	slice = function (self, start, stop, is_rev)
+		local all_ids = self:sliceIds(self, start, stop, is_rev)
+		local objs = {}
+		local getById = self.getById 
+
+		for _, id in ipairs(all_ids) do
+			local obj = getById(self, id)
+			if obj then
+				table.insert(objs, obj)
+			end
+		end
+		
+		return objs
+	end;
 	
 	-- 返回此类中所有的成员
 	all = function (self)
@@ -601,6 +641,8 @@ Model = Object:extend {
 		assert(fld, ("[ERROR] Field %s doesn't be defined!"):format(field))
 		assert( fld.foreign, ("[ERROR] This field %s is not a foreign field."):format(field))
 		assert( new_obj.id, "[ERROR] This object doesn't contain id, it's not a valid object!")
+		assert( fld.foreign == new_obj.__name, ("[ERROR] This foreign field %s can't accept the instance of model %s."):format(field, new_obj.__name))
+		
 		
 		local new_id
 		if fld.foreign == 'UNFIXED' then
@@ -631,7 +673,7 @@ Model = Object:extend {
 	-- liststr的处理算法
 	-- 释放本对象的一个域中所存储的外链模型的实例
 	-- 返回那些实例的对象列表
-	getForeign = function (self, field, start, stop)
+	getForeign = function (self, field, start, stop, is_rev)
 		checkType(field, 'string')
 		local fld = self.__fields[field]
 		assert(fld, ("[ERROR] Field %s doesn't be defined!"):format(field))
@@ -657,10 +699,7 @@ Model = Object:extend {
 			local list = self[field]
 			if isFalse(list) then return {} end
 			
-			local start = start or 1
-			local stop = stop or #list
-			
-			list = table.slice(list, start, stop)
+			list = table.slice(list, start, stop, is_rev)
 			if isFalse(list) then return {} end
 			
 			local obj_list = {}

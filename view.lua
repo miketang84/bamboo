@@ -11,10 +11,10 @@ local VIEW_ACTIONS = {
     end,
     -- 标记中嵌入lua变量
     ['{{'] = function(code)
-        -- 如果要找的变量不存在，则渲染为空字符串，这只一句目前只能处理{{}}
-        -- 这样的情况，而并不能处理变量不存在的情况
-        -- 可以通过执行pcall(loadstring())来检查一个变量是否存在
-        if not code then code = '""' end
+        -- 由于在执行这个的时候，变量尚未传入，所以不能通过执行pcall(loadstring())来检查一个变量是否存在
+        -- local ret = loadstring('return ' + code)()
+        -- assert(ret, ('[ERROR] The value of code "%s" is nil!'):format(code))
+        
         return ('_result[#_result+1] = %s'):format(code)
     end,
     -- 标记中嵌入文件名字符串，用于包含其它文件

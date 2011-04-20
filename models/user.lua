@@ -45,6 +45,7 @@ local User = Model:extend {
 	
 	-- 类函数，此处的self是User本身
 	authenticate = function (self, params)
+		I_AM_CLASS(self)
 		-- 取出用户对象
 		local user = self:getByName(params.username)
 		if not user then return false end
@@ -56,6 +57,7 @@ local User = Model:extend {
 	
 	-- 类函数，此处的self是User本身
 	login = function (self, params, req)
+		I_AM_CLASS(self)
 		if not params['username'] or not params['password'] then return nil end
 		local authed, user = self:authenticate(params)
 		if not authed then return nil end
@@ -66,11 +68,13 @@ local User = Model:extend {
 	end;
 	
 	logout = function (self, req)
+		I_AM_CLASS(self)
 		return Session:delKey(req, 'user_id')
 	end;
 	
-	-- 类函数，此处的self是User本身
+	-- 类函数，此处的self是User本身，也可以是User的继承类型
 	register = function (self, params, req)
+		I_AM_CLASS(self)
 		if not params['username'] or not params['password'] then return nil, 101, 'less parameters.' end
 		-- 查看数据库中是否有同名用户
 		local user_id = self:getIdByName (params.username)
@@ -85,15 +89,24 @@ local User = Model:extend {
 		return user
 	end;
 	
+	getFromReq = function (self, req)
+		I_AM_CLASS(self)
+		if not req.user then return nil end
+		
+		local id = req.user.id
+		return self:getById (id)
+	end;
+	
 	-- 类函数，此处的self是User本身
 	set = function (self, req)
+		I_AM_CLASS(self)
 		local user_id = req.session['user_id']
 		if user_id then
-			req.user = self:get{ id = user_id }
+			req.user = self:getById ( user_id )
 		else
 			req.user = nil
 		end
-		return true
+		return self
 	end;
 	
 
