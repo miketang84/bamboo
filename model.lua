@@ -2,7 +2,8 @@ module(..., package.seeall)
 
 local db = BAMBOO_DB
 
-local rdlist = require 'bamboo.redis.rdlist'
+-- local rdlist = require 'bamboo.redis.rdlist'
+local rdzset = require 'bamboo.redis.rdzset'
 local getModelByName  = bamboo.getModelByName 
 
 local function getIndexName(self)
@@ -14,9 +15,6 @@ local function getClassName(self)
 	return self.__tag:match('%.(%w+)$')
 end
 
-local function getStoreName(self)
-	return self.__name
-end
 
 local function checkExistanceById(self, id)
 	local index_name = getIndexName(self)
@@ -62,7 +60,8 @@ local getFromRedis = function (self, model_key)
 		if fld.foreign then
 			local st = fld.st
 			if st == 'MANY' then
-				data[k] = rdlist.retrieveList(model_key + ':' + k)
+				-- data[k] = rdlist.retrieveList(model_key + ':' + k)
+				data[k] = rdzset.retrieveZset(model_key + ':' + k)
 			end
 		end
 	end
@@ -83,9 +82,10 @@ local delFromRedis = function (self)
 	for k, v in pairs(self) do
 		local fld = fields[k]
 		if fld and fld.foreign then
-			local key = model_name + ':' + self.id + ':' + k 
 			if fld.st == 'MANY' then
-				rdlist.delList(key)
+				local key = model_name + ':' + self.id + ':' + k 
+				-- rdlist.delList(key)
+				rdzset.delZset(key)
 			end
 		end
 	end
@@ -618,7 +618,8 @@ Model = Object:extend {
 			-- 当为多外键时
 			local key = model_key + ':' + field
 			-- 将新值更新到数据库中去，因此，后面不用用户再写self:save()了
-			rdlist.appendToList(key, new_id)
+			-- rdlist.appendToList(key, new_id)
+			rdzset.addToZset(key, new_id)
 			if not self[field] then self[field] = {} end
 			-- 给本对象添加更新值
 			table.insert(self[field], new_id)
@@ -670,7 +671,8 @@ Model = Object:extend {
 				-- 这里，要检查返回的obj是不是空对象，而不仅仅是不是空表
 				if isFalse(obj) then
 					-- 如果没有获取到，就把这个外键去掉
-					rdlist.removeFromList(model_key + ':' + field, v)
+					-- rdlist.removeFromList(model_key + ':' + field, v)
+					rdzset.removeFromZset(model_key + ':' + field, v)
 					table.iremVal(self[field], v)
 				else
 					table.insert(obj_list, obj)
@@ -718,7 +720,8 @@ Model = Object:extend {
 			
 		elseif fld.st == 'MANY' then
 			
-			rdlist.removeFromList(model_key + ':' + field, frid)
+			-- rdlist.removeFromList(model_key + ':' + field, frid)
+			rdzset.removeFromZset(model_key + ':' + field, frid)
 			table.iremVal(self[field], frid)
 		end
 	
