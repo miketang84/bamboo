@@ -287,7 +287,9 @@ Model = Object:extend {
 		return r
 	end;
 	
+	-- 支持以负数为索引
 	sliceIds = function (self, start, stop, is_rev)
+		I_AM_CLASS(self)
 		checkType(start, stop, 'number', 'number')
 		local index_name = getIndexName(self)
 		if start > 0 then start = start - 1 end
@@ -307,7 +309,9 @@ Model = Object:extend {
 		return r
 	end;	
 	
+	-- 支持以负数为索引
 	slice = function (self, start, stop, is_rev)
+		I_AM_CLASS(self)
 		local all_ids = self:sliceIds(self, start, stop, is_rev)
 		local objs = {}
 		local getById = self.getById 
@@ -323,13 +327,13 @@ Model = Object:extend {
 	end;
 	
 	-- 返回此类中所有的成员
-	all = function (self)
+	all = function (self, is_rev)
 		I_AM_CLASS(self)
 		local all_instaces = {}
 		local _name = self.__name + ':'
 		
 		local index_name = getIndexName(self)
-		local all_ids = self:allIds()
+		local all_ids = self:allIds(is_rev)
 		local getById = self.getById 
 		
 		local obj, data
