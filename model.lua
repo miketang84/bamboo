@@ -543,6 +543,8 @@ Model = Object:extend {
 		local one_key = getClassName(self) + ':' + key
 		if st == 'LIST' then
 			checkType(val, 'table')
+			-- 先删除以前的value，要重填value
+			db:del(one_key)
 			for _, v in ipairs(val) do
 				db:rpush(one_key, seri(v))
 			end
