@@ -578,6 +578,78 @@ Model = Object:extend {
 		return db:del(one_key)		
 	end;
 	
+	makeFifo = function (self, gkey, length)
+		I_AM_CLASS(self)
+		checkType(gkey, length, 'string', 'number')
+		assert( gkey ~= '', "[ERROR] In makeFIFO, 'key' shouldn't be empty.")
+		assert( length > 0, "[ERROR] In makeFIFO, 'length' shouldn't be smaller than 1.")
+		local innerkey = '_fifo_' + gkey
+		
+		self[innerkey] = length
+		return self
+	end;
+	
+	-- 注意：fifo存储的顺序是与普通的list反过来的
+	pushFifo = function (self, gkey, key, val)
+		I_AM_CLASS(self)
+		checkType(gkey, key, val, 'string', 'string', 'string')
+		local innerkey = '_fifo_' + gkey
+		assert(self[innerkey], "[ERROR] To use pushFIFO, you should call makeFIFO first.")
+		local length = self[innerkey]
+		
+		local store_key = 'FIFO:' + getClassName(self) + ':' + key
+		local len = db:llen(store_key)
+		
+		if len < length then
+			db:lpush(store_key, val)
+		else
+			-- 如果FIFO已经满了，就从右边弹出，左边压入
+			db:rpop(store_key)
+			db:lpush(store_key, val)
+		end
+		
+		return self
+	end;
+	
+	popFifo = function (self, gkey, key)
+		I_AM_CLASS(self)
+		checkType(gkey, key, 'string', 'string')
+		local innerkey = '_fifo_' + gkey
+		assert(self[innerkey], "[ERROR] To use popFIFO, you should call makeFIFO first.")
+		
+		local store_key = 'FIFO:' + getClassName(self) + ':' + key
+		local len = db:llen(store_key)
+		
+		-- 如果至少有一个元素
+		if len >= 1 then
+			return db:rpop(store_key)
+		else
+			return nil
+		end
+	end;
+	
+	lenFifo = function (self, gkey, key)
+		I_AM_CLASS(self)
+		checkType(gkey, key, 'string', 'string')
+		local innerkey = '_fifo_' + gkey
+		assert(self[innerkey], "[ERROR] To use lenFIFO, you should call makeFIFO first.")
+		
+		local store_key = 'FIFO:' + getClassName(self) + ':' + key
+		return db:llen(store_key)
+	end;
+	
+	getFifo = function (self, gkey, key)
+		I_AM_CLASS(self)
+		checkType(gkey, key, 'string', 'string')
+		local innerkey = '_fifo_' + gkey
+		assert(self[innerkey], "[ERROR] To use getFIFO, you should call makeFIFO first.")
+		
+		local store_key = 'FIFO:' + getClassName(self) + ':' + key
+		
+		-- 直接返回整个列表
+		return db:lrange(store_key, 0, -1)
+	end;
+	
     --------------------------------------------------------------------
 	-- 实例函数。由类的实例访问
 	--------------------------------------------------------------------
