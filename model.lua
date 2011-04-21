@@ -271,6 +271,7 @@ Model = Object:extend {
 	
 	-- 返回此类的所有id组成的一个列表
 	allIds = function (self, is_rev)
+		I_AM_CLASS(self)
 		local index_name = getIndexName(self)
 		local all_ids 
 		if not is_rev then
@@ -312,7 +313,7 @@ Model = Object:extend {
 	-- 支持以负数为索引
 	slice = function (self, start, stop, is_rev)
 		I_AM_CLASS(self)
-		local all_ids = self:sliceIds(self, start, stop, is_rev)
+		local all_ids = self:sliceIds(start, stop, is_rev)
 		local objs = {}
 		local getById = self.getById 
 
