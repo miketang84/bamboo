@@ -536,23 +536,46 @@ Model = Object:extend {
 	--end;
 
 	-- 向数据库中存入自定义键值对，灵活性比较高，也比较危险
-	setCustom = function (self, key, val)
+	-- 目前可以存储字符串和list
+	setCustom = function (self, key, val, st)
 		I_AM_CLASS(self)
-		checkType(key, val, 'string', 'string')
+		checkType(key, 'string')
 		local one_key = getClassName(self) + ':' + key
-		return db:set(one_key, seri(val))
+		if st == 'LIST' then
+			checkType(val, 'table')
+			for _, v in ipairs(val) do
+				db:rpush(one_key, seri(v))
+			end
+		else
+			assert( type(val) == 'string' or type(val) == 'number', "[ERROR] In the string mode of setCustom, val should be string or number.")
+			db:set(one_key, seri(val))
+		end
 	end;
 
 	-- 向数据库中取出自定义键值对
-	getCustom = function (self, key)
+	getCustom = function (self, key, st)
 		I_AM_CLASS(self)
 		checkType(key, 'string')
-		
 		local one_key = getClassName(self) + ':' + key
 		if not db:exists(one_key) then print(("[WARNING] Key %s doesn't exist!"):format(one_key)); return nil end
-		return db:get(one_key)
+
+		local store_type = db:type(one_key)
+		if store_type == 'list' then
+			if not st then print(("[WARNING] Key %s is list!"):format(one_key)) end
+			return db:lrange(one_key, 0, -1)
+		elseif store_type == 'string' then
+			return db:get(one_key)
+		end
 	end;
 
+	delCustom = function (self, key)
+		I_AM_CLASS(self)
+		checkType(key, 'string')
+		local one_key = getClassName(self) + ':' + key
+		
+		return db:del(one_key)		
+	end;
+	
     --------------------------------------------------------------------
 	-- 实例函数。由类的实例访问
 	--------------------------------------------------------------------
@@ -646,7 +669,7 @@ Model = Object:extend {
 		assert(fld, ("[ERROR] Field %s doesn't be defined!"):format(field))
 		assert( fld.foreign, ("[ERROR] This field %s is not a foreign field."):format(field))
 		assert( new_obj.id, "[ERROR] This object doesn't contain id, it's not a valid object!")
-		assert( fld.foreign == new_obj.__name, ("[ERROR] This foreign field %s can't accept the instance of model %s."):format(field, new_obj.__name))
+		assert( fld.foreign == 'UNFIXED' or fld.foreign == new_obj.__name, ("[ERROR] This foreign field %s can't accept the instance of model %s."):format(field, new_obj.__name))
 		
 		
 		local new_id
@@ -683,11 +706,13 @@ Model = Object:extend {
 		local fld = self.__fields[field]
 		assert(fld, ("[ERROR] Field %s doesn't be defined!"):format(field))
 		assert( fld.foreign, ("[ERROR] This field %s is not a foreign field."):format(field))
-		if isFalse(self[field]) then return nil end
+		
 		
 		local model_key = self.__name + ':' + self.id
 		local link_model, linked_id
 		if (not fld.st) or fld.st == 'ONE' then
+			if isFalse(self[field]) then return nil end
+			
 			link_model, linked_id = checkUnfixed(fld, self[field])
 			-- 返回单个外键对象
 			local obj = link_model:getById (linked_id)
@@ -701,6 +726,7 @@ Model = Object:extend {
 				return obj
 			end
 		elseif fld.st == 'MANY' then
+			if isFalse(self[field]) then return {} end
 			local list = self[field]
 			if isFalse(list) then return {} end
 			

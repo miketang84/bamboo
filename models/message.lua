@@ -23,9 +23,6 @@ local Message = Model:extend {
 	init = function (self, t)
 		if not t then return self end
 		
-		self.from = t.from
-		self.to = t.to
-		self.subject = t.subject
 		self.type = t.type
 		-- self.uuid = t.uuid
 		self.author = t.author
