@@ -328,23 +328,6 @@ Model = Object:extend {
 		return r
 	end;	
 	
-	-- 支持以负数为索引
-	slice = function (self, start, stop, is_rev)
-		I_AM_CLASS(self)
-		local all_ids = self:sliceIds(start, stop, is_rev)
-		local objs = {}
-		local getById = self.getById 
-
-		for _, id in ipairs(all_ids) do
-			local obj = getById(self, id)
-			if obj then
-				table.insert(objs, obj)
-			end
-		end
-		
-		return objs
-	end;
-	
 	-- 返回此类中所有的成员
 	all = function (self, is_rev)
 		I_AM_CLASS(self)
@@ -363,6 +346,23 @@ Model = Object:extend {
 			end
 		end
 		return all_instaces
+	end;
+
+	-- 支持以负数为索引
+	slice = function (self, start, stop, is_rev)
+		I_AM_CLASS(self)
+		local all_ids = self:sliceIds(start, stop, is_rev)
+		local objs = {}
+		local getById = self.getById 
+
+		for _, id in ipairs(all_ids) do
+			local obj = getById(self, id)
+			if obj then
+				table.insert(objs, obj)
+			end
+		end
+		
+		return objs
 	end;
 	
 	-- 返回此类的所有的key（有可能不限于此类，
@@ -501,58 +501,6 @@ Model = Object:extend {
 		return self
 	end;
 	
-	---- 判断模型中的缓存（如果有的话），是否已经是脏的了，即已经不反映最新的状态了
-	--isDirty = function (self)
-		--I_AM_CLASS(self)
-		--local model_key = self.__name + ':__dirty'
-		--local r = db:get(model_key)
-		--if r and r == 'true' then
-			--return true
-		--else
-			--return false
-		--end
-	--end;
-	
-	---- 设置缓存标志为脏
-	--dirty = function (self)
-		--I_AM_CLASS(self)
-		--local dirty_key = self.__name + ':__dirty'
-		--db:set(dirty_key, 'true')
-		
-		--return self
-	--end;
-	
-	---- 生成一个模型中所有对象的id列表的缓存
-	--cache = function (self)
-		--I_AM_CLASS(self)
-		--local model_key = self.__name + ':__cache'
-		--local dirty_key = self.__name + ':__dirty'
-		--local all_keys = self:allKeys()
-		--local idpart
-		--local id_list = {}
-		--for i, v in ipairs(all_keys) do
-			--idpart = tonumber(v:match(':(%d+):'))
-			--table.insert(id_list, idpart)
-		--end 
-		--table.sort(id_list)
-		--local constr = table.concat(id_list, ' ')
-		--db:set(model_key, constr)
-		--db:set(dirty_key, 'false')
-		---- 返回所有id的list
-		--local keystr = db:get(model_key)
-		--if not keystr then return {} end
-		--return keystr:split(' ')
-	--end;
-
-	--getCache = function (self)
-		--I_AM_CLASS(self)
-		--local model_key = self.__name + ':__cache'
-		--local keystr = db:get(model_key)
-		--if not keystr then return {} end
-		---- 返回所有id的list
-		--return keystr:split(' ')
-	--end;
-
 	-- 向数据库中存入自定义键值对，灵活性比较高，也比较危险
 	-- 目前可以存储字符串和list
 	setCustom = function (self, key, val, st)
@@ -581,7 +529,7 @@ Model = Object:extend {
 
 		local store_type = db:type(one_key)
 		if store_type == 'list' then
-			if not st then print(("[WARNING] Key %s is list!"):format(one_key)) end
+			if not st or st ~= 'LIST' then print(("[WARNING] Key %s is list!"):format(one_key)) end
 			return db:lrange(one_key, 0, -1)
 		elseif store_type == 'string' then
 			return db:get(one_key)
@@ -596,92 +544,12 @@ Model = Object:extend {
 		return db:del(one_key)		
 	end;
 	
-	makeFifo = function (self, gkey, length)
-		I_AM_CLASS(self)
-		checkType(gkey, length, 'string', 'number')
-		assert( gkey ~= '', "[ERROR] In makeFIFO, 'key' shouldn't be empty.")
-		assert( length > 0, "[ERROR] In makeFIFO, 'length' shouldn't be smaller than 1.")
-		
-		-- 存到数据库中
-		storeFifoGkey(self, gkey)
-		return self
-	end;
-	
-	-- 注意：fifo存储的顺序是与普通的list反过来的
-	pushToFifo = function (self, gkey, key, val)
-		I_AM_CLASS(self)
-		checkType(gkey, key, val, 'string', 'string', 'string')
-		
-		local length = retrieveFifoGkey(self, gkey)
-		assert(length, "[ERROR] To use pushFifo, you should call makeFifo first, and make sure the length is a number greater than zero.")
-		
-		local store_key = self.__name + ':' + key
-		rdfifo.pushToFifo(store_key, length, val)
-		
-		return self
-	end;
-	
-	popFromFifo = function (self, gkey, key)
-		I_AM_CLASS(self)
-		checkType(gkey, key, 'string', 'string')
-		local length = retrieveFifoGkey(self, gkey)
-		assert(length, "[ERROR] To use popFifo, you should call makeFifo first, and make sure the length is a number greater than zero.")
-		
-		local store_key = self.__name + ':' + key
-		return rdfifo.popFromFifo(store_key)
-	end;
-
-	retrieveFifo = function (self, gkey, key)
-		I_AM_CLASS(self)
-		checkType(gkey, key, 'string', 'string')
-		local length = retrieveFifoGkey(self, gkey)
-		assert(length, "[ERROR] To use retrieveFifo, you should call makeFifo first, and make sure the length is a number greater than zero.")
-		
-		local store_key = self.__name + ':' + key
-		
-		-- 直接返回整个列表
-		return rdfifo.retrieveFifo(store_key)
-	end;
-	
-	removeFromFifo = function (self, gkey, key, val)
-		I_AM_CLASS(self)
-		checkType(gkey, key, val, 'string', 'string', 'string')
-		
-		local length = retrieveFifoGkey(self, gkey)
-		assert(length, "[ERROR] To use removeFromFifo, you should call makeFifo first, and make sure the length is a number greater than zero.")
-		
-		local store_key = self.__name + ':' + key
-		return rdfifo.removeFromFifo(store_key, val)
-	end;	
-	
-	lenFifo = function (self, gkey, key)
-		I_AM_CLASS(self)
-		checkType(gkey, key, 'string', 'string')
-		local length = retrieveFifoGkey(self, gkey)
-		assert(length, "[ERROR] To use lenFifo, you should call makeFifo first, and make sure the length is a number greater than zero.")
-
-		local store_key = self.__name + ':' + key
-		return rdfifo.lenFifo(store_key)
-	end;
-		
-	delFifo = function (self, gkey, key)
-		I_AM_CLASS(self)
-		checkType(gkey, key, val, 'string', 'string', 'string')
-		local length = retrieveFifoGkey(self, gkey)
-		assert(length, "[ERROR] To use delFifo, you should call makeFifo first, and make sure the length is a number greater than zero.")
-
-		local store_key = self.__name + ':' + key
-		return rdfifo.delFifo(store_key)
-	end;
-
-	
-
-	
     --------------------------------------------------------------------
 	-- 实例函数。由类的实例访问
 	--------------------------------------------------------------------
     -- 在数据库中创建一个hash表项，保存模型实例
     save = function (self)
+		I_AM_INSTANCE(self)
         assert(self.name, "[ERROR] The name field doesn't exist!")
         local model_key = self.__name + ':' + tostring(self.id)
 		local isExisted = db:exists(model_key)
@@ -720,6 +588,7 @@ Model = Object:extend {
     
     -- 这是当实例取出来后，进行部分更新的函数
     update = function (self, field, new_value)
+		I_AM_INSTANCE(self)
 		checkType(field, new_value, 'string', 'string')
 		local fld = self.__fields[field]
 		assert(fld, ("[ERROR] Field %s doesn't be defined!"):format(field))
@@ -732,17 +601,20 @@ Model = Object:extend {
     end;
     
     fillNewField = function (self, t)
+		I_AM_INSTANCE(self)
 		if not t then return self end
 		return self:init(t)
     end;
     
     -- 获取模型的counter值
     getCounter = function (self)
+		I_AM_INSTANCE(self)
 		return tonumber(db:get(self.__name + ':__counter') or 0)
     end;
     
     -- 删除数据库中的一个对象数据
     del = function (self)
+		I_AM_INSTANCE(self)
 		-- 如果self是单个对象
 		if self['id'] then
 			-- 在数据库中删除这个对象的内容
@@ -763,6 +635,7 @@ Model = Object:extend {
 	-- 添加一个外链模型的实例的id到本对象的一个域中来
 	-- 返回本对象
 	addForeign = function (self, field, new_obj)
+		I_AM_INSTANCE(self)
 		checkType(field, new_obj, 'string', 'table')
 		checkType(tonumber(new_obj.id), 'number')
 
@@ -807,6 +680,7 @@ Model = Object:extend {
 	-- 释放本对象的一个域中所存储的外链模型的实例
 	-- 返回那些实例的对象列表
 	getForeign = function (self, field, start, stop, is_rev)
+		I_AM_INSTANCE(self)
 		checkType(field, 'string')
 		local fld = self.__fields[field]
 		assert(fld, ("[ERROR] Field %s doesn't be defined!"):format(field))
@@ -893,6 +767,7 @@ Model = Object:extend {
 	end;    
 	
 	delForeign = function (self, field, frobj)
+		I_AM_INSTANCE(self)
 		checkType(field, frobj, 'string', 'table')
 		local fld = self.__fields[field]
 		assert(fld, ("[ERROR] Field %s doesn't be defined!"):format(field))
@@ -932,6 +807,7 @@ Model = Object:extend {
 	end;
 
 	foreignNumbers = function (self, field)
+		I_AM_INSTANCE(self)
 		checkType(field, 'string')
 		local fld = self.__fields[field]
 		assert(fld, ("[ERROR] Field %s doesn't be defined!"):format(field))
