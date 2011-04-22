@@ -32,6 +32,12 @@ function removeFromZset( key, val )
 	return db:zrem(zsetkey, val)
 end
 
+function lenZset( key )
+	local zsetkey = 'ZSET:' + key
+	
+	return db:zcard(zsetkey)
+end
+
 function delZset( key )
 	local zsetkey = 'ZSET:' + key
 	

@@ -4,6 +4,7 @@ local db = BAMBOO_DB
 
 -- local rdlist = require 'bamboo.redis.rdlist'
 local rdzset = require 'bamboo.redis.rdzset'
+local rdfifo = require 'bamboo.redis.rdfifo'
 local getModelByName  = bamboo.getModelByName 
 
 local function getIndexName(self)
@@ -15,6 +16,20 @@ local function getClassName(self)
 	return self.__tag:match('%.(%w+)$')
 end
 
+local function storeFifoGkey(self, gkey, length)
+	local innerkey = self.__name + ':_fifo_' + gkey
+	db:set(innerkey, length)
+end
+
+local function retrieveFifoGkey(self, gkey)
+	local innerkey = self.__name + ':_fifo_' + gkey
+	if not db:exists(innerkey) then return nil end
+	
+	local length = tonumber(db:get(innerkey))
+	assert(type(length) == 'number', ("[ERROR] The value of the FIFO key %s is not a number!"):format(innerkey))
+	
+	return length
+end
 
 local function checkExistanceById(self, id)
 	local index_name = getIndexName(self)
@@ -61,7 +76,10 @@ local getFromRedis = function (self, model_key)
 			local st = fld.st
 			if st == 'MANY' then
 				-- data[k] = rdlist.retrieveList(model_key + ':' + k)
-				data[k] = rdzset.retrieveZset(model_key + ':' + k)
+				-- data[k] = rdzset.retrieveZset(model_key + ':' + k)
+				data[k] = 'FOREIGN MANY'
+			elseif st == 'FIFO' then
+				data[k] = 'FOREIGN FIFO'
 			end
 		end
 	end
@@ -583,72 +601,81 @@ Model = Object:extend {
 		checkType(gkey, length, 'string', 'number')
 		assert( gkey ~= '', "[ERROR] In makeFIFO, 'key' shouldn't be empty.")
 		assert( length > 0, "[ERROR] In makeFIFO, 'length' shouldn't be smaller than 1.")
-		local innerkey = '_fifo_' + gkey
 		
-		self[innerkey] = length
+		-- 存到数据库中
+		storeFifoGkey(self, gkey)
 		return self
 	end;
 	
 	-- 注意：fifo存储的顺序是与普通的list反过来的
-	pushFifo = function (self, gkey, key, val)
+	pushToFifo = function (self, gkey, key, val)
 		I_AM_CLASS(self)
 		checkType(gkey, key, val, 'string', 'string', 'string')
-		local innerkey = '_fifo_' + gkey
-		assert(self[innerkey], "[ERROR] To use pushFIFO, you should call makeFIFO first.")
-		local length = self[innerkey]
 		
-		local store_key = 'FIFO:' + getClassName(self) + ':' + key
-		local len = db:llen(store_key)
+		local length = retrieveFifoGkey(self, gkey)
+		assert(length, "[ERROR] To use pushFifo, you should call makeFifo first, and make sure the length is a number greater than zero.")
 		
-		if len < length then
-			db:lpush(store_key, val)
-		else
-			-- 如果FIFO已经满了，就从右边弹出，左边压入
-			db:rpop(store_key)
-			db:lpush(store_key, val)
-		end
+		local store_key = self.__name + ':' + key
+		rdfifo.pushToFifo(store_key, length, val)
 		
 		return self
 	end;
 	
-	popFifo = function (self, gkey, key)
+	popFromFifo = function (self, gkey, key)
 		I_AM_CLASS(self)
 		checkType(gkey, key, 'string', 'string')
-		local innerkey = '_fifo_' + gkey
-		assert(self[innerkey], "[ERROR] To use popFIFO, you should call makeFIFO first.")
+		local length = retrieveFifoGkey(self, gkey)
+		assert(length, "[ERROR] To use popFifo, you should call makeFifo first, and make sure the length is a number greater than zero.")
 		
-		local store_key = 'FIFO:' + getClassName(self) + ':' + key
-		local len = db:llen(store_key)
-		
-		-- 如果至少有一个元素
-		if len >= 1 then
-			return db:rpop(store_key)
-		else
-			return nil
-		end
+		local store_key = self.__name + ':' + key
+		return rdfifo.popFromFifo(store_key)
 	end;
+
+	retrieveFifo = function (self, gkey, key)
+		I_AM_CLASS(self)
+		checkType(gkey, key, 'string', 'string')
+		local length = retrieveFifoGkey(self, gkey)
+		assert(length, "[ERROR] To use retrieveFifo, you should call makeFifo first, and make sure the length is a number greater than zero.")
+		
+		local store_key = self.__name + ':' + key
+		
+		-- 直接返回整个列表
+		return rdfifo.retrieveFifo(store_key)
+	end;
+	
+	removeFromFifo = function (self, gkey, key, val)
+		I_AM_CLASS(self)
+		checkType(gkey, key, val, 'string', 'string', 'string')
+		
+		local length = retrieveFifoGkey(self, gkey)
+		assert(length, "[ERROR] To use removeFromFifo, you should call makeFifo first, and make sure the length is a number greater than zero.")
+		
+		local store_key = self.__name + ':' + key
+		return rdfifo.removeFromFifo(store_key, val)
+	end;	
 	
 	lenFifo = function (self, gkey, key)
 		I_AM_CLASS(self)
 		checkType(gkey, key, 'string', 'string')
-		local innerkey = '_fifo_' + gkey
-		assert(self[innerkey], "[ERROR] To use lenFIFO, you should call makeFIFO first.")
-		
-		local store_key = 'FIFO:' + getClassName(self) + ':' + key
-		return db:llen(store_key)
+		local length = retrieveFifoGkey(self, gkey)
+		assert(length, "[ERROR] To use lenFifo, you should call makeFifo first, and make sure the length is a number greater than zero.")
+
+		local store_key = self.__name + ':' + key
+		return rdfifo.lenFifo(store_key)
 	end;
-	
-	getFifo = function (self, gkey, key)
+		
+	delFifo = function (self, gkey, key)
 		I_AM_CLASS(self)
-		checkType(gkey, key, 'string', 'string')
-		local innerkey = '_fifo_' + gkey
-		assert(self[innerkey], "[ERROR] To use getFIFO, you should call makeFIFO first.")
-		
-		local store_key = 'FIFO:' + getClassName(self) + ':' + key
-		
-		-- 直接返回整个列表
-		return db:lrange(store_key, 0, -1)
+		checkType(gkey, key, val, 'string', 'string', 'string')
+		local length = retrieveFifoGkey(self, gkey)
+		assert(length, "[ERROR] To use delFifo, you should call makeFifo first, and make sure the length is a number greater than zero.")
+
+		local store_key = self.__name + ':' + key
+		return rdfifo.delFifo(store_key)
 	end;
+
+	
+
 	
     --------------------------------------------------------------------
 	-- 实例函数。由类的实例访问
@@ -762,11 +789,15 @@ Model = Object:extend {
 			-- 当为多外键时
 			local key = model_key + ':' + field
 			-- 将新值更新到数据库中去，因此，后面不用用户再写self:save()了
-			-- rdlist.appendToList(key, new_id)
 			rdzset.addToZset(key, new_id)
-			if not self[field] then self[field] = {} end
-			-- 给本对象添加更新值
-			table.insert(self[field], new_id)
+		elseif fld.st == 'FIFO' then
+			-- 当指定的为FIFO管道时
+			local length = fld.fifolen
+			assert(length and type(length) == 'number' and length > 0, 
+				"[ERROR] In Fifo foreign, the 'fifolen' must be number greater than 0!")
+			local key = model_key + ':' + field
+			rdfifo.pushToFifo(key, length, new_id)
+		
 		end
 		
 		return self
@@ -801,7 +832,9 @@ Model = Object:extend {
 			end
 		elseif fld.st == 'MANY' then
 			if isFalse(self[field]) then return {} end
-			local list = self[field]
+			
+			local key = model_key + ':' + field
+			local list = rdzset.retrieveZset(key)
 			if isFalse(list) then return {} end
 			
 			list = table.slice(list, start, stop, is_rev)
@@ -815,9 +848,36 @@ Model = Object:extend {
 				-- 这里，要检查返回的obj是不是空对象，而不仅仅是不是空表
 				if isFalse(obj) then
 					-- 如果没有获取到，就把这个外键去掉
-					-- rdlist.removeFromList(model_key + ':' + field, v)
-					rdzset.removeFromZset(model_key + ':' + field, v)
-					table.iremVal(self[field], v)
+					rdzset.removeFromZset(key, v)
+				else
+					table.insert(obj_list, obj)
+				end
+			end
+			
+			if #obj_list == 1 then
+				return obj_list[1]
+			else
+				return obj_list
+			end
+			
+		elseif fld.st == 'FIFO' then
+			if isFalse(self[field]) then return {} end
+		
+			local key = model_key + ':' + field
+			local list = rdfifo.retrieveFifo(key)
+			
+			list = table.slice(list, start, stop, is_rev)
+			if isFalse(list) then return {} end
+	
+			local obj_list = {}
+			for _, v in ipairs(list) do
+				link_model, linked_id = checkUnfixed(fld, v)
+
+				local obj = link_model:getById(linked_id)
+				-- 这里，要检查返回的obj是不是空对象，而不仅仅是不是空表
+				if isFalse(obj) then
+					-- 如果没有获取到，就把这个外键元素去掉
+					rdfifo.removeFromFifo(key, v)
 				else
 					table.insert(obj_list, obj)
 				end
@@ -829,10 +889,8 @@ Model = Object:extend {
 				return obj_list
 			end
 		end
-		
+
 	end;    
-
-
 	
 	delForeign = function (self, field, frobj)
 		checkType(field, frobj, 'string', 'table')
@@ -863,15 +921,37 @@ Model = Object:extend {
 			end
 			
 		elseif fld.st == 'MANY' then
-			
-			-- rdlist.removeFromList(model_key + ':' + field, frid)
 			rdzset.removeFromZset(model_key + ':' + field, frid)
-			table.iremVal(self[field], frid)
+		
+		elseif fld.st == 'FIFO' then
+			rdfifo.removeFromFifo(model_key + ':' + field, frid)
+			
 		end
 	
 		return self
 	end;
 
+	foreignNumbers = function (self, field)
+		checkType(field, 'string')
+		local fld = self.__fields[field]
+		assert(fld, ("[ERROR] Field %s doesn't be defined!"):format(field))
+		assert( fld.foreign, ("[ERROR] This field %s is not a foreign field."):format(field))
+		-- 还没有外链的
+		if isFalse(self[field]) then return 0 end
+		
+		local model_key = self.__name + ':' + tostring(self.id)
+		if (not fld.st) or fld.st == 'ONE' then
+			-- 单外链就是一个噻
+			return 1
+		elseif fld.st == 'MANY' then
+			return rdzset.lenZset(model_key + ':' + field)
+		
+		elseif fld.st == 'FIFO' then
+			return rdfifo.lenFifo(model_key + ':' + field)
+			
+		end
+	
+	end;
 
 
 
