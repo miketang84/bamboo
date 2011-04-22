@@ -600,7 +600,7 @@ Model = Object:extend {
 		return self
     end;
     
-    fillFreshField = function (self, t)
+    fillFreshFields = function (self, t)
 		I_AM_INSTANCE(self)
 		if not t then return self end
 		return self:init(t)
