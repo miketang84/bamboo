@@ -642,14 +642,16 @@ Model = Object:extend {
 		local fld = self.__fields[field]
 		assert(fld, ("[ERROR] Field %s doesn't be defined!"):format(field))
 		assert( fld.foreign, ("[ERROR] This field %s is not a foreign field."):format(field))
-		assert( new_obj.id, "[ERROR] This object doesn't contain id, it's not a valid object!")
-		assert( fld.foreign == 'UNFIXED' or fld.foreign == new_obj.__name, ("[ERROR] This foreign field %s can't accept the instance of model %s."):format(field, new_obj.__name))
-		
+		assert( fld.foreign == 'ANYSTRING' or new_obj.id , "[ERROR] This object doesn't contain id, it's not a valid object!")
+		assert( fld.foreign == 'ANYSTRING' or fld.foreign == 'UNFIXED' or fld.foreign == new_obj.__name, ("[ERROR] This foreign field %s can't accept the instance of model %s."):format(field, new_obj.__name))
 		
 		local new_id
-		if fld.foreign == 'UNFIXED' then
+		if fld.foreign == 'ANYSTRING' then
+			checkType(new_obj, 'string')
+			new_id = new_obj
+		elseif fld.foreign == 'UNFIXED' then
 			new_id = new_obj.__name + ':' + new_obj.id
-		else 
+		else
 			new_id = new_obj.id
 		end
 		
@@ -657,6 +659,7 @@ Model = Object:extend {
 		if (not fld.st) or fld.st == 'ONE' then
 			-- 当没有写st属性，或st属性为ONE时，即为单外链时
 			db:hset(model_key, field, new_id)
+			-- 单外键是可以被get系函数获取出来的
 			self[field] = new_id
 		elseif fld.st == 'MANY' then
 			-- 当为多外键时
@@ -692,17 +695,23 @@ Model = Object:extend {
 		if (not fld.st) or fld.st == 'ONE' then
 			if isFalse(self[field]) then return nil end
 			
-			link_model, linked_id = checkUnfixed(fld, self[field])
-			-- 返回单个外键对象
-			local obj = link_model:getById (linked_id)
-			if isFalse(obj) then
-				
-				-- 如果没有获取到，就把这个外键去掉
-				db:hset(model_key, field, '')
-				self[field] = ''
-				return nil
+			if fld.foreign == 'ANYSTRING' then
+				-- 直接返回字符串
+				return self[field]
 			else
-				return obj
+				-- 其它真正的外键情况
+				link_model, linked_id = checkUnfixed(fld, self[field])
+				-- 返回单个外键对象
+				local obj = link_model:getById (linked_id)
+				if isFalse(obj) then
+					
+					-- 如果没有获取到，就把这个外键去掉
+					db:hset(model_key, field, '')
+					self[field] = ''
+					return nil
+				else
+					return obj
+				end
 			end
 		elseif fld.st == 'MANY' then
 			if isFalse(self[field]) then return {} end
@@ -714,24 +723,29 @@ Model = Object:extend {
 			list = table.slice(list, start, stop, is_rev)
 			if isFalse(list) then return {} end
 			
-			local obj_list = {}
-			for _, v in ipairs(list) do
-				link_model, linked_id = checkUnfixed(fld, v)
-
-				local obj = link_model:getById(linked_id)
-				-- 这里，要检查返回的obj是不是空对象，而不仅仅是不是空表
-				if isFalse(obj) then
-					-- 如果没有获取到，就把这个外键去掉
-					rdzset.removeFromZset(key, v)
-				else
-					table.insert(obj_list, obj)
-				end
-			end
-			
-			if #obj_list == 1 then
-				return obj_list[1]
+			if fld.foreign == 'ANYSTRING' then
+				-- 直接返回字符串列表
+				return list
 			else
-				return obj_list
+				local obj_list = {}
+				for _, v in ipairs(list) do
+					link_model, linked_id = checkUnfixed(fld, v)
+
+					local obj = link_model:getById(linked_id)
+					-- 这里，要检查返回的obj是不是空对象，而不仅仅是不是空表
+					if isFalse(obj) then
+						-- 如果没有获取到，就把这个外键去掉
+						rdzset.removeFromZset(key, v)
+					else
+						table.insert(obj_list, obj)
+					end
+				end
+				
+				if #obj_list == 1 then
+					return obj_list[1]
+				else
+					return obj_list
+				end
 			end
 			
 		elseif fld.st == 'FIFO' then
@@ -743,24 +757,29 @@ Model = Object:extend {
 			list = table.slice(list, start, stop, is_rev)
 			if isFalse(list) then return {} end
 	
-			local obj_list = {}
-			for _, v in ipairs(list) do
-				link_model, linked_id = checkUnfixed(fld, v)
-
-				local obj = link_model:getById(linked_id)
-				-- 这里，要检查返回的obj是不是空对象，而不仅仅是不是空表
-				if isFalse(obj) then
-					-- 如果没有获取到，就把这个外键元素去掉
-					rdfifo.removeFromFifo(key, v)
-				else
-					table.insert(obj_list, obj)
-				end
-			end
-			
-			if #obj_list == 1 then
-				return obj_list[1]
+			if fld.foreign == 'ANYSTRING' then
+				-- 直接返回字符串列表
+				return list
 			else
-				return obj_list
+				local obj_list = {}
+				for _, v in ipairs(list) do
+					link_model, linked_id = checkUnfixed(fld, v)
+
+					local obj = link_model:getById(linked_id)
+					-- 这里，要检查返回的obj是不是空对象，而不仅仅是不是空表
+					if isFalse(obj) then
+						-- 如果没有获取到，就把这个外键元素去掉
+						rdfifo.removeFromFifo(key, v)
+					else
+						table.insert(obj_list, obj)
+					end
+				end
+				
+				if #obj_list == 1 then
+					return obj_list[1]
+				else
+					return obj_list
+				end
 			end
 		end
 
@@ -772,11 +791,14 @@ Model = Object:extend {
 		local fld = self.__fields[field]
 		assert(fld, ("[ERROR] Field %s doesn't be defined!"):format(field))
 		assert( fld.foreign, ("[ERROR] This field %s is not a foreign field."):format(field))
-		assert( frobj.id, "[ERROR] This object doesn't contain id, it's not a valid object!")
+		assert( fld.foreign == 'ANYSTRING' or frobj.id, "[ERROR] This object doesn't contain id, it's not a valid object!")
 		if isFalse(self[field]) then return end
 		
 		local frid
-		if fld.foreign == 'UNFIXED' then
+		if fld.foreign == 'ANYSTRING' then
+			checkType(frobj, 'string')
+			frid = frobj
+		elseif fld.foreign == 'UNFIXED' then
 			frid = frobj.__name + ':' + frobj.id
 		else 
 			frid = tostring(frobj.id)
@@ -828,7 +850,6 @@ Model = Object:extend {
 		end
 	
 	end;
-
 
 
 }
