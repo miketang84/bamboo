@@ -661,11 +661,13 @@ Model = Object:extend {
 			db:hset(model_key, field, new_id)
 			-- 单外键是可以被get系函数获取出来的
 			self[field] = new_id
+
 		elseif fld.st == 'MANY' then
 			-- 当为多外键时
 			local key = model_key + ':' + field
 			-- 将新值更新到数据库中去，因此，后面不用用户再写self:save()了
 			rdzset.addToZset(key, new_id)
+
 		elseif fld.st == 'FIFO' then
 			-- 当指定的为FIFO管道时
 			local length = fld.fifolen
@@ -673,7 +675,16 @@ Model = Object:extend {
 				"[ERROR] In Fifo foreign, the 'fifolen' must be number greater than 0!")
 			local key = model_key + ':' + field
 			rdfifo.pushToFifo(key, length, new_id)
-		
+
+		elseif fld.st == 'ZFIFO' then
+			-- 当指定的为ZFIFO管道时
+			local length = fld.zfifolen
+			assert(length and type(length) == 'number' and length > 0, 
+				"[ERROR] In Fifo foreign, the 'fifolen' must be number greater than 0!")
+			local key = model_key + ':' + field
+			
+			local new_score = db:incr(key+':virctr')
+			rdfifo.pushToFifo(key, length, new_score, new_id)
 		end
 		
 		return self
@@ -781,6 +792,47 @@ Model = Object:extend {
 					return obj_list
 				end
 			end
+			
+		elseif fld.st == 'ZFIFO' then
+			if isFalse(self[field]) then return {} end
+		
+			local key = model_key + ':' + field
+			local list = rdzfifo.retrieveZfifo(key)
+			
+			list = table.slice(list, start, stop, is_rev)
+			if isFalse(list) then return {} end
+	
+			if fld.foreign == 'ANYSTRING' then
+				-- 直接返回嵌套列表
+				return list
+			else
+				local obj_list = {}
+				-- 把下面用得到的内容部分抽取出来
+				local tlist = {}
+				for _, v in ipairs(list) do
+					table.insert(tlist, v[1])
+				end
+				list = tlist
+				
+				for _, v in ipairs(list) do
+					link_model, linked_id = checkUnfixed(fld, v)
+
+					local obj = link_model:getById(linked_id)
+					-- 这里，要检查返回的obj是不是空对象，而不仅仅是不是空表
+					if isFalse(obj) then
+						-- 如果没有获取到，就把这个外键元素去掉
+						rdzfifo.removeFromZfifo(key, 0, v)
+					else
+						table.insert(obj_list, obj)
+					end
+				end
+				
+				if #obj_list == 1 then
+					return obj_list[1]
+				else
+					return obj_list
+				end
+			end
 		end
 
 	end;    
@@ -823,6 +875,10 @@ Model = Object:extend {
 		elseif fld.st == 'FIFO' then
 			rdfifo.removeFromFifo(model_key + ':' + field, frid)
 			
+		elseif fld.st == 'ZFIFO' then
+			-- 此处，frid为要删除的项的score
+			rdzfifo.removeFromZfifo(model_key + ':' + field, frid)
+			
 		end
 	
 		return self
@@ -846,7 +902,10 @@ Model = Object:extend {
 		
 		elseif fld.st == 'FIFO' then
 			return rdfifo.lenFifo(model_key + ':' + field)
-			
+	
+		elseif fld.st == 'ZFIFO' then
+			return rdzfifo.lenZfifo(model_key + ':' + field)
+	
 		end
 	
 	end;

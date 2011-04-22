@@ -9,7 +9,7 @@ function addToZset( key, val )
 	-- 如果没有，就创建一个
 	-- 有，就附加在后面
 	local score = db:zscore(zsetkey, val)
-	-- 如果存在，就不再添加，不然会更新score
+	-- 如果存在，就不再添加，不然会更新score，会导致排序变化
 	if score then return nil end
 	-- 获取到当前集合中的元素个数
 	local n = db:zcard(zsetkey)

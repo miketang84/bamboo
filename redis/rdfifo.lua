@@ -46,7 +46,7 @@ end
 function lenFifo( key )
 	local store_key = 'FIFO:' + key
 
-	return db:llen(store_key, 0, -1)
+	return db:llen(store_key)
 end
 
 
