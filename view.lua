@@ -3,10 +3,35 @@ module(..., package.seeall)
 local PLUGIN_LIST = bamboo.PLUGIN_LIST
 local G_TMPL_DIR = 'views/'
 
+local localvars_pattern_list = {
+    -- 判断是否包含循环
+    'for%s+([%w_%s,]-)%s+in',
+    -- 判断是否包含local定义新变量，必须要用等于号
+    'local([%w_%s,]+)=',
+}
+
+
 -- 模板渲染指令
 local VIEW_ACTIONS = {
     -- 标记中嵌入lua语句
     ['{%'] = function(code)
+        -- 将在模板中生成的新局部变量添加到全局环境中去
+        local varstr
+        local morestr = ''
+        for _, pattern in ipairs(localvars_pattern_list) do
+            varstr = code:match(pattern)
+            if varstr then
+                local varlist = varstr:split(',')
+                for _, v in ipairs(varlist) do
+                    local t = v:trim()
+                    if not isFalse(t) and t ~= '_' then
+                        morestr = morestr + (" _G['%s'] = %s; "):format(t, t)
+                    end
+                end
+            end
+        end
+        
+        code = code + morestr
         return code
     end,
     -- 标记中嵌入lua变量
@@ -24,24 +49,8 @@ local VIEW_ACTIONS = {
                 local View = require 'bamboo.view'
                 _children[%s] = View(%s)
             end
-            -- getfenv()，用于传递当前函数所在环境，默认即全局变量
-            local env = getfenv()
-            -- 6和7只是经验值，目前还无法找出一个更好的办法来将局部变量（不同情况下名字不同）扩充到
-            -- 全局环境中去。这里这几个语句主要是抽取泛型for中的暴露出来的局部变量
-            local kstr, kstr_val = debug.getlocal(1, 6)
-            local vstr, vstr_val = debug.getlocal(1, 7)
-            --print(kstr, kstr_val)
-            --print(vstr, vstr_val)
-            if kstr and vstr then 
-                if type(kstr_val) == 'number' or type(kstr_val) == 'string' then
-                    if type(vstr_val) == 'string' or type(vstr_val) == 'table' then
-                        env[kstr] = kstr_val
-                        env[vstr] = vstr_val
-                    end
-                end
-            end
-            
-            _result[#_result+1] = _children[%s](env)
+
+            _result[#_result+1] = _children[%s](getfenv())
         ]]):format(code, code, code, code)
     end,
     -- 标记中嵌入转义后的html代码，安全措施
