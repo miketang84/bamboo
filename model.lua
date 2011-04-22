@@ -4,6 +4,8 @@ local db = BAMBOO_DB
 
 local rdzset = require 'bamboo.redis.rdzset'
 local rdfifo = require 'bamboo.redis.rdfifo'
+local rdzfifo = require 'bamboo.redis.rdzfifo'
+
 local getModelByName  = bamboo.getModelByName 
 
 local function getIndexName(self)
