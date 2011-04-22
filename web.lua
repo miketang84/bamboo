@@ -74,7 +74,7 @@ local Web = Object:extend {
         self:page(json.encode(data), 200, "OK", {['content-type'] = ctype or 'application/json'})
     end;
 	-- 返回一个报告错误的json信息
-	json_error = function (self, err_code, err_desc)
+	jsonError = function (self, err_code, err_desc)
 		self:json { success = false, err_code = err_code, err_desc = err_desc }	
 	end;
 	-- 页面重定向
@@ -88,6 +88,13 @@ local Web = Object:extend {
         self:close()
         return false
     end;
+	-- 需要用户登录
+	loginRequired = function (self, reurl)
+		local reurl = reurl or '/index/'
+		if isFalse(req.user) then web:redirect(reurl); self:close(); return false end
+		return true
+	end;
+	
     -- 一些关于错误类型的函数
     notFound = function (self, msg) self:error(msg or 'Not Found', 404, 'Not Found') end;
     unauthorized = function (self, msg) self:error(msg or 'Unauthorized', 401, 'Unauthorized') end;
@@ -120,6 +127,7 @@ local Web = Object:extend {
 	
 	--------------------------------------------------------------------
 	-- 下面的，都是状态编程的函数
+	--------------------------------------------------------------------
 	-- 接收请求
 	-- @return 返回请求对象
     recv = function (self) 
