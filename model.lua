@@ -2,33 +2,16 @@ module(..., package.seeall)
 
 local db = BAMBOO_DB
 
--- local rdlist = require 'bamboo.redis.rdlist'
 local rdzset = require 'bamboo.redis.rdzset'
 local rdfifo = require 'bamboo.redis.rdfifo'
 local getModelByName  = bamboo.getModelByName 
 
 local function getIndexName(self)
-	--return self.__tag:match('%.(%w+)$')  + ':__index'
 	return self.__name  + ':__index'
 end
 
 local function getClassName(self)
 	return self.__tag:match('%.(%w+)$')
-end
-
-local function storeFifoGkey(self, gkey, length)
-	local innerkey = self.__name + ':_fifo_' + gkey
-	db:set(innerkey, length)
-end
-
-local function retrieveFifoGkey(self, gkey)
-	local innerkey = self.__name + ':_fifo_' + gkey
-	if not db:exists(innerkey) then return nil end
-	
-	local length = tonumber(db:get(innerkey))
-	assert(type(length) == 'number', ("[ERROR] The value of the FIFO key %s is not a number!"):format(innerkey))
-	
-	return length
 end
 
 local function checkExistanceById(self, id)
@@ -91,9 +74,8 @@ end
 
 -- 定义只能从实例调用
 local delFromRedis = function (self)
-	local model_name = self.__name
+	local model_key = self.__name +  ':' + self.id
 	local index_name = getIndexName(self)
-	local id = self.id
 	
 	local fields = self.__fields
 	-- 在redis里面，将对象中关联的外键key-value对删除
@@ -101,15 +83,18 @@ local delFromRedis = function (self)
 		local fld = fields[k]
 		if fld and fld.foreign then
 			if fld.st == 'MANY' then
-				local key = model_name + ':' + self.id + ':' + k 
+				local key = model_key + ':' + k 
 				-- rdlist.delList(key)
 				rdzset.delZset(key)
+			elseif fld.st == 'FIFO' then
+				local key = model_key + ':' + k 
+				rdfifo.delFifo(key)
 			end
 		end
 	end
 
 	-- 删除这个key
-	db:del(model_name + ':' + id)
+	db:del(model_key)
 	-- 删除本对象的一个全局模型索引
 	db:zrem(index_name, self.name)
 	-- 释放在lua中的对象
@@ -123,7 +108,7 @@ end
 
 _G['lt'] = function (limitation)
 	return function (v)
-		if v < limitation then
+		if tonumber(v) < limitation then
 			return true
 		else
 			return false
@@ -133,7 +118,7 @@ end
 
 _G['gt'] = function (limitation)
 	return function (v)
-		if v > limitation then
+		if tonumber(v) > limitation then
 			return true
 		else
 			return false
@@ -144,7 +129,7 @@ end
 
 _G['le'] = function (limitation)
 	return function (v)
-		if v <= limitation then
+		if tonumber(v) <= limitation then
 			return true
 		else
 			return false
@@ -154,7 +139,7 @@ end
 
 _G['ge'] = function (limitation)
 	return function (v)
-		if v >= limitation then
+		if tonumber(v) >= limitation then
 			return true
 		else
 			return false
@@ -164,7 +149,7 @@ end
 
 _G['bt'] = function (small, big)
 	return function (v)
-		if v > small and v < big then
+		if tonumber(v) > small and v < big then
 			return true
 		else
 			return false
@@ -174,7 +159,7 @@ end
 
 _G['be'] = function (small, big)
 	return function (v)
-		if v >= small and v <= big then
+		if tonumber(v) >= small and v <= big then
 			return true
 		else
 			return false
@@ -184,6 +169,8 @@ end
 
 _G['outside'] = function (small, big)
 	return function (v)
+		local v = tonumber(v)
+		
 		if v < small and v > big then
 			return true
 		else
@@ -194,6 +181,7 @@ end
 
 _G['contains'] = function (substr)
 	return function (v)
+		v = tostring(v)
 		if v:contains(substr) then 
 			return true
 		else
@@ -204,6 +192,7 @@ end
 
 _G['startsWith'] = function (substr)
 	return function (v)
+		v = tostring(v)
 		if v:startsWith(substr) then 
 			return true
 		else
@@ -214,6 +203,7 @@ end
 
 _G['endsWith'] = function (substr)
 	return function (v)
+		v = tostring(v)
 		if v:endsWith(substr) then 
 			return true
 		else
@@ -381,36 +371,34 @@ Model = Object:extend {
 	end;
 	
     -- 返回第一个查询对象，
-    get = function (self, query)
+    get = function (self, query_args)
 		I_AM_CLASS(self)
-		local query_args = table.copy(query)
 		local id = query_args.id
 		
 		-- 如果查询要求中有id，就以id为主键查询。因为id是存放在总key中，所以要分开处理
 		if id then
-
 			query_args['id'] = nil
 
-			-- 把这个id的整个取出来
-			local vv = self:getById( id )
-			if not vv then return nil end
+			-- 把这个id的整个对象取出来
+			local obj = self:getById( id )
+			if isEmpty(obj) then return nil end
 			
 			for k, v in pairs(query_args) do
-				if not vv[k] then return nil end
+				if not obj[k] then return nil end
 				-- 如果是函数，执行限定比较，返回布尔值
 				if type(v) == 'function' then
 					-- 进入函数v进行比较的，总是单个字段
-					local flag = v(vv)
+					local flag = v(obj[k])
 					-- 如果不在限制条件内，直接跳出循环
 					if not flag then return nil end
 				-- 处理查询条件为等于的情况
 				else
 					-- 一旦发现有不等的情况，立即返回否值
-					if vv[k] ~= v then return nil end
+					if obj[k] ~= v then return nil end
 				end
 			end
 			-- 如果执行到这一步，就说明已经找到了，返回对象
-			return vv
+			return obj
 		-- 如果查询要求中没有id
 		else
 			-- 取得所有关于这个模型的实例keys
@@ -418,38 +406,48 @@ Model = Object:extend {
 			local getById = self.getById 
 			for _, kk in ipairs(all_ids) do
 				-- 根据key获得一个实例的内容，返回一个表
-				local vv = getById(self, kk)
+				local obj = getById(self, kk)
 				local flag = true
 				for k, v in pairs(query_args) do
-					if not vv or not vv[k] then flag=false; break end
-					-- 目前为止，还只能处理条件式为等于的情况
+					if not obj or not obj[k] then flag=false; break end
+					
 					if type(v) == 'function' then
 						-- 进入函数v进行比较的，总是单个字段
-						flag = v(vv)
-						-- 如果不在限制条件内，直接跳出循环
+						flag = v(obj[k])
+						-- 如果不在限制条件内，直接跳出循环，检查下一个
 						if not flag then break end
-					-- 处理条件式为等于的情况
 					else
-						if vv[k] ~= v then flag=false; break end
+						-- 处理条件式为等于的情况
+						if obj[k] ~= v then flag=false; break end
 					end
 				end
 				-- 如果走到这一步，flag还为真，则说明已经找到第一个，直接返回
 				if flag then
-					return vv
+					return obj
 				end
 			end
 		end
 		
+		return nil		
     end;
 
 	-- filter的query表中，不应该出现id，这里也不打算支持它
 	-- filter返回的是一个列表
-	filter = function (self, query)
+	filter = function (self, query_args)
 		I_AM_CLASS(self)
-		local query_args = table.copy(query)
-		if query_args['id'] then query_args['id'] = nil end
+		if query_args['id'] then
+			-- 去除以id为键的搜索
+			print("[WARNING] Filter doesn't support search by id.")
+			query_args['id'] = nil 
+			local t = {}
+			for k, _ in pairs(query_args) do
+				table.insert(t, k)
+			end
+			if #t == 0 then return nil end
+		end
 		-- ???行不行???
 		-- 这里让query_set（一个表）也获得Model中定义的方法，到时可用于链式操作
+		-- 这里就创建了一个query_set，类似于Django中的
 		local query_set = setProto({}, Model)
 	
 		-- 取得所有关于这个模型的例id
@@ -457,28 +455,30 @@ Model = Object:extend {
 		local getById = self.getById 
 		for _, kk in ipairs(all_ids) do
 			-- 根据key获得一个实例的内容，返回一个表
-			local vv = getById (self, kk)
+			local obj = getById (self, kk)
 			local flag = true	
 			for k, v in pairs(query_args) do
 				-- 对于多余的查询条件，一经发现，直接跳出
-				if not vv or not vv[k] then flag=false; break end
+				if not obj or not obj[k] then flag=false; break end
 				-- 处理条件式为外调函数的情况
 				if type(v) == 'function' then
 					-- 进入函数v进行比较的，总是单个字段
-					flag = v(vv)
+					flag = v(obj[k])
 					-- 如果不在限制条件内，直接跳出循环
 					if not flag then break end
-				-- 处理条件式为等于的情况
+	
 				else
-					if vv[k] ~= v then flag=false; break end
+					-- 处理条件式为等于的情况
+					if obj[k] ~= v then flag=false; break end
 				end
 			end
 			-- 如果走到这一步，flag还为真，则说明已经找到，添加到查询结果表中去
 			if flag then
 				-- filter返回的表中由一个个值对构成
-				table.insert(query_set, vv)
+				table.insert(query_set, obj)
 			end
 		end
+		
 		return query_set
 	end;
     
@@ -595,12 +595,12 @@ Model = Object:extend {
 		assert( not fld['foreign'], ("[ERROR] %s is a foreign field, shouldn't use update function!"):format(field))
 		local model_key = self.__name + ':' + tostring(self.id)
 		assert(db:exists(model_key), ("[ERROR] Key %s does't exist! Can't apply update."):format(model_key))
-		db:hset(model_key, field, new_value)
+		db:hset(model_key, field, seri(new_value))
 		
 		return self
     end;
     
-    fillNewField = function (self, t)
+    fillFreshField = function (self, t)
 		I_AM_INSTANCE(self)
 		if not t then return self end
 		return self:init(t)
