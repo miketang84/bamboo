@@ -53,13 +53,16 @@ end
 -- 创建全局模型注册列表结构
 MODEL_MANAGEMENT = {}
 
+
+local function getClassName(model)
+	return model.__tag:match('%.(%w+)$')
+end
+
 registerModel = function (model)
 	checkType(model, 'table')
-	assert( model.__name, 'Registered model __name must not be missing.' )
+	assert( model.__tag, 'Registered model __tag must not be missing.' )
 	
-	MODEL_MANAGEMENT[model.__name] = model
-	print(model.__name, MODEL_MANAGEMENT[model.__name])
-
+	MODEL_MANAGEMENT[getClassName(model)] = model
 end
 
 getModelByName = function (name)

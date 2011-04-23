@@ -160,7 +160,7 @@ local Form = Object:extend {
 		if req.headers.QUERY then
             return http.parseURL(req.headers.QUERY)
         else
-            return nil
+            return {}
         end
 	end;
 

@@ -51,7 +51,7 @@ local getFromRedis = function (self, model_key)
 	-- 先从数据库中取出来
 	-- 这时，取出来的值，不包含一对多型外键的，但包括一对一外键
 	local data = db:hgetall(model_key)
-	if isEmpty(data) then print("WARNING: Can't get object by", model_key); return nil end
+	if isObjEmpty(data) then print("WARNING: Can't get object by", model_key); return nil end
 
 	local fields = self.__fields
 	for k, fld in pairs(fields) do
@@ -65,6 +65,8 @@ local getFromRedis = function (self, model_key)
 				data[k] = 'FOREIGN MANY'
 			elseif st == 'FIFO' then
 				data[k] = 'FOREIGN FIFO'
+			elseif st == 'ZFIFO' then
+				data[k] = 'FOREIGN ZFIFO'
 			end
 		end
 	end
@@ -91,6 +93,9 @@ local delFromRedis = function (self)
 			elseif fld.st == 'FIFO' then
 				local key = model_key + ':' + k 
 				rdfifo.delFifo(key)
+			elseif fld.st == 'ZFIFO' then
+				local key = model_key + ':' + k 
+				rdzfifo.delZfifo(key)
 			end
 		end
 	end
@@ -383,7 +388,7 @@ Model = Object:extend {
 
 			-- 把这个id的整个对象取出来
 			local obj = self:getById( id )
-			if isEmpty(obj) then return nil end
+			if isObjEmpty(obj) then return nil end
 			
 			for k, v in pairs(query_args) do
 				if not obj[k] then return nil end
@@ -514,11 +519,11 @@ Model = Object:extend {
 			-- 先删除以前的value，要重填value
 			db:del(one_key)
 			for _, v in ipairs(val) do
-				db:rpush(one_key, seri(v))
+				db:rpush(one_key, v)
 			end
 		else
 			assert( type(val) == 'string' or type(val) == 'number', "[ERROR] In the string mode of setCustom, val should be string or number.")
-			db:set(one_key, seri(val))
+			db:set(one_key, val)
 		end
 	end;
 
@@ -581,7 +586,7 @@ Model = Object:extend {
 			local field = self.__fields[k]
 			if v and (not k:startsWith('_')) and type(v) ~= 'function' and field and (not field['foreign']) then
 				-- 由于不保存有外键的字段，故可以在这里对各种类型直接以字符串存储
-				db:hset(model_key, k, seri(v))
+				db:hset(model_key, k, v)
 			end
 		end
 		
@@ -597,7 +602,7 @@ Model = Object:extend {
 		assert( not fld['foreign'], ("[ERROR] %s is a foreign field, shouldn't use update function!"):format(field))
 		local model_key = self.__name + ':' + tostring(self.id)
 		assert(db:exists(model_key), ("[ERROR] Key %s does't exist! Can't apply update."):format(model_key))
-		db:hset(model_key, field, seri(new_value))
+		db:hset(model_key, field, new_value)
 		
 		return self
     end;
@@ -638,14 +643,15 @@ Model = Object:extend {
 	-- 返回本对象
 	addForeign = function (self, field, new_obj)
 		I_AM_INSTANCE(self)
-		checkType(field, new_obj, 'string', 'table')
-		checkType(tonumber(new_obj.id), 'number')
-
+		checkType(field, 'string')
+		assert(type(new_obj) == 'table' or type(new_obj) == 'string', '[ERROR] "new_obj" should be table or string.')
+		if type(new_obj) == 'table' then checkType(tonumber(new_obj.id), 'number') end
+		
 		local fld = self.__fields[field]
 		assert(fld, ("[ERROR] Field %s doesn't be defined!"):format(field))
 		assert( fld.foreign, ("[ERROR] This field %s is not a foreign field."):format(field))
 		assert( fld.foreign == 'ANYSTRING' or new_obj.id , "[ERROR] This object doesn't contain id, it's not a valid object!")
-		assert( fld.foreign == 'ANYSTRING' or fld.foreign == 'UNFIXED' or fld.foreign == new_obj.__name, ("[ERROR] This foreign field %s can't accept the instance of model %s."):format(field, new_obj.__name))
+		assert( fld.foreign == 'ANYSTRING' or fld.foreign == 'UNFIXED' or fld.foreign == new_obj.__name, ("[ERROR] This foreign field %s can't accept the instance of model %s."):format(field, new_obj.__name or new_obj))
 		
 		local new_id
 		if fld.foreign == 'ANYSTRING' then
@@ -680,13 +686,13 @@ Model = Object:extend {
 
 		elseif fld.st == 'ZFIFO' then
 			-- 当指定的为ZFIFO管道时
-			local length = fld.zfifolen
+			local length = fld.fifolen
 			assert(length and type(length) == 'number' and length > 0, 
 				"[ERROR] In Fifo foreign, the 'fifolen' must be number greater than 0!")
 			local key = model_key + ':' + field
 			
 			local new_score = db:incr(key+':virctr')
-			rdfifo.pushToFifo(key, length, new_score, new_id)
+			rdzfifo.pushToZfifo(key, length, new_score, new_id)
 		end
 		
 		return self
@@ -716,7 +722,7 @@ Model = Object:extend {
 				link_model, linked_id = checkUnfixed(fld, self[field])
 				-- 返回单个外键对象
 				local obj = link_model:getById (linked_id)
-				if isFalse(obj) then
+				if isObjEmpty(obj) then
 					
 					-- 如果没有获取到，就把这个外键去掉
 					db:hset(model_key, field, '')
@@ -731,10 +737,10 @@ Model = Object:extend {
 			
 			local key = model_key + ':' + field
 			local list = rdzset.retrieveZset(key)
-			if isFalse(list) then return {} end
+			if isEmpty(list) then return {} end
 			
 			list = table.slice(list, start, stop, is_rev)
-			if isFalse(list) then return {} end
+			if isEmpty(list) then return {} end
 			
 			if fld.foreign == 'ANYSTRING' then
 				-- 直接返回字符串列表
@@ -746,7 +752,7 @@ Model = Object:extend {
 
 					local obj = link_model:getById(linked_id)
 					-- 这里，要检查返回的obj是不是空对象，而不仅仅是不是空表
-					if isFalse(obj) then
+					if isObjEmpty(obj) then
 						-- 如果没有获取到，就把这个外键去掉
 						rdzset.removeFromZset(key, v)
 					else
@@ -780,7 +786,7 @@ Model = Object:extend {
 
 					local obj = link_model:getById(linked_id)
 					-- 这里，要检查返回的obj是不是空对象，而不仅仅是不是空表
-					if isFalse(obj) then
+					if isObjEmpty(obj) then
 						-- 如果没有获取到，就把这个外键元素去掉
 						rdfifo.removeFromFifo(key, v)
 					else
@@ -799,6 +805,7 @@ Model = Object:extend {
 			if isFalse(self[field]) then return {} end
 		
 			local key = model_key + ':' + field
+			-- 由于FIFO的特性，取出来的列表，新鲜的是在左边
 			local list = rdzfifo.retrieveZfifo(key)
 			
 			list = table.slice(list, start, stop, is_rev)
@@ -821,7 +828,7 @@ Model = Object:extend {
 
 					local obj = link_model:getById(linked_id)
 					-- 这里，要检查返回的obj是不是空对象，而不仅仅是不是空表
-					if isFalse(obj) then
+					if isObjEmpty(obj) then
 						-- 如果没有获取到，就把这个外键元素去掉
 						rdzfifo.removeFromZfifo(key, 0, v)
 					else

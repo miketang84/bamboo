@@ -167,8 +167,8 @@ local View = Object:extend {
     end;
     
     preprocess = function(tmpl)
-        -- 如果页面中有继承符号（继承符号必须写在最前面）
         if tmpl:match('{:') then
+            -- 如果页面中有继承符号（继承符号必须写在最前面）
             local block = tmpl:match("(%b{})")
             local headtwo = block:sub(1,2)
             local block_content = block:sub(3, -3)
@@ -176,8 +176,8 @@ local View = Object:extend {
 
             local act = VIEW_ACTIONS[headtwo]
             return act(block_content, tmpl)
-        -- 如果页面没有继承，则直接返回
         else
+            -- 如果页面没有继承，则直接返回
             return tmpl
         end
     end;

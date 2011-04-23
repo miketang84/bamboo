@@ -48,7 +48,7 @@ function retrieveZfifo( key )
 
 	-- 返回的是一个二重嵌套table
 	-- 第一层的每个元素中，[1]为val, [2]为score
-	return db:zrange(store_key, 0, -1, 'withscores')
+	return db:zrevrange(store_key, 0, -1, 'withscores')
 end
 
 function lenZfifo( key )
