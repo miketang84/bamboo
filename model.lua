@@ -893,7 +893,7 @@ Model = Object:extend {
 		return self
 	end;
 
-	foreignNumbers = function (self, field)
+	numForeign = function (self, field)
 		I_AM_INSTANCE(self)
 		checkType(field, 'string')
 		local fld = self.__fields[field]

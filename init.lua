@@ -49,6 +49,21 @@ registerPlugin = function (name, mdl)
 end
 ------------------------------------------------------------------------
 
+
+-- 实现就这么简单，但是意义重大，使得独立模块开发和集成更加方便
+-- 在模块中，添加一个URLS的全局表，直接在这里面写上与函数对应的url表，
+-- 这样就不用再在handler_entry中再一个一个地再来指定了。
+registerModule = function (mdl)
+	checkType(mdl, 'table')
+	
+	-- 这里这个URLS应该不会报错的
+	if mdl.URLS then
+		checkType(mdl.URLS, 'table')
+	
+		table.update(URLS, mdl.URLS)	
+	end
+end
+
 ------------------------------------------------------------------------
 -- 创建全局模型注册列表结构
 MODEL_MANAGEMENT = {}
