@@ -391,16 +391,18 @@ function run(conn, config)
 					-- 根据来的PATH，找到对应的handler，如果没有找到，就报错（目前来讲是这样，但后面应该返回一个404页面）。
 					local main_t, state_flag = getHandlerByPath(MappingTable, path)
 					if not main_t then
-						error(('No handler to process this path: %s'):format(path))
-					end
-					main = main_t
-					
-					-- 状态编程
-					if state_flag then
-						runCoro(conn, main, req, conn_id, path, before, after)
-					-- 无状态编程
+						print(('[WARNING] No handler to process this path: %s.'):format(path))
+						conn:reply_http(req, '<h2>Page Not Found.</h2>', 404, 'Not Found', req.headers)
 					else
-						runStateless(conn, main, req, before, after)
+						main = main_t
+						
+						-- 状态编程
+						if state_flag then
+							runCoro(conn, main, req, conn_id, path, before, after)
+						-- 无状态编程
+						else
+							runStateless(conn, main, req, before, after)
+						end
 					end
 
                 end
