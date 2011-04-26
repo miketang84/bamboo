@@ -760,11 +760,7 @@ Model = Object:extend {
 					end
 				end
 				
-				if #obj_list == 1 then
-					return obj_list[1]
-				else
-					return obj_list
-				end
+				return obj_list
 			end
 			
 		elseif fld.st == 'FIFO' then
@@ -794,11 +790,7 @@ Model = Object:extend {
 					end
 				end
 				
-				if #obj_list == 1 then
-					return obj_list[1]
-				else
-					return obj_list
-				end
+				return obj_list
 			end
 			
 		elseif fld.st == 'ZFIFO' then
@@ -836,11 +828,7 @@ Model = Object:extend {
 					end
 				end
 				
-				if #obj_list == 1 then
-					return obj_list[1]
-				else
-					return obj_list
-				end
+				return obj_list
 			end
 		end
 

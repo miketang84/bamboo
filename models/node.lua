@@ -14,6 +14,7 @@ Node = Model:extend {
 		['rank'] 	= 	{  newfield=true},						-- 节点在整个节点树中的级别，为字符串
 		['title'] 	= 	{  required=true, newfield=true},						-- 节点标题
 		['content'] = 	{  required=true, newfield=true},				-- 节点内容
+		['status'] 	= 	{  newfield=true},
 
 		['is_category'] = {  newfield=true},			-- 标明此节点是否是一个类别节点，即是否可接子节点
 		['parent'] 		= { st='ONE', foreign='Node', newfield=true},						-- 节点的父页面id，如果为空，则表明本节点为顶级节点
