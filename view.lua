@@ -3,6 +3,8 @@ module(..., package.seeall)
 local PLUGIN_LIST = bamboo.PLUGIN_LIST
 local G_TMPL_DIR = 'views/'
 
+
+
 local function findTemplDir( name )
     -- 首先，找用户指定路径
     if USERDEFINED_VIEWS and posix.access(USERDEFINED_VIEWS + name) then
@@ -71,7 +73,7 @@ local VIEW_ACTIONS = {
     end,
     -- 标记中嵌入转义后的html代码，安全措施
     ['{<'] = function(code)
-        return ('_result[#_result+1] = http.escapeHTML(%s)'):format(code)
+        return ('local http = require("lglib.http"); _result[#_result+1] = http.escapeHTML(%s)'):format(code)
     end,
     
     ['{['] = function(code)

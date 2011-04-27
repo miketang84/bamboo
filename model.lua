@@ -113,6 +113,26 @@ end
 -- 由于使用的时候希望不再做导入工作，所以在加载Model模块的时候直接导入到全局环境中
 ------------------------------------------------------------------------
 
+_G['eq'] = function ( cmp_obj )
+	return function (v)
+		if v == cmp_obj then
+			return true
+		else
+			return false
+		end
+	end
+end
+
+_G['uneq'] = function ( cmp_obj )
+	return function (v)
+		if v ~= cmp_obj then
+			return true
+		else
+			return false
+		end
+	end
+end
+
 _G['lt'] = function (limitation)
 	return function (v)
 		if tonumber(v) < limitation then
@@ -378,7 +398,7 @@ Model = Object:extend {
 	end;
 	
     -- 返回第一个查询对象，
-    get = function (self, query_args)
+    get = function (self, query_args, is_rev)
 		I_AM_CLASS(self)
 		local id = query_args.id
 		
@@ -390,8 +410,9 @@ Model = Object:extend {
 			local obj = self:getById( id )
 			if isObjEmpty(obj) then return nil end
 			
+			local fields = obj.__fields
 			for k, v in pairs(query_args) do
-				if not obj[k] then return nil end
+				if not fields[k] then return nil end
 				-- 如果是函数，执行限定比较，返回布尔值
 				if type(v) == 'function' then
 					-- 进入函数v进行比较的，总是单个字段
@@ -409,14 +430,15 @@ Model = Object:extend {
 		-- 如果查询要求中没有id
 		else
 			-- 取得所有关于这个模型的实例keys
-			local all_ids = self:allIds()
+			local all_ids = self:allIds(is_rev)
 			local getById = self.getById 
 			for _, kk in ipairs(all_ids) do
 				-- 根据key获得一个实例的内容，返回一个表
 				local obj = getById(self, kk)
 				local flag = true
+				local fields = obj.__fields
 				for k, v in pairs(query_args) do
-					if not obj or not obj[k] then flag=false; break end
+					if not obj or not fields[k] then flag=false; break end
 					
 					if type(v) == 'function' then
 						-- 进入函数v进行比较的，总是单个字段
@@ -440,7 +462,7 @@ Model = Object:extend {
 
 	-- filter的query表中，不应该出现id，这里也不打算支持它
 	-- filter返回的是一个列表
-	filter = function (self, query_args)
+	filter = function (self, query_args, is_rev)
 		I_AM_CLASS(self)
 		if query_args['id'] then
 			-- 去除以id为键的搜索
@@ -458,15 +480,16 @@ Model = Object:extend {
 		local query_set = setProto({}, Model)
 	
 		-- 取得所有关于这个模型的例id
-		local all_ids = self:allIds()
+		local all_ids = self:allIds(is_rev)
 		local getById = self.getById 
 		for _, kk in ipairs(all_ids) do
 			-- 根据key获得一个实例的内容，返回一个表
 			local obj = getById (self, kk)
 			local flag = true	
+			local fields = obj.__fields
 			for k, v in pairs(query_args) do
 				-- 对于多余的查询条件，一经发现，直接跳出
-				if not obj or not obj[k] then flag=false; break end
+				if not obj or not fields[k] then flag=false; break end
 				-- 处理条件式为外调函数的情况
 				if type(v) == 'function' then
 					-- 进入函数v进行比较的，总是单个字段
@@ -584,7 +607,8 @@ Model = Object:extend {
 			-- 对于在程序中任意写的字段名也不予保存，要进行类定义时字段的检查
 			-- 对于有外链的字段，也不在save中保存，只能用外键相关函数处理
 			local field = self.__fields[k]
-			if v and (not k:startsWith('_')) and type(v) ~= 'function' and field and (not field['foreign']) then
+			-- 如果v为nil，则pairs将不会遍历它及它对应的key
+			if (not k:startsWith('_')) and type(v) ~= 'function' and field and (not field['foreign']) then
 				-- 由于不保存有外键的字段，故可以在这里对各种类型直接以字符串存储
 				db:hset(model_key, k, v)
 			end
