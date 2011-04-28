@@ -22,7 +22,6 @@ local User = Model:extend {
 		['lastlogin_date'] = {}, 		-- 上次登录的时间日期
 		['perms'] = {},				-- 权限集合
 		['groups'] = {},				-- 用户所属组集合
-		['forwhat'] = {},				-- 原生于哪个网站？因为，我想做一个通用的用户登录系统，众多站点使用同个用户数据库
 	};
 
 	init = function (self, t)
@@ -37,7 +36,6 @@ local User = Model:extend {
 		self.created_date = os.time()
 		self.perms = t.perms
 		self.groups = t.groups
-		self.forwhat = t.forwhat
 		
 		return self
 	end;
@@ -56,7 +54,7 @@ local User = Model:extend {
 	end;
 	
 	-- 类函数，此处的self是User本身
-	login = function (self, params, req)
+	login = function (self, params)
 		I_AM_CLASS(self)
 		if not params['username'] or not params['password'] then return nil end
 		local authed, user = self:authenticate(params)
@@ -67,13 +65,13 @@ local User = Model:extend {
 		return user
 	end;
 	
-	logout = function (self, req)
+	logout = function (self)
 		I_AM_CLASS(self)
 		return Session:delKey(req, 'user_id')
 	end;
 	
 	-- 类函数，此处的self是User本身，也可以是User的继承类型
-	register = function (self, params, req)
+	register = function (self, params)
 		I_AM_CLASS(self)
 		if not params['username'] or not params['password'] then return nil, 101, 'less parameters.' end
 		-- 查看数据库中是否有同名用户
@@ -89,13 +87,15 @@ local User = Model:extend {
 		return user
 	end;
 	
-	getFromReq = function (self, req)
+	getFromReq = function (self)
 		I_AM_CLASS(self)
 		if not req.user then return nil end
 		
 		local id = req.user.id
 		return self:getById (id)
 	end;
+	
+	
 	
 	-- 类函数，此处的self是User本身
 	set = function (self, req)

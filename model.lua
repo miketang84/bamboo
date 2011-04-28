@@ -13,6 +13,7 @@ local function getIndexName(self)
 end
 
 local function getClassName(self)
+	if type(self) ~= 'table' then return nil end
 	return self.__tag:match('%.(%w+)$')
 end
 
@@ -675,14 +676,14 @@ Model = Object:extend {
 		assert(fld, ("[ERROR] Field %s doesn't be defined!"):format(field))
 		assert( fld.foreign, ("[ERROR] This field %s is not a foreign field."):format(field))
 		assert( fld.foreign == 'ANYSTRING' or new_obj.id , "[ERROR] This object doesn't contain id, it's not a valid object!")
-		assert( fld.foreign == 'ANYSTRING' or fld.foreign == 'UNFIXED' or fld.foreign == new_obj.__name, ("[ERROR] This foreign field %s can't accept the instance of model %s."):format(field, new_obj.__name or new_obj))
+		assert( fld.foreign == 'ANYSTRING' or fld.foreign == 'UNFIXED' or fld.foreign == getClassName(new_obj), ("[ERROR] This foreign field '%s' can't accept the instance of model '%s'."):format(field, getClassName(new_obj) or new_obj))
 		
 		local new_id
 		if fld.foreign == 'ANYSTRING' then
 			checkType(new_obj, 'string')
 			new_id = new_obj
 		elseif fld.foreign == 'UNFIXED' then
-			new_id = new_obj.__name + ':' + new_obj.id
+			new_id = getClassName(new_obj) + ':' + new_obj.id
 		else
 			new_id = new_obj.id
 		end
@@ -872,7 +873,7 @@ Model = Object:extend {
 			checkType(frobj, 'string')
 			frid = frobj
 		elseif fld.foreign == 'UNFIXED' then
-			frid = frobj.__name + ':' + frobj.id
+			frid = getClassName(frobj) + ':' + frobj.id
 		else 
 			frid = tostring(frobj.id)
 		end

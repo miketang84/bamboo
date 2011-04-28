@@ -149,7 +149,7 @@ local Session = Object:extend {
         -- 再一次性写到数据库hash项中去，这样存的数据才正确。直接写新hash子项
         -- 到数据库的话，会把之前的信息清除掉。很奇怪，为什么？怀疑是系统环境
         local session_t = db:hgetall(session_key)
-        session_t[key] = seri(value)
+        session_t[key] = value
         for k, v in pairs(session_t) do
             db:hset(session_key, k, v)
         end

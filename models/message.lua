@@ -27,7 +27,7 @@ local Message = Model:extend {
 		-- self.uuid = t.uuid
 		self.author = t.author
 		self.content = t.content
-		self.timestamp = t.timestamp
+		self.timestamp = t.timestamp or os.time()
 		
 		return self
 	end;
