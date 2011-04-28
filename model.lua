@@ -575,6 +575,58 @@ Model = Object:extend {
 		return db:del(one_key)		
 	end;
 	
+	-- 简单的使用模型验证上传表单参数的功能
+	validate = function (self, params)
+		I_AM_CLASS(self)
+		checkType(params, 'table')
+		local fields = self.__fields
+		for k, v in pairs(fields) do
+			local t = params[k]
+			print('====',t, k, v)
+			-- 规则1，如果域有required=true，那么
+			if v.required then
+				print('----', k)
+				-- 在required的情况下，如果上传参数不存在，或参数长度为空
+				if not t or #t == 0 then return false, ('Required parameter "%s" is missing.'):format(k) end
+			end
+			-- 如果有此域的内容，那么就检测
+			if t then
+				-- 规则2，如果域有min, max，则说明传输的是数字，限定一个范围
+				if v.min then
+					local num = tonumber(t)
+					if not num or num < tonumber(v.min) then
+						return false, ('Parameter "%s" should be equal or larger than %s.'):format(k, v.min) 
+					end
+				end
+				if v.max then
+					local num = tonumber(t)
+					if not num or num > tonumber(v.max) then
+						return false, ('Parameter "%s" should be equal or smaller than %s.'):format(k, v.max) 
+					end
+				end
+				-- 规则3，如果域有min_length, max_length，则说明传输的是字符串，要限定在一个范围
+				if v.min_length then
+					if #t < v.min_length then
+						return false, ('Parameter "%s" should be equal or larger than %s.'):format(k, v.min_length) 
+					end
+				end
+				if v.max_length then
+					if #t > v.max_length then
+						return false, ('Parameter "%s" should be equal or smaller than %s.'):format(k, v.max_length) 
+					end
+				end
+				-- 规则4，如果域有pattern，则说明传输的是字符串，要限定在一个正则表达式匹配范围内
+				if v.pattern then
+					if #t ~= #t:match(v.pattern) then
+						return false, ('Parameter "%s" should be suited to the internal pattern.'):format(k) 
+					end
+				end
+			end
+		end
+		
+		return true
+	end;
+	
     --------------------------------------------------------------------
 	-- 实例函数。由类的实例访问
 	--------------------------------------------------------------------
