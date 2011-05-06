@@ -111,6 +111,7 @@ local Session = Object:extend {
     -- 即并不产生具体的实例对象。因此，这里面会重新实现一些函数，并且，实现的这些函数的参
     -- 数里面，都没有self作为第一个参数。那为什么不把它直接实现为一个模块呢？因为它要涉及
     -- 操作数据库，感觉弄成一个类，会好一点。以后说不定可以供别人继承呢。
+    -- 现在看来，把session做成一个模块更好一点(110505)。
     -- 在数据库中创建一个hash表项
     set = function (self, req)
         local session_key = PREFIX+req.session_id
@@ -135,19 +136,21 @@ local Session = Object:extend {
     end;
 
     -- 返回一个table
-    get = function (self, req)
+    get = function (self)
         local session_key = PREFIX+req.session_id
         db:expire(session_key, SMALL_EXPIRE_TIME)
         return db:hgetall(session_key)
     end;
 
-    setKey = function (self, req, key, value)
-        checkType(key, 'string')
+    setKey = function (self, key, value)
+        checkType(key, value, 'string', 'string')
+        -- 这里，req直接用的全局变量
         local session_key = PREFIX+req.session_id
         
         -- 这里还必须这样，先把之前的数据取出来，把新数据加到lua表中，
         -- 再一次性写到数据库hash项中去，这样存的数据才正确。直接写新hash子项
         -- 到数据库的话，会把之前的信息清除掉。很奇怪，为什么？怀疑是系统环境
+        -- 是不是因为对key加了expire的原因？
         local session_t = db:hgetall(session_key)
         session_t[key] = value
         for k, v in pairs(session_t) do
@@ -161,7 +164,7 @@ local Session = Object:extend {
     end;
 
     -- 返回
-    getKey = function (self, req, key)
+    getKey = function (self, key)
         checkType(key, 'string')
         local session_key = PREFIX+req.session_id
         db:expire(session_key, SMALL_EXPIRE_TIME)
@@ -171,7 +174,7 @@ local Session = Object:extend {
     end;
 
     -- 返回是否删除成功标志
-    delKey = function (self, req, key)
+    delKey = function (self, key)
         checkType(key, 'string')
         local session_key = PREFIX+req.session_id   
         req.session[key] = nil

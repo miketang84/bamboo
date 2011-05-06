@@ -582,15 +582,13 @@ Model = Object:extend {
 		local fields = self.__fields
 		for k, v in pairs(fields) do
 			local t = params[k]
-			print('====',t, k, v)
 			-- 规则1，如果域有required=true，那么
 			if v.required then
-				print('----', k)
 				-- 在required的情况下，如果上传参数不存在，或参数长度为空
 				if not t or #t == 0 then return false, ('Required parameter "%s" is missing.'):format(k) end
 			end
 			-- 如果有此域的内容，那么就检测
-			if t then
+			if t and t ~= '' then
 				-- 规则2，如果域有min, max，则说明传输的是数字，限定一个范围
 				if v.min then
 					local num = tonumber(t)
@@ -617,7 +615,8 @@ Model = Object:extend {
 				end
 				-- 规则4，如果域有pattern，则说明传输的是字符串，要限定在一个正则表达式匹配范围内
 				if v.pattern then
-					if #t ~= #t:match(v.pattern) then
+					local ret = t:match(v.pattern)
+					if not ret or #t ~= #ret then
 						return false, ('Parameter "%s" should be suited to the internal pattern.'):format(k) 
 					end
 				end

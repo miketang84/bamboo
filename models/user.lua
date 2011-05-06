@@ -61,13 +61,13 @@ local User = Model:extend {
 		if not authed then return nil end
 		-- 登录，即是在用户所在的session中添加一个user_id字段，值为用户的id号
 		-- 登录的过期时间，即为session的过期时间
-		Session:setKey(req, 'user_id', user.id)
+		Session:setKey('user_id', user.id)
 		return user
 	end;
 	
 	logout = function (self)
 		I_AM_CLASS(self)
-		return Session:delKey(req, 'user_id')
+		return Session:delKey('user_id')
 	end;
 	
 	-- 类函数，此处的self是User本身，也可以是User的继承类型

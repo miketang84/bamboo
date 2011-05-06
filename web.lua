@@ -7,6 +7,7 @@ module(..., package.seeall)
 
 local session = require 'bamboo.session'
 local Form  = require 'bamboo.form'
+local View = require 'bamboo.view'
 
 local Web = Object:extend {
 	__tag = 'Bamboo.Web';
@@ -122,6 +123,11 @@ local Web = Object:extend {
 
         return self.conn:reply_http(self.req, data, code, status, headers)
     end;
+	html = function (self, html_tmpl, tbl)
+		local tbl = tbl or {}
+		return self:page(View(html_tmpl)(tbl))
+	end;
+	
     -- 成功返回的快捷方式
     ok = function (self, msg) self:page(msg or 'OK', 200, 'OK') end;
 	
