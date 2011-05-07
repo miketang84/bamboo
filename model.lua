@@ -465,16 +465,21 @@ Model = Object:extend {
 	-- filter返回的是一个列表
 	filter = function (self, query_args, is_rev)
 		I_AM_CLASS(self)
-		if query_args['id'] then
+		if query_args and query_args['id'] then
 			-- 去除以id为键的搜索
 			print("[WARNING] Filter doesn't support search by id.")
 			query_args['id'] = nil 
-			local t = {}
-			for k, _ in pairs(query_args) do
-				table.insert(t, k)
-			end
-			if #t == 0 then return nil end
+			
 		end
+		
+		-- 检查是否为空
+		local t = {}
+		for k, _ in pairs(query_args) do
+			table.insert(t, k)
+		end
+		-- 当为空时，就返回所有
+		if #t == 0 then return self:all() end
+
 		-- ???行不行???
 		-- 这里让query_set（一个表）也获得Model中定义的方法，到时可用于链式操作
 		-- 这里就创建了一个query_set，类似于Django中的
@@ -626,6 +631,15 @@ Model = Object:extend {
 		return true
 	end;
 	
+	fieldInfo = function (self, field)
+		I_AM_CLASS(self)
+		checkType(field, 'string')
+		
+		-- 如果有，就返回描述表；如果没有，就返回nil
+		return self.__fields[field]
+	end;
+	
+	
     --------------------------------------------------------------------
 	-- 实例函数。由类的实例访问
 	--------------------------------------------------------------------
@@ -636,16 +650,23 @@ Model = Object:extend {
         local model_key = self.__name + ':' + tostring(self.id)
 		local isExisted = db:exists(model_key)
 		-- 如果之前数据库中没有这个对象，即是新创建的情况
+		local index_key = getIndexName(self)
 		if not isExisted then
 			-- 对象类别的总数计数器就加1
 			db:incr(self.__name + ':__counter')
 			-- 将记录添加到Model:__index中去
 			-- 在保存索引的时候，使用__tag中的最后一个单词作为名字，
 			-- 这是因为__name有可能会命名成与父辈同名的名字
-			local index_key = getIndexName(self)
+			
 			-- local index_key = self.__name + ':__index'
 			--assert(db:exists(index_key), ("[ERROR] %s doesn't exist!"):format(index_key))
 			db:zadd(index_key, tonumber(self.id), self.name)
+		else
+			-- 如果对象存在, 更新索引信息
+			-- 先把之前的删除掉
+			db:zremrangebyscore(index_key, self.id, self.id)
+			-- 再把新的name添加进去
+			db:zadd(index_key, self.id, self.name)
 		end
 
 		-- 这两项必存
