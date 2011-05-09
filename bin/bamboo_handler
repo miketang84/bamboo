@@ -67,9 +67,6 @@ setfenv(assert(loadfile(handler_file)), setmetatable(childenv, {__index=_G}))()
 -- 将主URLS定义融合到全局的URLS中来
 table.update(bamboo.URLS, childenv.URLS)
 local URLS = bamboo.URLS
-print('------------ URL Settings --------------')
-ptable(URLS)
-print('----------------------------------------')
 
 ------------------------------------------------------------------------
 
@@ -107,7 +104,8 @@ local function trailingPath(path)
 end
 
 local function makeUrlHandlerMapping(URLS)
-	local mapping_table = {}
+	local table_concrete = {}
+	local table_pattern = {}
 	
 	local base = URLS[1]
 	for k, v in pairs(URLS) do
@@ -115,17 +113,27 @@ local function makeUrlHandlerMapping(URLS)
 		if k ~= 1 then
 			local url_t = base + k
 			-- 去除多余的分隔符
-			url_t = url_t:gsub('//+', '/')
+			url_t = trailingPath(url_t)
 			
-			mapping_table[url_t:lower()] = v
+			-- 把有模式匹配的部分分离出去，这里不一定还很精确，先试试
+			if url_t:find('%[?%%[%%%-_a-zA-Z]+%]?%+?') then
+				table_pattern[url_t:lower()] = v
+			else
+				table_concrete[url_t:lower()] = v
+			end
 		end
 	end	
 	
-	return mapping_table
+	return table_concrete, table_pattern
 end
 
 -- 对URLS中数据作简单处理，生成MappingTable，后面主要用MappingTable
-local MappingTable = makeUrlHandlerMapping(URLS)
+local MappingTableConcrete, MappingTablePattern = makeUrlHandlerMapping(URLS)
+print('------------ URL Settings --------------')
+ptable(MappingTableConcrete)
+print('========================================')
+ptable(MappingTablePattern)
+print('----------------------------------------')
 
 ------------------------------------------------------------------------
 -- 从URLS定义列表中找到匹配的handler，实际上这是个集合操作
@@ -133,7 +141,7 @@ local MappingTable = makeUrlHandlerMapping(URLS)
 -- @param path	来访path
 -- @return  返回两个参数，第一个参数是handler函数，第二个参数是是否状态编程(true)，无状态编程(false)
 ------------------------------------------------------------------------
-local function getHandlerByPath(mapt, path)
+local function getHandlerByPath(path)
 	local path = path:lower() 
 	local parse = function (v)
 		if type(v) == 'table' then
@@ -146,11 +154,16 @@ local function getHandlerByPath(mapt, path)
 	end
 	
 	local key, value = "", nil
-	for k, v in pairs(mapt) do
+	
+	-- 如果URL表中已经有此具体的URL了，就直接返回，这样效率奇高
+	if MappingTableConcrete[path] then return parse(MappingTableConcrete[path]) end
+	
+	for k, v in pairs(MappingTablePattern) do
 		-- 此处，添加URL正则表达式匹配功能，要做到完整且尽可能长的匹配
 		-- 而且，要求，如果两种模式都满足，则取表述清楚的那一种模式。如：
 		-- "%w+/"与"login/"之间取"login/"
 		--  如果都完全显式地等于它了，那么立即处理
+		-- 处理精确匹配后的漏网之鱼
 		if k == path then
 			return parse(v)
 		-- 如果是一个模式匹配等于它的，则先悬挂，等到全部检查完，选择其中最长的模式
@@ -190,7 +203,7 @@ end
 
 -- STATE是一个状态记录器，在其基础上实现一个FSM，有限状态机
 -- STATE是一个二组数组。第一维是path，即URL PATH部分，第二维是conn_id
-local STATE = createStateRecorder(setmetatable({}, {__mode="k"}), MappingTable)
+local STATE = createStateRecorder(setmetatable({}, {__mode="k"}), MappingTableConcrete)
 
 
 -- 硬编码，临时
@@ -389,7 +402,7 @@ function run(conn, config)
 					--ptable(BAMBOO_DB:hgetall('session:'+req.session_id))	-- for test
 					-------------------------------------------------
 					-- 根据来的PATH，找到对应的handler，如果没有找到，就报错（目前来讲是这样，但后面应该返回一个404页面）。
-					local main_t, state_flag = getHandlerByPath(MappingTable, path)
+					local main_t, state_flag = getHandlerByPath(path)
 					if not main_t then
 						print(('[WARNING] No handler to process this path: %s.'):format(path))
 						conn:reply_http(req, '<h2>Page Not Found.</h2>', 404, 'Not Found', req.headers)
@@ -439,7 +452,8 @@ function start(config)
 	config.APP_DIR = APP_DIR
 	-- 需要这个变量来从sqlite3数据库中找到传输通道
 	config.route = URLS[1]
-	config.MappingTable = MappingTable
+	config.MappingTableConcrete = MappingTableConcrete
+	config.MappingTablePattern = MappingTablePattern
 	
     config = updateConfig(config, config.config_file or CONFIG_FILE)
     -- 模板路径（用户定义，或默认）

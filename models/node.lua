@@ -51,9 +51,6 @@ Node = Model:extend {
 
 		self.created_date = os.time()
 		self.lastmodified_date = self.created_date
-		self.creator = t.creator
-		self.owner = t.owner
-		self.lastmodifier = t.lastmodifier
 		
 		return self
 	end;
