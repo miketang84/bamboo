@@ -77,7 +77,7 @@ registerModule = function (mdl, extra_params)
 				-- 生成一个新函数
 				nfun = function (web, req)
 					-- 先执行模块初始化函数
-					local ret = mdl.init(extra_params)
+					local ret = mdl.init(url, extra_params)
 					if ret then
 					-- 如果返回结果为真，就继续执行
 						return fun(web, req)
