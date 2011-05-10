@@ -28,7 +28,7 @@ module('bamboo', package.seeall)
 ------------------------
 
 ------------------------------------------------------------------------
--- 创建全局URLS
+-- 创建Bamboo全局URLS
 URLS = {}
 -- 创建全局插件列表结构
 PLUGIN_LIST = {}
@@ -53,14 +53,46 @@ end
 -- 实现就这么简单，但是意义重大，使得独立模块开发和集成更加方便
 -- 在模块中，添加一个URLS的全局表，直接在这里面写上与函数对应的url表，
 -- 这样就不用再在handler_entry中再一个一个地再来指定了。
-registerModule = function (mdl)
+registerModule = function (mdl, extra_params)
 	checkType(mdl, 'table')
 	
 	-- 这里这个URLS应该不会报错的
 	if mdl.URLS then
 		checkType(mdl.URLS, 'table')
-	
-		table.update(URLS, mdl.URLS)	
+		
+		for url, fun in pairs(mdl.URLS) do
+			local nurl = ''
+			if url == '/' or not url:startsWith('/') then
+				print(url)
+				-- 相对URL路径，在前面要添加上模块名字，以组成绝对路径
+				local module_name = mdl._NAME:match('%.([%w_]+)$')
+				nurl = ('/%s/%s'):format(module_name, url)
+				print(nurl)
+			else
+				nurl = url
+			end
+			
+			local nfun
+			if mdl.init and type(mdl.init) == 'function' then
+				-- 生成一个新函数
+				nfun = function (web, req)
+					-- 先执行模块初始化函数
+					local ret = mdl.init(extra_params)
+					if ret then
+					-- 如果返回结果为真，就继续执行
+						return fun(web, req)
+					end
+					
+					return false
+				end
+			else
+				nfun = fun
+			end
+			-- 将新的函数赋值给URLS
+			URLS[nurl] = nfun
+		
+		end
+		
 	end
 end
 

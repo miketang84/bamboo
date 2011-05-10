@@ -4,8 +4,8 @@ require 'md5'
 require 'posix'
 
 local UUID_TYPE = 'random'
-local BIG_EXPIRE_TIME = 20					-- years
-local SMALL_EXPIRE_TIME = 3600*24*14		-- two weeks
+local BIG_EXPIRE_TIME = 3600*24*14			-- years
+local SMALL_EXPIRE_TIME = 3600*24*3		    -- one day
 local PID = tonumber(posix.getpid().pid)
 local HOSTID = posix.hostid()
 local RNG_BYTES = 8 						-- 64 bits of randomness should be good
@@ -46,10 +46,8 @@ local makeExpires = function (seconds)
     return os.date("%Y-%m-%d %H:%M:%S", os.time() + (seconds or SMALL_EXPIRE_TIME))
 end
 
-local makeBigExpires = function ()
-    local tmp = os.date("*t", os.time())
-    tmp.year = tmp.year + BIG_EXPIRE_TIME
-    return os.date("%Y-%m-%d %H:%M:%S", os.time(tmp))
+local makeBigExpires = function (seconds)
+    return os.date("%Y-%m-%d %H:%M:%S", os.time() + (seconds or BIG_EXPIRE_TIME))
 end
 
 local makeSessionCookie = function (ident)
