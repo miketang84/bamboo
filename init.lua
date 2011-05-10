@@ -73,11 +73,23 @@ registerModule = function (mdl, extra_params)
 			end
 			
 			local nfun
-			if mdl.init and type(mdl.init) == 'function' then
+			local exclude_flag = false
+			if extra_params then
+				checkType(extra_params, 'table')
+				if extra_params['excludes'] then
+					for _, exclude in ipairs(extra_params['excludes']) do
+						if exclude == url then
+							exclude_flag = true
+						end
+					end
+				end
+			end
+			
+			if mdl.init and type(mdl.init) == 'function' and not exclude_flag then
 				-- 生成一个新函数
 				nfun = function (web, req)
 					-- 先执行模块初始化函数
-					local ret = mdl.init(url, extra_params)
+					local ret = mdl.init(extra_params)
 					if ret then
 					-- 如果返回结果为真，就继续执行
 						return fun(web, req)
