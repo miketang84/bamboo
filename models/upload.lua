@@ -39,6 +39,7 @@ end
 local function savefile(t)
 	local req, file_obj = t.req, t.file_obj
 	local dest_dir = (t.dest_dir and 'media/uploads/' + t.dest_dir + '/') or 'media/uploads/'
+	dest_dir = trailingPath(dest_dir)
 	local prefix = t.prefix or ''
 	local postfix = t.postfix or ''
 	local filename = ''

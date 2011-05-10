@@ -77,6 +77,7 @@ registerModule = function (mdl, extra_params)
 			if extra_params then
 				checkType(extra_params, 'table')
 				if extra_params['excludes'] then
+				-- 为模块添加例外，即不执行init函数的例外
 					for _, exclude in ipairs(extra_params['excludes']) do
 						if exclude == url then
 							exclude_flag = true
