@@ -180,6 +180,14 @@ local Upload = Model:extend {
 		return calcNewFilename(oldname)
 	end;
 	
+	-- 这个函数，用于绑定模型特定的删除工作
+	specDelete = function (self)
+		I_AM_INSTANCE()
+		-- 本模型中，自动删除文件
+		os.execute('mkdir -p ' + self.path)
+		return self
+	end;
+	
 }
 
 return Upload

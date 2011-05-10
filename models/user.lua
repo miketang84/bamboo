@@ -20,6 +20,7 @@ local User = Model:extend {
 		['is_active'] = {},			-- 是否是活动用户，代替删除
 		['created_date'] = {},			-- 帐号创建的时间日期
 		['lastlogin_date'] = {}, 		-- 上次登录的时间日期
+		['is_logined'] = {},		-- 是否在线上
 		['perms'] = {},				-- 权限集合
 		['groups'] = {},				-- 用户所属组集合
 	};

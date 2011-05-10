@@ -21,7 +21,7 @@ local handler_file = arg[2]
 local errors = require 'bamboo.errors'
 local redis = require 'bamboo.redis'
 
-local CONFIG_FILE = APP_DIR + "app/settings.lua"
+local CONFIG_FILE = APP_DIR + "settings.lua"
 -- 工程目录完整路径
 local PROJECT_DIR = PROCESS_DIR + '/' + APP_DIR
 -- 将工程目录也加入到搜索路径中去，以实现工程目录中的模块相互调用
