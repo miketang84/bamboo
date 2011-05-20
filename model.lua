@@ -311,7 +311,7 @@ Model = Object:extend {
 		I_AM_CLASS(self)
 		local index_name = getIndexName(self)
 		local all_ids 
-		if not is_rev then
+		if is_rev ~= 'rev' then
 			all_ids = db:zrange(index_name, 0, -1, 'withscores')
 		else
 			all_ids = db:zrevrange(index_name, 0, -1, 'withscores')
@@ -464,8 +464,11 @@ Model = Object:extend {
 
 	-- filter的query表中，不应该出现id，这里也不打算支持它
 	-- filter返回的是一个列表
-	filter = function (self, query_args, is_rev)
+	-- starti 是指明从哪一个序号开始搜索, length指明要找几个元素
+	-- dir指明要查找的方向，1表示正向，-1表示反向
+	filter = function (self, query_args, is_rev, starti, length, dir)
 		I_AM_CLASS(self)
+		local dir = dir or 1
 		if query_args and query_args['id'] then
 			-- 去除以id为键的搜索
 			print("[WARNING] Filter doesn't support search by id.")
@@ -481,10 +484,36 @@ Model = Object:extend {
 		-- 这里就创建了一个query_set，类似于Django中的
 		local query_set = setProto(List(), Model)
 	
-		-- 取得所有关于这个模型的例id
+		-- 取得所有关于这个模型的实例id
 		local all_ids = self:allIds(is_rev)
+		if starti then
+			checkType(starti, 'number')
+			assert( starti >= 1, '[Error] starti must be greater than 1.')
+			-- 取得从指定开始位置到末尾的列表
+			if dir == 1 then
+				all_ids = all_ids:slice(starti, -1)
+			else
+				assert( dir == -1, '[Error] dir must be 1 or -1.')
+				all_ids = all_ids:slice(1, starti)
+			end
+		end
+		if isEmpty(all_ids) then return {} end
+		
+		local exiti = 0
 		local getById = self.getById 
-		for _, kk in ipairs(all_ids) do
+		local s, e
+		if dir > 0 then
+			s = 1
+			e = #all_ids
+			dir = 1
+		else
+			s = #all_ids
+			e = 1
+			dir = -1
+		end
+		
+		for i = s, e, dir do
+			local kk = all_ids[i]
 			-- 根据key获得一个实例的内容，返回一个表
 			local obj = getById (self, kk)
 			local flag = true	
@@ -508,10 +537,36 @@ Model = Object:extend {
 			if flag then
 				-- filter返回的表中由一个个值对构成
 				query_set:append(obj)
+				
+				if length then 
+					checkType(length, 'number')
+					if #query_set >= length then
+					-- 如果找到的元素个数已经达到要求
+						exiti = i
+						break
+					end
+				end
 			end
 		end
 		
-		return query_set
+		-- 返回的时候，不仅返回取得的结果，还返回搜索到的最终位置
+		local endpoint
+		if starti then
+			if exiti > 0 then
+				endpoint = (dir == 1) and starti + exiti - 1 or exiti
+			else
+				endpoint = (dir == 1) and starti + #all_ids - 1 or 1
+			end
+		else
+			endpoint = #all_ids
+		end
+		
+		-- 当是反向查找的时候，还要把结果再反过来
+		if dir == -1 then
+			query_set:reverse()
+		end
+		
+		return query_set, endpoint
 	end;
     
     -- 将模型的counter值归零
