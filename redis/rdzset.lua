@@ -1,3 +1,5 @@
+local List = require 'lglib.list'
+
 module(..., package.seeall)
 
 -- 本文件只负责对redis的ZSET结构的封装
@@ -23,7 +25,7 @@ end
 function retrieveZset( key )
 	local zsetkey = 'ZSET:' + key
 	-- 获取集合中的所有元素，返回一个list，元素间按score排序
-	return db:zrange(zsetkey, 0, -1)
+	return List(db:zrange(zsetkey, 0, -1))
 end
 
 function removeFromZset( key, val )

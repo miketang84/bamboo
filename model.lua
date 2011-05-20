@@ -2,6 +2,7 @@ module(..., package.seeall)
 
 local db = BAMBOO_DB
 
+local List = require 'lglib.list'
 local rdzset = require 'bamboo.redis.rdzset'
 local rdfifo = require 'bamboo.redis.rdfifo'
 local rdzfifo = require 'bamboo.redis.rdzfifo'
@@ -315,10 +316,10 @@ Model = Object:extend {
 		else
 			all_ids = db:zrevrange(index_name, 0, -1, 'withscores')
 		end
-		local r = {}
+		local r = List()
 		for _, v in ipairs(all_ids) do
 			-- v[2] is the id
-			table.insert(r, v[2])
+			r:append(v[2])
 		end
 		
 		return r
@@ -337,10 +338,10 @@ Model = Object:extend {
 		else
 			all_ids = db:zrevrange(index_name, start, stop, 'withscores')
 		end
-		local r = {}
+		local r = List()
 		for _, v in ipairs(all_ids) do
 			-- v[2] is the id
-			table.insert(r, v[2])
+			r:append(v[2])
 		end
 		
 		return r
@@ -349,7 +350,7 @@ Model = Object:extend {
 	-- 返回此类中所有的成员
 	all = function (self, is_rev)
 		I_AM_CLASS(self)
-		local all_instaces = {}
+		local all_instaces = List()
 		local _name = self.__name + ':'
 		
 		local index_name = getIndexName(self)
@@ -360,7 +361,7 @@ Model = Object:extend {
 		for _, id in ipairs(all_ids) do
 			local obj = getById(self, id)
 			if obj then
-				table.insert(all_instaces, obj)
+				all_instaces:append(obj)
 			end
 		end
 		return all_instaces
@@ -370,13 +371,13 @@ Model = Object:extend {
 	slice = function (self, start, stop, is_rev)
 		I_AM_CLASS(self)
 		local all_ids = self:sliceIds(start, stop, is_rev)
-		local objs = {}
+		local objs = List()
 		local getById = self.getById 
 
 		for _, id in ipairs(all_ids) do
 			local obj = getById(self, id)
 			if obj then
-				table.insert(objs, obj)
+				objs:append(obj)
 			end
 		end
 		
@@ -472,18 +473,13 @@ Model = Object:extend {
 			
 		end
 		
-		-- 检查是否为空
-		local t = {}
-		for k, _ in pairs(query_args) do
-			table.insert(t, k)
-		end
 		-- 当为空时，就返回所有
-		if #t == 0 then return self:all() end
+		if isEmpty(query_args) then return self:all() end
 
 		-- ???行不行???
 		-- 这里让query_set（一个表）也获得Model中定义的方法，到时可用于链式操作
 		-- 这里就创建了一个query_set，类似于Django中的
-		local query_set = setProto({}, Model)
+		local query_set = setProto(List(), Model)
 	
 		-- 取得所有关于这个模型的例id
 		local all_ids = self:allIds(is_rev)
@@ -511,7 +507,7 @@ Model = Object:extend {
 			-- 如果走到这一步，flag还为真，则说明已经找到，添加到查询结果表中去
 			if flag then
 				-- filter返回的表中由一个个值对构成
-				table.insert(query_set, obj)
+				query_set:append(obj)
 			end
 		end
 		
@@ -704,11 +700,11 @@ Model = Object:extend {
 		return self
     end;
     
-    fillFreshFields = function (self, t)
-		I_AM_INSTANCE(self)
-		if not t then return self end
-		return self:init(t)
-    end;
+    --fillFreshFields = function (self, t)
+		--I_AM_INSTANCE(self)
+		--if not t then return self end
+		--return self:init(t)
+    --end;
     
     -- 获取模型的counter值
     getCounter = function (self)
@@ -836,14 +832,14 @@ Model = Object:extend {
 			local list = rdzset.retrieveZset(key)
 			if isEmpty(list) then return {} end
 			
-			list = table.slice(list, start, stop, is_rev)
+			list = list:slice(start, stop, is_rev)
 			if isEmpty(list) then return {} end
 			
 			if fld.foreign == 'ANYSTRING' then
 				-- 直接返回字符串列表
 				return list
 			else
-				local obj_list = {}
+				local obj_list = List()
 				for _, v in ipairs(list) do
 					link_model, linked_id = checkUnfixed(fld, v)
 
@@ -853,7 +849,7 @@ Model = Object:extend {
 						-- 如果没有获取到，就把这个外键去掉
 						rdzset.removeFromZset(key, v)
 					else
-						table.insert(obj_list, obj)
+						obj_list:append(obj)
 					end
 				end
 				
@@ -866,14 +862,14 @@ Model = Object:extend {
 			local key = model_key + ':' + field
 			local list = rdfifo.retrieveFifo(key)
 			
-			list = table.slice(list, start, stop, is_rev)
+			list = list:slice(start, stop, is_rev)
 			if isFalse(list) then return {} end
 	
 			if fld.foreign == 'ANYSTRING' then
 				-- 直接返回字符串列表
 				return list
 			else
-				local obj_list = {}
+				local obj_list = List()
 				for _, v in ipairs(list) do
 					link_model, linked_id = checkUnfixed(fld, v)
 
@@ -883,7 +879,7 @@ Model = Object:extend {
 						-- 如果没有获取到，就把这个外键元素去掉
 						rdfifo.removeFromFifo(key, v)
 					else
-						table.insert(obj_list, obj)
+						obj_list:append(obj)
 					end
 				end
 				
@@ -897,18 +893,18 @@ Model = Object:extend {
 			-- 由于FIFO的特性，取出来的列表，新鲜的是在左边
 			local list = rdzfifo.retrieveZfifo(key)
 			
-			list = table.slice(list, start, stop, is_rev)
+			list = list:slice(start, stop, is_rev)
 			if isFalse(list) then return {} end
 	
 			if fld.foreign == 'ANYSTRING' then
 				-- 直接返回嵌套列表
 				return list
 			else
-				local obj_list = {}
+				local obj_list = List()
 				-- 把下面用得到的内容部分抽取出来
-				local tlist = {}
+				local tlist = List()
 				for _, v in ipairs(list) do
-					table.insert(tlist, v[1])
+					tlist:append(v[1])
 				end
 				list = tlist
 				
@@ -921,7 +917,7 @@ Model = Object:extend {
 						-- 如果没有获取到，就把这个外键元素去掉
 						rdzfifo.removeFromZfifo(key, 0, v)
 					else
-						table.insert(obj_list, obj)
+						obj_list:append(obj)
 					end
 				end
 				

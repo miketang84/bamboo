@@ -1,3 +1,5 @@
+local List = require 'lglib.list'
+
 module(..., package.seeall)
 
 -- 本文件只负责对redis的FIFO结构的封装
@@ -39,7 +41,7 @@ end
 function retrieveFifo( key )
 	local store_key = 'FIFO:' + key
 
-	return db:lrange(store_key, 0, -1)
+	return List(db:lrange(store_key, 0, -1))
 	
 end
 
