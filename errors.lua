@@ -48,6 +48,7 @@ function reportError(conn, request, err, state)
     local page = ERROR_PAGE {err=trace, source=source, request=pretty_req}
     conn:reply_http(request, page, 500, "Internal Server Error")
     print("ERROR", err)
+
 end
 
 

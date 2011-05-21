@@ -241,6 +241,39 @@ _G['endsWith'] = function (substr)
 	end
 end
 
+_G['inset'] = function (...)
+	local args = {...}
+	return function (v)
+		v = tostring(v)
+		for _, val in ipairs(args) do
+			-- 只要有一个满足，就表明在这个集合里
+			if tostring(val) == v then
+				return true
+			end
+		end
+		
+		return false
+	end
+
+end
+
+_G['uninset'] = function (...)
+	local args = {...}
+	return function (v)
+		v = tostring(v)
+		for _, val in ipairs(args) do
+			-- 需要所有的都不等，才表明不在这个集合里
+			-- 只要有一个等，就说明在这个集合里
+			if tostring(val) == v then
+				return false
+			end
+		end
+		
+		return true
+	end
+
+end
+
 ------------------------------------------------------------------------
 -- Model定义
 -- Model是Bambo中涉及到数据库及模型定义的通用接口
@@ -467,8 +500,14 @@ Model = Object:extend {
 	-- starti 是指明从哪一个序号开始搜索, length指明要找几个元素
 	-- dir指明要查找的方向，1表示正向，-1表示反向
 	filter = function (self, query_args, is_rev, starti, length, dir)
-		I_AM_CLASS(self)
+		I_AM_CLASS_OR_QUERY_SET(self)
+		
+		local is_query_set = false
+		if isList(self) then is_query_set = true end
+		
 		local dir = dir or 1
+		assert( dir == 1 or dir == -1, '[Error] dir must be 1 or -1.')
+		
 		if query_args and query_args['id'] then
 			-- 去除以id为键的搜索
 			print("[WARNING] Filter doesn't support search by id.")
@@ -478,14 +517,31 @@ Model = Object:extend {
 		
 		-- 当为空时，就返回所有
 		if isEmpty(query_args) then return self:all() end
-
+		
+		local logic = 'and'
+		if query_args[1] then
+			if query_args[1] == 'or' then
+				logic = 'or'
+			end
+			query_args[1] = nil
+		end
 		-- ???行不行???
 		-- 这里让query_set（一个表）也获得Model中定义的方法，到时可用于链式操作
 		-- 这里就创建了一个query_set，类似于Django中的
 		local query_set = setProto(List(), Model)
-	
+		-- add it to fit the check of isClass function
+		query_set.__spectype = 'QuerySet'
+		
+			
+		local all_ids
+		if is_query_set then
+		-- 如果是query_set，则把all_ids就看成对象的列表，而不是对象id的列表
+			all_ids = self
+		else
 		-- 取得所有关于这个模型的实例id
-		local all_ids = self:allIds(is_rev)
+			all_ids = self:allIds(is_rev)
+		end
+		
 		if starti then
 			checkType(starti, 'number')
 			assert( starti >= 1, '[Error] starti must be greater than 1.')
@@ -493,15 +549,14 @@ Model = Object:extend {
 			if dir == 1 then
 				all_ids = all_ids:slice(starti, -1)
 			else
-				assert( dir == -1, '[Error] dir must be 1 or -1.')
 				all_ids = all_ids:slice(1, starti)
 			end
 		end
-		if isEmpty(all_ids) then return {} end
+		if #all_ids == 0 then return {} end
 		
+		local s, e
 		local exiti = 0
 		local getById = self.getById 
-		local s, e
 		if dir > 0 then
 			s = 1
 			e = #all_ids
@@ -511,13 +566,20 @@ Model = Object:extend {
 			e = 1
 			dir = -1
 		end
-		
+			
 		for i = s, e, dir do
-			local kk = all_ids[i]
-			-- 根据key获得一个实例的内容，返回一个表
-			local obj = getById (self, kk)
 			local flag = true	
+			local flag_all = false
+			local obj
+			if is_query_set then
+				obj = all_ids[i]
+			else
+				local kk = all_ids[i]
+				-- 根据key获得一个实例的内容，返回一个表
+				obj = getById (self, kk)
+			end
 			local fields = obj.__fields
+			
 			for k, v in pairs(query_args) do
 				-- 对于多余的查询条件，一经发现，直接跳出
 				if not obj or not fields[k] then flag=false; break end
@@ -526,11 +588,23 @@ Model = Object:extend {
 					-- 进入函数v进行比较的，总是单个字段
 					flag = v(obj[k])
 					-- 如果不在限制条件内，直接跳出循环
-					if not flag then break end
+					if logic == 'and' then
+					-- 逻辑为and的情况下，只要有一个条件不满足，就跳过
+						if not flag then break end
+					else
+					-- 逻辑为or的情况下，只要有一个条件满足，就添加
+						if flag then break end
+					end
 	
 				else
-					-- 处理条件式为等于的情况
-					if obj[k] ~= v then flag=false; break end
+				-- 处理条件式为等于的情况
+					if logic == 'and' then
+					-- 逻辑为and的情况下，只要有一个条件不满足，就跳过
+						if obj[k] ~= v then flag=false; break end
+					else
+					-- 逻辑为or的情况下，只要有一个条件满足，就添加
+						if obj[k] == v then flag=true; break end
+					end
 				end
 			end
 			-- 如果走到这一步，flag还为真，则说明已经找到，添加到查询结果表中去
@@ -540,7 +614,7 @@ Model = Object:extend {
 				
 				if length then 
 					checkType(length, 'number')
-					if #query_set >= length then
+					if length > 0 and #query_set >= length then
 					-- 如果找到的元素个数已经达到要求
 						exiti = i
 						break
@@ -548,7 +622,7 @@ Model = Object:extend {
 				end
 			end
 		end
-		
+			
 		-- 返回的时候，不仅返回取得的结果，还返回搜索到的最终位置
 		local endpoint
 		if starti then
@@ -567,6 +641,7 @@ Model = Object:extend {
 		end
 		
 		return query_set, endpoint
+		
 	end;
     
     -- 将模型的counter值归零
@@ -768,15 +843,17 @@ Model = Object:extend {
     end;
     
     -- 删除数据库中的一个对象数据
+    -- 可以是单个对象，也可以是query_set，即对象列表
     del = function (self)
-		I_AM_INSTANCE(self)
+		I_AM_INSTANCE_OR_QUERY_SET(self)
 		-- 如果self是单个对象
 		if self['id'] then
 			-- 在数据库中删除这个对象的内容
 			delFromRedis(self)
-		-- 如果self是一个对象列表
+		
 		else
-			-- 一个一个挨着删除
+		-- 如果self是一个对象列表，即query_set
+		-- 一个一个挨着删除
 			for _, v in ipairs(self) do
 				delFromRedis(v)
 				v = nil
