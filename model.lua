@@ -692,7 +692,7 @@ Model = Object:extend {
 		local store_type = db:type(one_key)
 		if store_type == 'list' then
 			if not st or st ~= 'LIST' then print(("[WARNING] Key %s is list!"):format(one_key)) end
-			return db:lrange(one_key, 0, -1)
+			return List(db:lrange(one_key, 0, -1))
 		elseif store_type == 'string' then
 			return db:get(one_key)
 		end
