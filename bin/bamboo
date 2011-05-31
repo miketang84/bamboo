@@ -216,7 +216,7 @@ COMMANDS = {
         os.execute(('ln -sdf %s %s/media'):format(mediadir, appname))        
 
         -- 修改appname/app/settings.lua中的md5字串
-        local fd = io.open(('%s/app/settings.lua'):format(appname), 'r')
+        local fd = io.open(('%s/settings.lua'):format(appname), 'r')
 		local ctx = fd:read('*all')
 		fd:close()
 		local md5str = makemd5()
