@@ -222,7 +222,7 @@ COMMANDS = {
 		local md5str = makemd5()
 		ctx = ctx:gsub('####', md5str)
 
-		local fd = io.open(('%s/app/settings.lua'):format(appname), 'w')
+		local fd = io.open(('%s/settings.lua'):format(appname), 'w')
 		fd:write(ctx)
 		fd:close()
 		
