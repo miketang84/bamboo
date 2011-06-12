@@ -110,6 +110,71 @@ local delFromRedis = function (self)
 	self = nil
 end
 
+--------------------------------------------------------------------------------
+-- 下面四个断言，只能是类，实例或query set调用
+_G['I_AM_CLASS'] = function (self)
+	assert(self:isClass(), 'This function is only allowed to be called by class singleton.')
+end
+
+_G['I_AM_CLASS_OR_QUERY_SET'] = function (self)
+	assert(self:isClass() or self.__spectype == 'QuerySet', 'This function is only allowed to be called by class singleton or query set.')
+end
+
+_G['I_AM_INSTANCE'] = function (self)
+	assert(self:isInstance(), 'This function is only allowed to be called by instance of class.')
+end
+
+_G['I_AM_INSTANCE_OR_QUERY_SET'] = function (self)
+	assert(self:isInstance() or self.__spectype == 'QuerySet', 'This function is only allowed to be called by instance of class.')
+end
+
+-- 判断是否是类
+_G['isClass'] = function (t)
+	if t.isClass then
+		if type(t.isClass) == 'function' then
+			return t:isClass()
+		else
+			return false
+		end
+	else 
+		return false
+	end
+end
+
+-- 判断是否是实例
+_G['isInstance'] = function (t)
+	if t.isInstance then 
+		if type(t.isInstance) == 'function' then
+			return t:isInstance()
+		else
+			return false
+		end
+	else 
+		return false
+	end
+end
+
+-- 实例函数。判断实例对象是不是空的。即数据库中的没有符合要求的对象。
+-- 下面是我们的规则
+_G['isObjEmpty'] = function (obj)
+	if isFalse(obj) then return true end
+	checkType(obj, 'table')
+	
+	for k, v in pairs(obj) do
+		if type(k) == 'string' then
+			if not k:startsWith('_') 		-- 去掉_parent
+			and type(v) ~= 'function' 		-- 去掉new, extend两个函数
+			and k ~= 'id'					-- 去掉id字段
+			and k ~= 'name'					-- 去掉name字段
+			then
+				return false
+			end
+		end
+	end
+	
+	return true
+end;
+
 ------------------------------------------------------------------------
 -- 数据库检索的限制函数集
 -- 由于使用的时候希望不再做导入工作，所以在加载Model模块的时候直接导入到全局环境中
