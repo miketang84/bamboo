@@ -488,7 +488,7 @@ Model = Object:extend {
 	-- 返回一个字符串列表
 	allKeys = function (self)
 		I_AM_CLASS(self)
-		return db:keys(self.__name + ':[0-9]*')
+		return db:keys(self.__name + ':*')
 	end;
 	
 	-- 返回此类中实例实际个数
