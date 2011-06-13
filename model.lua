@@ -709,21 +709,13 @@ Model = Object:extend {
 		
 	end;
     
-    -- 将模型的counter值归零
-    clearCounter = function (self)
-		I_AM_CLASS(self)
-		db:set(self.__name + ':__counter', 0)
-		
-		return self
-    end;
-	
 	clearAll = function (self)
 		I_AM_CLASS(self)
 		local all_objs = self:all()
 		for i, v in ipairs(all_objs) do
 			v:del()
 		end
-		self:clearCounter ()
+		db:set(self.__name + ':__counter', 0)
 		
 		return self
 	end;
@@ -894,12 +886,6 @@ Model = Object:extend {
 		
 		return self
     end;
-    
-    --fillFreshFields = function (self, t)
-		--I_AM_INSTANCE(self)
-		--if not t then return self end
-		--return self:init(t)
-    --end;
     
     -- 获取模型的counter值
     getCounter = function (self)
