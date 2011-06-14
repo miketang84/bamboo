@@ -497,8 +497,8 @@ Model = Object:extend {
 		return db:zcard(getIndexName(self))
 	end;
 	
-    -- 返回第一个查询对象，
-    get = function (self, query_args, is_rev)
+	-- 返回第一个查询对象，
+	get = function (self, query_args, is_rev)
 		I_AM_CLASS(self)
 		local id = query_args.id
 		
@@ -558,7 +558,7 @@ Model = Object:extend {
 		end
 		
 		return nil		
-    end;
+	end;
 
 	-- filter的query表中，不应该出现id，这里也不打算支持它
 	-- filter返回的是一个列表
@@ -814,13 +814,6 @@ Model = Object:extend {
 		return true
 	end;
 	
-	fieldInfo = function (self, field)
-		I_AM_CLASS(self)
-		checkType(field, 'string')
-		
-		-- 如果有，就返回描述表；如果没有，就返回nil
-		return self.__fields[field]
-	end;
 	
 	
     --------------------------------------------------------------------
@@ -889,7 +882,7 @@ Model = Object:extend {
     
     -- 获取模型的counter值
     getCounter = function (self)
-		I_AM_INSTANCE(self)
+		-- I_AM_INSTANCE(self)
 		return tonumber(db:get(self.__name + ':__counter') or 0)
     end;
     
@@ -1183,6 +1176,13 @@ Model = Object:extend {
 	
 	end;
 
+	
+	fieldInfo = function (self, field)
+		checkType(field, 'string')
+		
+		-- 如果有，就返回描述表；如果没有，就返回nil
+		return self.__fields[field]
+	end;
 
 }
 
