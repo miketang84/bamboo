@@ -53,6 +53,10 @@ local WHICH_DB = config.WHICH_DB or 0
 BAMBOO_DB = redis.connect {host=DB_HOST, port=DB_PORT, which = WHICH_DB}
 --ptable(BAMBOO_DB)
 
+-- 作配置文件的参数声明
+assert(config.monserver_dir, 'Mongrel2 directory "monserver_dir" must be specified.')
+
+
 local Web = require 'bamboo.web'
 local Session = require 'bamboo.session'
 local User = require 'bamboo.models.user'
@@ -455,7 +459,7 @@ function start(config)
 	config.MappingTableConcrete = MappingTableConcrete
 	config.MappingTablePattern = MappingTablePattern
 	
-    config = updateConfig(config, config.config_file or CONFIG_FILE)
+    --config = updateConfig(config, config.config_file or CONFIG_FILE)
     -- 模板路径（用户定义，或默认）
 	config.templates = config.templates or (APP_DIR + "views/")
     -- 标识码产生器，为一函数（用户定义，或默认）
@@ -472,8 +476,8 @@ function start(config)
     -- allowed_methods_header字段是一个字符串
 	config.allowed_methods_header = table.concat(allowed, ' ')
 	
-	setfenv(assert(loadfile('/etc/monserver.lua')), config)()
 	if config.monserver_dir then
+		-- 形成完整路径
 		config.config_db = config.monserver_dir + config.config_db
 	end
 	
@@ -498,6 +502,6 @@ end
 --------------
 -- 启动handler
 --------------
-start()
+start(config)
 
 

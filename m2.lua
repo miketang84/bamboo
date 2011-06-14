@@ -42,10 +42,6 @@ end
 function connect(config)
     -- 如果存在非默认目录的全局应用路径，则对之前定义的zmp信息通道的路径做相应修改
     local sub_addr, pub_addr = config.sub_addr, config.pub_addr
-    if config.monserver_dir then
-        sub_addr = sub_addr:sub(1,6) + config.monserver_dir + sub_addr:sub(7)
-        pub_addr = pub_addr:sub(1,6) + config.monserver_dir + pub_addr:sub(7)
-    end
     print("CONNECTING", config.route, config.sender_id, sub_addr, pub_addr)
   
     local ctx = mongrel2.new(config.io_threads)

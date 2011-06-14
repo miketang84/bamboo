@@ -13,6 +13,18 @@ signal.signal("SIGINT", function (...)
     end
 end)
 
+------------------------------------------------------------------------------
+-- 加载配置
+local config = {}
+-- 此处，只支持在工程目录下启动
+setfenv(assert(loadfile('settings.lua')), config)()
+local bamboo_dir = config.bamboo_dir or '/usr/local/share/lua/5.1/bamboo/'
+local monserver_dir = config.monserver_dir or '/root/workspace/monserver/'
+
+
+
+------------------------------------------------------------------------------
+--
 function parse_args(arg)
     if #arg == 0 then return nil end
 
@@ -194,11 +206,6 @@ COMMANDS = {
         -- 4. 对app/settings/中的md5码的填充；
         local appname = settings[1] or 'bambooapp'
         
-        local env = {}
-        -- 将全局的一个配置加载进来
-        setfenv(assert(loadfile('/etc/monserver.lua')), env)()
-        local bamboo_dir = env.bamboo_dir or '/usr/local/share/lua/5.1/bamboo/'
-        local monserver_dir = env.monserver_dir or '/root/workspace/monserver/'  -- temp
         -- 创建目录
 		-- 确保没有同名目录存在
         assert(posix.stat(appname) == nil, '[Error] Some file or directory of this name exists！')
@@ -233,11 +240,6 @@ COMMANDS = {
         -- 要求，此命令必须在工程目录下执行，不然没有效果
         local plugin_name = settings[1] or 'bambooplugin'
         
-        local env = {}
-        -- 将全局的一个配置加载进来
-        setfenv(assert(loadfile('/etc/monserver.lua')), env)()
-        local bamboo_dir = env.bamboo_dir or '/usr/local/share/lua/5.1/bamboo/'
-        local monserver_dir = env.monserver_dir or '/root/workspace/monserver/'  -- temp
         -- 获取工程名字
         local appdir = posix.getcwd()
         --print(appdir)
@@ -267,7 +269,6 @@ COMMANDS = {
     createmodel = function(settings)
         -- 要求，此命令必须在工程目录下执行，不然没有效果
         local model_name = settings[1] or 'bamboomodel'
-        local bamboo_dir = env.bamboo_dir or '/usr/local/share/lua/5.1/bamboo/'
         
         local newfile = ('./%s.lua'):format(model_name:lower())
         -- 拷贝文件
@@ -350,7 +351,6 @@ end
 local cmd, settings = parse_args(arg)
 
 -- 将全局的一个配置加载进来
-setfenv(assert(loadfile('/etc/monserver.lua')), env)()
 
 if not cmd then print('No cmd input.'); return  end
 --for i, v in pairs(settings) do
