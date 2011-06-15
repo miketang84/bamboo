@@ -1,12 +1,12 @@
-require 'mongrel2'
-require 'mongrel2.config'
+local mongrel2 = require 'mongrel2'
+local mconfig = require 'mongrel2.config'
 
 module('bamboo.m2', package.seeall)
 
 function findHandler(m2conf, route, host_name)
-    local host_name = host_name or m2conf[1].default_host
+    local host_name = host_name or m2conf.servers[1].default_host
 
-    for _, server in ipairs(m2conf) do
+    for _, server in ipairs(m2conf.servers) do
         for _, host in ipairs(server.hosts) do
             if host.name == host_name then
                 return host.routes[route]
@@ -22,7 +22,7 @@ end
 -- @return 返回cookie id，也即session id值
 ------------------------------------------------------------------------
 function loadConfig(config)
-    local m2conf = assert(mongrel2.config.read(config.config_db),
+    local m2conf = assert(mconfig.read(config.config_db),
         "Failed to load the mongrel2 config: " .. config.config_db)
 
     local handler = findHandler(m2conf, config.route, config.host)
