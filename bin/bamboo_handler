@@ -478,7 +478,7 @@ function start(config)
 	
 	if config.monserver_dir then
 		-- 形成完整路径
-		config.config_db = config.monserver_dir + config.config_db
+		config.config_db = config.monserver_dir + '/' + config.config_db
 	end
 	
 	if not isFalse(config.views) then

@@ -17,11 +17,40 @@ end)
 -- 加载配置
 local config = {}
 -- 此处，只支持在工程目录下启动
-setfenv(assert(loadfile('settings.lua')), config)()
+local setting_file = loadfile('settings.lua')
+if not setting_file then
+	print [[
+[ERROR] You should make sure the existance of settings.lua in your workspace!
+
+The content of the settings.lua can be like following, 
+copy them to your 'settings.lua' file, if it doesn't exist, create it:
+
+------------------------------------------------------
+monserver_dir = "$your_mongrel2_server's_directory"
+bamboo_dir = "$the_directory_bamboo_installed"
+------------------------------------------------------
+	]]
+
+	os.exit()
+end
+setfenv(assert(setting_file), config)()
 local bamboo_dir = config.bamboo_dir or '/usr/local/share/lua/5.1/bamboo/'
 local monserver_dir = config.monserver_dir or '/root/workspace/monserver/'
 
+if monserver_dir == "$your_mongrel2_server's_directory" 
+or bamboo_dir == "$the_directory_bamboo_installed" 
+then
+	print [[
+[ERROR] You should make sure the validation of the bamboo_dir and monserver_dir!
 
+Change the value of them like following:
+	bamboo_dir = "/usr/local/share/lua/5.1/bamboo/"
+	monserver_dir = "/root/workspace/monserver/"
+
+	]]
+
+	os.exit()
+end
 
 ------------------------------------------------------------------------------
 --
@@ -226,6 +255,13 @@ COMMANDS = {
         local fd = io.open(('%s/settings.lua'):format(appname), 'r')
 		local ctx = fd:read('*all')
 		fd:close()
+
+		ctx = [[
+bamboo_dir = "/usr/local/share/lua/5.1/bamboo/"
+monserver_dir = "/root/workspace/monserver/"
+]] .. ctx
+		
+		
 		local md5str = makemd5()
 		ctx = ctx:gsub('####', md5str)
 
