@@ -2,7 +2,10 @@
 
 require 'posix'
 require 'signal'
+require 'lglib'
+require 'redis'
 
+        
 local env = {}
 SCRIPT_PIDS = {}
 
@@ -17,7 +20,7 @@ end)
 -- 加载配置
 local config = {}
 -- 此处，只支持在工程目录下启动
-local setting_file = loadfile('settings.lua')
+local setting_file = loadfile('settings.lua') or loadfile('../settings.lua')
 if not setting_file then
 	print [[
 [ERROR] You should make sure the existance of settings.lua in your workspace!
@@ -64,10 +67,8 @@ function parse_args(arg)
     local settings = {}
     local last_opt = nil
 
-
-    -- all command options are allowed in two style: -xx yy -foo bar or xx yy zz
-	-- now, arg[1] is the options
-	if arg[1]:sub(1, 1) == '-' then 
+	-- make the liner command line args become key value pairs
+	local function beatArgs(arg)
 		for i, opt in ipairs(arg) do
 		    local token = opt:match("\-+([a-z\-]+)")
 
@@ -77,22 +78,41 @@ function parse_args(arg)
 		        settings[last_opt] = opt
 		    end
 		end
+	end
+
+	local kv_start = -1
+    -- all command options are allowed in two style: -xx yy -foo bar or xx yy zz
+	-- now, arg[1] is the options
+	if arg[1]:sub(1, 1) == '-' then 
+		beatArgs(arg)
 	else
 		-- if arg[1] doesn't start with -, 
 		if #arg >= 2 then
 			-- if the lenght of arg is larger than 2, check the following args
 			for i = 2, #arg do
 				if arg[i]:sub(1,1) == '-' then
-					error('[ERROR] Options format is not correct.')
+					kv_start = i
+					break
 				end
 			end 
 		end
 
+		-- the linear part
 		-- push the following args into settings linearly
-		for i, v in ipairs(arg) do
-			settings[#settings + 1] = v
+		for i = 1, kv_start - 1 do
+			settings[#settings + 1] = arg[i]
 		end
-		
+
+		if kv_start > 0 then
+			-- the key value part
+			local rest = {}
+			for i = kv_start, #arg do
+				rest[#rest + 1] = arg[i]
+			end
+
+			-- put the rest part to settings
+			beatArgs(rest)		
+		end
     end
 
     return cmd, settings
@@ -256,11 +276,11 @@ COMMANDS = {
 		local ctx = fd:read('*all')
 		fd:close()
 
-		ctx = [[
+		ctx = ([[
+project_name = "%s"
 bamboo_dir = "/usr/local/share/lua/5.1/bamboo/"
 monserver_dir = "/root/workspace/monserver/"
-]] .. ctx
-		
+]]):format(appname) .. ctx
 		
 		local md5str = makemd5()
 		ctx = ctx:gsub('####', md5str)
@@ -277,9 +297,10 @@ monserver_dir = "/root/workspace/monserver/"
         local plugin_name = settings[1] or 'bambooplugin'
         
         -- 获取工程名字
-        local appdir = posix.getcwd()
+        --local appdir = posix.getcwd()
         --print(appdir)
-        local appname = appdir:match('/([%w_%-]+)$')
+        --local appname = appdir:match('/([%w_%-]+)$')
+        local appname = config.project_name
         --print(appname)
         
         -- 创建目录
@@ -287,7 +308,7 @@ monserver_dir = "/root/workspace/monserver/"
         assert(posix.stat(plugin_name) == nil, '[Error] Some file or directory has this name already！')
         posix.mkdir(plugin_name)
         -- 拷贝文件
-        local cmdstr = ('cp -rf %s/cmd_tmpls/createplugin/* ./plugins/%s/'):format(bamboo_dir, plugin_name)
+        local cmdstr = ('cp -rf %s/cmd_tmpls/createplugin/* ./%s/'):format(bamboo_dir, plugin_name)
         os.execute(cmdstr)
         -- 创建资源目录
         local mediadir = ('%s/sites/%s/plugins/%s/'):format(monserver_dir, appname, plugin_name)
@@ -297,7 +318,7 @@ monserver_dir = "/root/workspace/monserver/"
         local cmdstr = ('cp -rf %s/cmd_tmpls/pluginmedia/*  %s'):format(bamboo_dir, mediadir)
         os.execute(cmdstr)
         -- 制作链接
-        os.execute(('ln -sdf %s plugins/%s/media'):format(mediadir, plugin_name)) 
+        os.execute(('ln -sdf %s %s/media'):format(mediadir, plugin_name)) 
         
         print(('[OK] Successfully created plugin %s.'):format(plugin_name))  
     end;
@@ -325,50 +346,147 @@ monserver_dir = "/root/workspace/monserver/"
     end;
     
     initdb = function (settings)
-        local data_file = settings[1] or 'initialdata.lua'
+        local data_file = settings[1] or 'initial.data'
         -- 加载并运行这个文件，释放数据到env中
         local env = setmetatable({}, {__index=_G})
         setfenv(assert(loadfile(data_file)), env)()
         assert(env['DATA'], '[ERROR] There must be DATA variable in initial data file.')
 
-        require 'redis'
-        require 'lglib'
         local params = {
-            host = env.DB_HOST or '127.0.0.1',
-            port = env.DB_PORT or 6379,
+            host = env.DB_HOST or settings.DB_HOST or '127.0.0.1',
+            port = env.DB_PORT or settings.DB_PORT or 6379,
         }
-        local which = env.WHICH_DB or 0
+        local which = env.WHICH_DB or settings.WHICH_DB or 0
 
         local redis_db = Redis.connect(params)
         redis_db:select(which)
 
         for k, v in pairs(env.DATA) do
             if type(v) ~= 'table' then
-                redis_db:setnx(tostring(k), tostring(v))
+				-- store the string
+                redis_db:set(tostring(k), tostring(v))
             else
-                if k ~= 'ZSETS' then
-                    for kk, vv in pairs(v) do
-                        redis_db:hsetnx(tostring(k), tostring(kk), seri(vv))
-                    end
+            	-- store the item
+                for kk, vv in pairs(v) do
+                    redis_db:hset(tostring(k), tostring(kk), tostring(vv))
                 end
+
+                -- k is the format of User:1
+				local model_name, num = k:match('([%w_]+):(%d+)')
+				if model_name and type(tonumber(num)) == 'number' then
+					-- update the latest __counter value of that model
+					local key_list = redis_db:keys(model_name + ':[0-9]*')
+					redis_db:set(model_name + ':__counter', #key_list)
+					-- add item zset cache 
+					-- maybe we should delete the same score item first
+					redis_db:zremrangebyscore(model_name + ':__index', num, num)
+					-- add it
+					redis_db:zadd(model_name + ':__index', num, v.name or num)
+				end
             end
+
         end
         
-        -- 添加zset记录
-        if DATA['ZSETS'] then
-            for _, v in ipairs(DATA['ZSETS']) do
-                local vset = db:keys(v + ':[0-9]*')
-                for _, vv in ipairs(vset) do
-                    local id = tonumber(vv:sub(#v + 2))
-                    local obj = db:hgetall(vv)
-                    db:zadd(v + ':__index', id, obj.name)
-                end
-            end
-        end
-
         print('OK')
     end;
+
+	-- push new data to database
+    pushdb = function (settings)
+    	local bamboo = require 'bamboo'
+    	
+        local data_file = settings[1] or 'initial.data'
+        -- 加载并运行这个文件，释放数据到env中
+        local env = setmetatable({}, {__index=_G})
+        setfenv(assert(loadfile(data_file)), env)()
+        assert(env['DATA'], '[ERROR] There must be DATA variable in initial data file.')
+
+        local params = {
+            host = env.DB_HOST or settings.DB_HOST or '127.0.0.1',
+            port = env.DB_PORT or settings.DB_PORT or 6379,
+        }
+        local which = env.WHICH_DB or settings.WHICH_DB or 0
+
+        local redis_db = Redis.connect(params)
+        redis_db:select(which)
+        -- Global variable BAMBOO_DB, to use bamboo's model function, must specify it
+        BAMBOO_DB = redis_db
+
+		-- 定义一个新环境
+		local childenv = {}
+		-- 加载目标handler_xxx.lua文件，将其环境设为childenv，
+		-- 目的是将那个文件中定义的全局变量释放到childenv来
+		setfenv(assert(loadfile('app/handler_entry.lua') or loadfile('../app/handler_entry.lua')), setmetatable(childenv, {__index=_G}))()
+
+		-- 先检查同名对象是否存在
+		for k, v in pairs(DATA) do
+			if type(v) == 'table' then
+				local model = bamboo.getModelByName(k)
+				for i, item in ipairs(v) do
+					local ori_obj = model:getByName(item.name)
+					-- here using isEmpty is enough
+					assert(isEmpty(ori_obj), ("[ERROR] The same name object %s exists."):format(item.name))
+				end
+			end
+		end
+
+		-- 前面检查了后，已经确保没有同名对象存在了，直接写入
+		for k, v in pairs(DATA) do
+			if type(v) == 'table' then
+				local model = bamboo.getModelByName(k)
+				local obj
+	
+				for i, item in ipairs(v) do
+					print(item.name)
+					obj = model(item)
+					obj:save()
+				end
+			else
+				-- do nothing now
+			end
+		end
+        
+        print('OK')
+    end;
+
+    clearmodel = function (settings)
+		local model_name = settings[1]
+		assert(model_name, '[ERROR] model_name must be specified!')
+        
+        local params = {
+            host = settings.DB_HOST or '127.0.0.1',
+            port = settings.DB_PORT or 6379,
+        }
+        local which = settings.WHICH_DB or 0
+
+        local redis_db = Redis.connect(params)
+        redis_db:select(which)
+
+		local key_list = redis_db:keys( model_name + ':*')
+		for i, v in ipairs(key_list) do
+			print(v)
+			redis_db:del(v)
+		end
+
+		print('OK.')
+    end;
+
+    shell = function (settings)
+		local shell_file = bamboo_dir + '/bin/shell.lua'
+		local host = settings.DB_HOST or '127.0.0.1'
+        local port = settings.DB_PORT or 6379
+        local which = settings.WHICH_DB or 0
+		
+        os.execute('lua -i ' + shell_file + (' %s %s %s'):format(host, port, which))
+
+        print('Return.')
+		
+    end;
+    
 }
+
+
+
+
 
 
 function run(cmd, settings)

@@ -40,7 +40,7 @@ registerPlugin = function (name, mdl)
 	checkType( mdl.main, 'function' )
 	
 	PLUGIN_LIST[name] = mdl.main
-	print(name, PLUGIN_LIST[name])
+	--print(name, PLUGIN_LIST[name])
 	
 	-- 将插件中的URL定义融合进来
 	if mdl['URLS'] then
