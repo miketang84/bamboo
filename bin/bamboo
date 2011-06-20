@@ -87,20 +87,25 @@ function parse_args(arg)
 		beatArgs(arg)
 	else
 		-- if arg[1] doesn't start with -, 
-		if #arg >= 2 then
-			-- if the lenght of arg is larger than 2, check the following args
-			for i = 2, #arg do
-				if arg[i]:sub(1,1) == '-' then
-					kv_start = i
-					break
-				end
-			end 
-		end
+		-- if the lenght of arg is larger than 2, check the following args
+		for i = 1, #arg do
+			if arg[i]:sub(1,1) == '-' then
+				kv_start = i
+				break
+			end
+		end 
 
 		-- the linear part
-		-- push the following args into settings linearly
-		for i = 1, kv_start - 1 do
-			settings[#settings + 1] = arg[i]
+		if kv_start < 0 then
+			-- push all args into setting
+			for i = 1, #arg do
+				settings[#settings + 1] = arg[i]
+			end
+		else
+			-- push the following args into settings linearly
+			for i = 1, kv_start - 1 do
+				settings[#settings + 1] = arg[i]
+			end
 		end
 
 		if kv_start > 0 then
@@ -120,7 +125,7 @@ end
 
 
 local function run_script(app_dir, script)
-    pid = posix.fork()
+    local pid = posix.fork()
 
     if pid == 0 then
         -- in pid, run the script
