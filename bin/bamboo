@@ -2,11 +2,12 @@
 
 require 'posix'
 require 'signal'
-require 'lglib'
+require 'bamboo'
 require 'redis'
 
         
 local env = {}
+BAMBOO_DB = nil
 SCRIPT_PIDS = {}
 
 
@@ -219,7 +220,6 @@ COMMANDS = {
         local app = ('%s%s'):format((settings.app or "./"), 'app/handler_*.lua')
         local script_times = {}
 
-
         while true do
             local targets = assert(posix.glob(app))
 
@@ -230,7 +230,7 @@ COMMANDS = {
             end
 
             run_app(app_dir, targets)
-            script, pid = wait_on_children()
+            local script, pid = wait_on_children()
             local tick = os.time()
 
             if tick - script_times[script] < 1 then
@@ -391,14 +391,22 @@ monserver_dir = "/root/workspace/monserver/"
             end
 
         end
+
+        BAMBOO_DB = redis_db
+        if env.SCRIPT then
+			for _, script in ipairs(env.SCRIPT) do
+				-- load the external code in initial data file
+				local f = assert(loadstring(script))
+				-- execute it
+				f()
+			end
+        end
         
         print('OK')
     end;
 
 	-- push new data to database
     pushdb = function (settings)
-    	local bamboo = require 'bamboo'
-    	
         local data_file = settings[1] or 'initial.data'
         -- 加载并运行这个文件，释放数据到env中
         local env = setmetatable({}, {__index=_G})
