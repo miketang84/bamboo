@@ -393,8 +393,8 @@ monserver_dir = "/root/workspace/monserver/"
         end
 
         BAMBOO_DB = redis_db
-        if env.SCRIPT then
-			for _, script in ipairs(env.SCRIPT) do
+        if env.SCRIPTS then
+			for _, script in ipairs(env.SCRIPTS) do
 				-- load the external code in initial data file
 				local f = assert(loadstring(script))
 				-- execute it
