@@ -283,9 +283,9 @@ COMMANDS = {
 
 		ctx = ([[
 project_name = "%s"
-bamboo_dir = "/usr/local/share/lua/5.1/bamboo/"
-monserver_dir = "/root/workspace/monserver/"
-]]):format(appname) .. ctx
+bamboo_dir = "%s"
+monserver_dir = "%s"
+]]):format(appname, bamboo_dir, monserver_dir) .. ctx
 		
 		local md5str = makemd5()
 		ctx = ctx:gsub('####', md5str)
