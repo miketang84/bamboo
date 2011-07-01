@@ -947,7 +947,7 @@ Model = Object:extend {
 
 		elseif fld.st == 'FIFO' then
 			-- 当指定的为FIFO管道时
-			local length = fld.fifolen
+			local length = fld.fifolen or 100
 			assert(length and type(length) == 'number' and length > 0, 
 				"[ERROR] In Fifo foreign, the 'fifolen' must be number greater than 0!")
 			local key = model_key + ':' + field
@@ -1105,12 +1105,14 @@ Model = Object:extend {
 	
 	delForeign = function (self, field, frobj)
 		I_AM_INSTANCE(self)
-		checkType(field, frobj, 'string', 'table')
+		checkType(field, 'string')
 		local fld = self.__fields[field]
 		assert(fld, ("[ERROR] Field %s doesn't be defined!"):format(field))
 		assert( fld.foreign, ("[ERROR] This field %s is not a foreign field."):format(field))
 		assert( fld.foreign == 'ANYSTRING' or frobj.id, "[ERROR] This object doesn't contain id, it's not a valid object!")
-		if isFalse(self[field]) then return end
+		assert( fld.foreign == 'ANYSTRING' or fld.foreign == 'UNFIXED' or fld.foreign == getClassName(frobj), ("[ERROR] This foreign field '%s' can't accept the instance of model '%s'."):format(field, getClassName(frobj) or tostring(frobj)))
+
+		if isFalse(self[field]) then return nil end
 		
 		local frid
 		if fld.foreign == 'ANYSTRING' then
@@ -1121,10 +1123,6 @@ Model = Object:extend {
 		else 
 			frid = tostring(frobj.id)
 		end
-		
-		local link_model = frobj.__name
-		assert(link_model and link_model == fld.foreign,
-			("[ERROR] The foreign model (%s) of this field %s doesn't equal the object's model %s."):format(fld.foreign, field, link_model))
 		
 		local model_key = self.__name + ':' + tostring(self.id)
 		if (not fld.st) or fld.st == 'ONE' then
@@ -1176,6 +1174,50 @@ Model = Object:extend {
 	
 	end;
 
+	inForeign = function (self, field, obj)
+					I_AM_INSTANCE(self)
+					checkType(field, 'string')
+					local fld = self.__fields[field]
+					assert(fld, ("[ERROR] Field %s doesn't be defined!"):format(field))
+					assert( fld.foreign, ("[ERROR] This field %s is not a foreign field."):format(field))
+					assert( fld.foreign == 'ANYSTRING' or obj.id, "[ERROR] This object doesn't contain id, it's not a valid object!")
+					if isFalse(self[field]) then return nil end
+
+					local frid
+					if fld.foreign == 'ANYSTRING' then
+						checkType(obj, 'string')
+						frid = obj
+					else
+						checkType(obj, 'table')
+						if fld.foreign == 'UNFIXED' then
+							frid = getClassName(obj) + ':' + obj.id
+						else
+							frid = tostring(obj.id)
+						end
+					end
+
+					local link_model = obj.__name
+					assert(link_model and (fld.foreign == 'ANYSTRING' or fld.foreign == 'UNFIXED' or link_model == fld.foreign),
+						   ("[ERROR] The foreign model (%s) of this field %s doesn't equal the object's model %s."):format(fld.foreign, field, link_model))
+
+					local model_key = self.__name + ':' + tostring(self.id)
+					if (not fld.st) or fld.st == "ONE" then
+						return self[field] == frid
+					elseif fld.st == 'MANY' then
+						-- TODO
+
+					elseif fld.st == 'FIFO' then
+						-- TODO
+
+					elseif fld.st == 'ZFIFO' then
+						-- TODO
+						
+					end 
+	
+
+
+				end;
+	
 	
 	fieldInfo = function (self, field)
 		checkType(field, 'string')
