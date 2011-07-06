@@ -1,0 +1,62 @@
+;; -*- mode: emacs-lisp; coding: emacs-mule; -*-
+;; --------------------------------------------------------------------------
+;; Desktop File for Emacs
+;; --------------------------------------------------------------------------
+;; Created Sat Jul  2 18:10:12 2011
+;; Desktop file format version 206
+;; Emacs version 23.2.1
+
+;; Global section:
+(setq desktop-missing-file-warning nil)
+(setq tags-file-name nil)
+(setq tags-table-list nil)
+(setq search-ring nil)
+(setq regexp-search-ring nil)
+(setq register-alist nil)
+(setq file-name-history '("~/GIT/bamboo/redis/rdzfifo.lua" "~/GIT/bamboo/redis/rdzset.lua" "~/GIT/bamboo/redis/rdzfifo.lua" "~/GIT/bamboo/redis/rdfifo.lua"))
+
+;; Buffer section -- buffers listed in same order as in buffer list:
+(desktop-create-buffer 206
+  "/root/GIT/bamboo/model.lua"
+  "model.lua"
+  'lua-mode
+  '(abbrev-mode linum-mode ede-minor-mode hs-minor-mode)
+  494
+  '(26297 nil)
+  nil
+  nil
+  '((buffer-file-coding-system . utf-8-unix)))
+
+(desktop-create-buffer 206
+  "/root/GIT/bamboo/redis/rdzfifo.lua"
+  "rdzfifo.lua"
+  'lua-mode
+  '(abbrev-mode linum-mode ede-minor-mode hs-minor-mode)
+  1422
+  '(1284 nil)
+  nil
+  nil
+  '((buffer-file-coding-system . utf-8-unix)))
+
+(desktop-create-buffer 206
+  "/root/GIT/bamboo/redis/rdzset.lua"
+  "rdzset.lua"
+  'lua-mode
+  '(abbrev-mode linum-mode ede-minor-mode hs-minor-mode)
+  998
+  '(870 nil)
+  nil
+  nil
+  '((buffer-file-coding-system . utf-8-unix)))
+
+(desktop-create-buffer 206
+  "/root/GIT/bamboo/redis/rdfifo.lua"
+  "rdfifo.lua"
+  'lua-mode
+  '(abbrev-mode linum-mode ede-minor-mode hs-minor-mode)
+  979
+  '(888 nil)
+  nil
+  nil
+  '((buffer-file-coding-system . utf-8-unix)))
+

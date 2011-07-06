@@ -64,3 +64,11 @@ function delZfifo( key )
 	
 	return db:del(store_key)
 end
+
+function inZfifo(key, obj)
+	local store_key = 'ZFIFO:' + key
+
+	local score = db:zscore(store_key, tostring(obj))
+
+	return (score ~= nil) 
+end

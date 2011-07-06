@@ -5,6 +5,17 @@ module(..., package.seeall)
 -- 本文件只负责对redis的ZSET结构的封装
 local db = BAMBOO_DB
 
+function saveZset(key, val_table)
+
+
+end
+
+function updateZset(key, val_table)
+
+
+end
+
+
 
 function addToZset( key, val )
 	local zsetkey = 'ZSET:' + key
@@ -45,3 +56,12 @@ function delZset( key )
 	
 	return db:del(zsetkey)
 end
+
+function inZset(key, obj)
+	local zsetkey = 'ZSET:' + key
+
+	local score = db:zscore(zsetkey, tostring(obj))
+
+	return (score ~= nil) 
+end
+

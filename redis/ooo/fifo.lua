@@ -58,3 +58,10 @@ function delFifo( key )
 	
 	return db:del(store_key)
 end
+
+function inFifo(key, obj)
+    local store_key = 'FIFO:' + key
+	
+	return nil
+end
+
