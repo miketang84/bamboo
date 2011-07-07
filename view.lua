@@ -21,6 +21,12 @@ local function findTemplDir( name )
 
 end
 
+local function removeComments(tmpl)
+	-- for html
+	return tmpl:gsub('%<%!%-%-.-%-%-%>', '')
+
+end
+
 
 local localvars_pattern_list = {
     -- 判断是否包含循环
@@ -85,7 +91,7 @@ local VIEW_ACTIONS = {
         local name = unseri(code)
         local tmpl_dir = findTemplDir(name)
         local base_page = io.loadFile(tmpl_dir, name)
-        local new_page = base_page
+        local new_page = removeComments(base_page)
         for block in new_page:gmatch("({%[[%s_%w%.%-\'\"]+%]})") do
             -- 获取到里面的内容
             local block_content = block:sub(3, -3):trim()
@@ -177,7 +183,10 @@ local View = Object:extend {
     end;
     
     preprocess = function(tmpl)
-        if tmpl:match('{:') then
+
+		local tmpl = removeComments(tmpl)
+		
+		if tmpl:match('{:') then
             -- 如果页面中有继承符号（继承符号必须写在最前面）
             local block = tmpl:match("(%b{})")
             local headtwo = block:sub(1,2)

@@ -816,6 +816,8 @@ Model = Object:extend {
 				rdset.save(val)
 			elseif st == 'zset' then
 				rdzset.save(val)
+			else
+				error("[ERROR] st must be one of 'string', 'list', 'set' or 'zset'")
 			end
 		end
 	end;
