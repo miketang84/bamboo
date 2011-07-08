@@ -195,7 +195,6 @@ local DEFAULT_ALLOWED_METHODS = {GET = true, POST = true, PUT = true, JSON = tru
 -- @param action_func	state对象操作函数，由外部传入
 -- @return true|false 是否执行成功的标志及错误信息
 ------------------------------------------------------------------------
---[[
 local function execState(state, req, before, after, action_func)
     local good, err
 
@@ -229,6 +228,7 @@ end
 -- @param after		执行对象操作函数后的处理函数，由外部传入
 -- @return 无
 ------------------------------------------------------------------------
+--[[
 local function runCoro(conn, main, req, conn_id, path, before, after)
     -- 进入这个函数，意味着客户端发送了一个数据过来
 	-- 从状态机中获得一个状态
