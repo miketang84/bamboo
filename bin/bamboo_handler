@@ -1,60 +1,57 @@
 #!/usr/bin/env lua
 
+-- ATTEN: this file is not a module
 package.path = '/usr/local/lib/lua/5.1/?.lua;/usr/local/lib/lua/5.1/?/init.lua;' .. package.path
-require 'posix'
--- 获取当前进程所在目录
-local PROCESS_DIR = posix.getcwd()
 
+require 'posix'
 require 'lglib'
 require 'bamboo'
-
--- 要传递给插件的渲染函数中去的全局变量
-web = nil
-req = nil
-
-------------------------------------------------------------------------
--- 把应用路径放在这里，并且声明为全局变量，主要就是将其传递给bamboo的子模块使用
-APP_DIR = arg[1]
--- 目标handler_xxx.lua文件
-local handler_file = arg[2]
 
 local errors = require 'bamboo.errors'
 local redis = require 'bamboo.redis'
 
+------------------------------------------------------------------------
+--- Global variables delarations: in top project code, we can see these variables
+-- two important global variables
+_G['web'] = nil
+_G['req'] = nil
+
+USERDEFINED_VIEWS = './views/'
+
+
+------------------------------------------------------------------------
+-- APP_DIR: application directory, default is './', because we start it in application directory
+local APP_DIR = arg[1]
+-- arg[2]: target file, every process handle one entry file, arg[2] is that file, default is 'handler_entry.lua'
+local handler_file = arg[2]
+
+-- settings.lua is the configuration file of one app, it sets at APP_DIR/settings.lua
 local CONFIG_FILE = APP_DIR + "settings.lua"
--- 工程目录完整路径
+local PROCESS_DIR = posix.getcwd()
+-- the full directory of one application
 local PROJECT_DIR = PROCESS_DIR + '/' + APP_DIR
--- 将工程目录也加入到搜索路径中去，以实现工程目录中的模块相互调用
+-- add the project's direcotry to the lua searching path, to simplify the calling relation
 package.path = package.path + (";%s/?.lua;%s/?/init.lua;"):format(PROJECT_DIR, PROJECT_DIR)
 ------------------------------------------------------------------------
 
 
-
 local function updateConfig(config, config_file)
-    local originals = table.copy(config)
-    -- 将外部配置文件中的内容添加到config表中，
-	-- 注：此处的config一定不能继承_G，不然会出很奇怪的错误
 	setfenv(assert(loadfile(config_file)), config)()
-    -- XXX: TODO
-	table.update(config, originals)
 
-    -- 返回合并参数后的配置表
 	return config
 end
 
 local config = updateConfig({}, CONFIG_FILE)
+assert(config.monserver_dir, 'Mongrel2 directory "monserver_dir" must be specified.')
+
 local DB_HOST = config.DB_HOST or '127.0.0.1'
 local DB_PORT = config.DB_PORT or 6379
 local WHICH_DB = config.WHICH_DB or 0
 
--- 创建一个数据库连接，要注意不要与现有的数据库重合了，which一定要选正确
--- 全局对象。由于bamboo的同一个应用可能会有很多子进程。把这一句也在这里的话，
--- 我们会为每一个子进程生成一个数据库连接（从redis方面看，这也是无关紧要的）。
+-- create a redis connection in this process
+-- we will create one redis connection for every process
 BAMBOO_DB = redis.connect {host=DB_HOST, port=DB_PORT, which = WHICH_DB}
---ptable(BAMBOO_DB)
 
--- 作配置文件的参数声明
-assert(config.monserver_dir, 'Mongrel2 directory "monserver_dir" must be specified.')
 
 
 local Web = require 'bamboo.web'
@@ -62,41 +59,35 @@ local Session = require 'bamboo.session'
 local User = require 'bamboo.models.user'
 
 ------------------------------------------------------------------------
--- 定义一个新环境
+-- URLS combination
 local childenv = {}
--- 加载目标handler_xxx.lua文件，将其环境设为childenv，
--- 目的是将那个文件中定义的全局变量释放到childenv来
+-- load file handler_xxx.lua, make its environment as childenv, extract global variables in handler_xxx.lua to childenv
 setfenv(assert(loadfile(handler_file)), setmetatable(childenv, {__index=_G}))()
 
--- 将主URLS定义融合到全局的URLS中来
 table.update(bamboo.URLS, childenv.URLS)
 local URLS = bamboo.URLS
 
+
 ------------------------------------------------------------------------
-
-USERDEFINED_VIEWS = './views/'
-
-
-
--- 检查URLS的结构
+-- check the structure legality
 local function checkURLS(urls)
-	if isFalse(urls[1]) then
-		error('URLS value is not right. URLS[1] must be string and NOT be blank.')
-	end
-
-	for i, v in pairs(urls) do
-		if i ~= 1 then
-			checkType(i, 'string')
-			if type(v) == 'table' then
-				checkType(v[1], v[2], 'function', 'boolean')
-			else
-				checkType(v, 'function')
-			end
+	assert(not isFalse(urls[1]), '[ERROR] URLS value is not right. URLS[1] must be string and NOT be blank.')
+	local router = urls[1]
+	urls[1] = nil
+	
+	for k, v in pairs(urls) do
+		checkType(k, 'string')
+		if type(v) == 'table' then
+			checkType(v[1], v[2], 'function', 'boolean')
+		else
+			checkType(v, 'function')
 		end
 	end
 
+	return router
 end
-checkURLS(URLS)
+local router = checkURLS(URLS)
+
 
 local function trailingPath(path)
 	local path = path:gsub('//+', '/')
@@ -107,43 +98,38 @@ local function trailingPath(path)
 	return path
 end
 
+-- urls processing work
 local function makeUrlHandlerMapping(URLS)
 	local table_concrete = {}
 	local table_pattern = {}
 	
-	local base = URLS[1]
+	local base = router
 	for k, v in pairs(URLS) do
-		-- 这儿，如果能够把1这个元素分开就好了，少写一层判断
-		if k ~= 1 then
-			local url_t = base + k
-			-- 去除多余的分隔符
-			url_t = trailingPath(url_t)
-			
-			-- 把有模式匹配的部分分离出去，这里不一定还很精确，先试试
-			if url_t:find('%[?%%[%%%-_a-zA-Z]+%]?%+?') then
-				table_pattern[url_t:lower()] = v
-			else
-				table_concrete[url_t:lower()] = v
-			end
+		local url_t = base + k
+		-- remove abundant '/'
+		url_t = trailingPath(url_t)
+		
+		-- separate the pattern format from normal concrete format
+		if url_t:find('%[?%%[%%%-_a-zA-Z]+%]?%+?') then
+			table_pattern[url_t:lower()] = v
+		else
+			table_concrete[url_t:lower()] = v
 		end
 	end	
 	
 	return table_concrete, table_pattern
 end
-
--- 对URLS中数据作简单处理，生成MappingTable，后面主要用MappingTable
 local MappingTableConcrete, MappingTablePattern = makeUrlHandlerMapping(URLS)
-print('------------ URL Settings --------------')
+
+print('-------------------- URL Settings --------------------')
 ptable(MappingTableConcrete)
-print('========================================')
 ptable(MappingTablePattern)
-print('----------------------------------------')
+print('------------------------------------------------------')
 
 ------------------------------------------------------------------------
--- 从URLS定义列表中找到匹配的handler，实际上这是个集合操作
--- @param mapt	URLS映射列表
--- @param path	来访path
--- @return  返回两个参数，第一个参数是handler函数，第二个参数是是否状态编程(true)，无状态编程(false)
+-- find handler function by path
+-- @param path:	coming path
+-- @return:  two values, first is a handler function, second is a boolean to indict whether is state programming
 ------------------------------------------------------------------------
 local function getHandlerByPath(path)
 	local path = path:lower() 
@@ -152,26 +138,21 @@ local function getHandlerByPath(path)
 			checkType(v[1], v[2], 'function', 'boolean')
 			return v[1], v[2]
 		elseif type(v) == 'function' then
-			-- 如果只写一个function，则默认为非状态编程。要状态编程，必须写成一个表，加上true标志
 			return v, false
 		end
 	end
 	
 	local key, value = "", nil
 	
-	-- 如果URL表中已经有此具体的URL了，就直接返回，这样效率奇高
+	-- process concrete case first
 	if MappingTableConcrete[path] then return parse(MappingTableConcrete[path]) end
-	
+
+	-- if process the pattern case
 	for k, v in pairs(MappingTablePattern) do
-		-- 此处，添加URL正则表达式匹配功能，要做到完整且尽可能长的匹配
-		-- 而且，要求，如果两种模式都满足，则取表述清楚的那一种模式。如：
-		-- "%w+/"与"login/"之间取"login/"
-		--  如果都完全显式地等于它了，那么立即处理
-		-- 处理精确匹配后的漏网之鱼
+		-- for pattern cases, we select the concretest one
 		if k == path then
 			return parse(v)
-		-- 如果是一个模式匹配等于它的，则先悬挂，等到全部检查完，选择其中最长的模式
-		-- 如果两个一样长，就取后面那一个
+		-- if some pattern cases meet one path meanwhile, and they have the save length, select the last one
 		elseif path:match('^' + k + '$') then
 			if key == '' or #k >= #key then 
 				key, value = k, v
@@ -180,37 +161,27 @@ local function getHandlerByPath(path)
 
 	end	
 
+	-- if walks here, means this is a pattern case path
 	if key and value then
-		-- 运行到这里，说明是通过模式匹配到的，执行最终的筛选结果
 		return parse(value)
 	end
 	
-	-- 执行到这里，说明没有符合的匹配模式
+	-- if walks here, means no suited case matched
 	return nil, nil
 end
 
 
+-- local function createStateRecorder(STATE, mapt)
+--	for k, _ in pairs(mapt) do
+--		STATE[k] = {}
+--	end
+--	return STATE
+-- end
 
-
-------------------------------------------------------------------------
-
-
--- 由于我们的URL直接正则表达式匹配了，所以这个函数没什么用了
--- 只对准确完整的URL有效
-local function createStateRecorder(STATE, mapt)
-	for k, _ in pairs(mapt) do
-		STATE[k] = {}
-	end
-	return STATE
-end
-
-
--- STATE是一个状态记录器，在其基础上实现一个FSM，有限状态机
 -- STATE是一个二组数组。第一维是path，即URL PATH部分，第二维是conn_id
-local STATE = createStateRecorder(setmetatable({}, {__mode="k"}), MappingTableConcrete)
+-- local STATE = createStateRecorder(setmetatable({}, {__mode="k"}), MappingTableConcrete)
 
 
--- 硬编码，临时
 local DEFAULT_ALLOWED_METHODS = {GET = true, POST = true, PUT = true, JSON = true, XML = true}
 
 
@@ -455,7 +426,7 @@ function start(config)
 	config = config or {}
 	config.APP_DIR = APP_DIR
 	-- 需要这个变量来从sqlite3数据库中找到传输通道
-	config.route = URLS[1]
+	config.route = router
 	config.MappingTableConcrete = MappingTableConcrete
 	config.MappingTablePattern = MappingTablePattern
 	

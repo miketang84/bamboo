@@ -6,13 +6,13 @@ local G_TMPL_DIR = 'views/'
 
 
 local function findTemplDir( name )
-    -- 首先，找用户指定路径
+    -- first, find user custom directory
     if USERDEFINED_VIEWS and posix.access(USERDEFINED_VIEWS + name) then
         return USERDEFINED_VIEWS
-    -- 第二，找工程下的views目录
+    -- second, find 'project_dir/views/'
     elseif posix.access( APP_DIR + "views/" + name) then
         return APP_DIR + "views/"
-    -- 第三，找工程下的plugins目录
+    -- third, find 'project_dir/plugins/'
     elseif posix.access( APP_DIR + "plugins/" + name) then
         return APP_DIR + "plugins/"
     else
@@ -29,17 +29,17 @@ end
 
 
 local localvars_pattern_list = {
-    -- 判断是否包含循环
+    -- judge whether contains repeatation
     'for%s+([%w_%s,]-)%s+in',
-    -- 判断是否包含local定义新变量，必须要用等于号
+    -- judge whether contains new local variable definations
     'local([%w_%s,]+)=',
 }
 
--- 模板渲染指令
+-- template rendering directives
 local VIEW_ACTIONS = {
-    -- 标记中嵌入lua语句
+    -- embeding lua sentances
     ['{%'] = function(code)
-        -- 将在模板中生成的新局部变量添加到全局环境中去
+        -- add new generated local variable to _G enviroment
         local varstr
         local morestr = ''
         for _, pattern in ipairs(localvars_pattern_list) do
@@ -58,15 +58,12 @@ local VIEW_ACTIONS = {
         code = code + morestr
         return code
     end,
-    -- 标记中嵌入lua变量
+    -- embeding lua variables
     ['{{'] = function(code)
-        -- 由于在执行这个的时候，变量尚未传入，所以不能通过执行pcall(loadstring())来检查一个变量是否存在
-        -- local ret = loadstring('return ' + code)()
-        -- assert(ret, ('[ERROR] The value of code "%s" is nil!'):format(code))
         
         return ('_result[#_result+1] = %s'):format(code)
     end,
-    -- 标记中嵌入文件名字符串，用于包含其它文件
+    -- containing child template
     ['{('] = function(code)
         return ([[       
             if not _children[%s] then
@@ -77,7 +74,7 @@ local VIEW_ACTIONS = {
             _result[#_result+1] = _children[%s](getfenv())
         ]]):format(code, code, code, code)
     end,
-    -- 标记中嵌入转义后的html代码，安全措施
+    -- escape tag, to make security
     ['{<'] = function(code)
         return ('local http = require("lglib.http"); _result[#_result+1] = http.escapeHTML(%s)'):format(code)
     end,
@@ -86,22 +83,21 @@ local VIEW_ACTIONS = {
         -- nothing now
         return true
     end,
-    -- 在这个函数中，传进来的code就是被继承的基页名称
+    -- template inheritation syntax
+	-- @param code: the base file's name
+	-- @param this_page: the master file rendered
     ['{:'] = function(code, this_page)
         local name = unseri(code)
         local tmpl_dir = findTemplDir(name)
         local base_page = io.loadFile(tmpl_dir, name)
         local new_page = removeComments(base_page)
         for block in new_page:gmatch("({%[[%s_%w%.%-\'\"]+%]})") do
-            -- 获取到里面的内容
+            -- remove the outer tags
             local block_content = block:sub(3, -3):trim()
-            -- 再检查自己这个页面中有无与这个block_content配对的实现，一个名字只限定标识一个块
-            -- 有的话，就把实现内容取出来
             local this_part = this_page:match('{%[%s*======*%s*' + block_content + '%s*======*%s+(.+)%s*%]}')
-            -- 如果this_part有值
+
             if this_part then
-                -- gsub的第二个参数，将会识别模式匹配，所以要将%变成%%才行。
-                -- gsub应该提供一个附加参数，以判断是否识别模式匹配，不然一点都不方便
+
                 this_part = this_part:gsub('%%', '%%%%')
                 new_page = new_page:gsub('{%[ *' + block_content + ' *%]}', this_part)
             else
@@ -112,7 +108,7 @@ local VIEW_ACTIONS = {
         return new_page
     end,
     
-    -- {^ 插件名称  参数1=值1, 参数2=值2, ....^}
+    -- insert plugin
     ['{^'] = function (code)
         local code = code:trim()
         assert( code ~= '', 'Plugin name must not be blank.')
@@ -122,7 +118,7 @@ local VIEW_ACTIONS = {
         local params = {}
         
         if divider_loc then
-            -- 如果找到了
+
             plugin_name = code:sub(1, divider_loc - 1)
             param_str = code:sub(divider_loc + 1)
             
@@ -140,9 +136,9 @@ local VIEW_ACTIONS = {
             
             return ('_result[#_result+1] = [[%s]]'):format(PLUGIN_LIST[plugin_name](params))
         else
-            -- 如果divider_loc是nil, 表明插件不带参数
+            -- if divider_loc is nil, means this plugin has no arguents
             plugin_name = code
-            -- 注：下面那个%s两边的引号必不可少，因为要被认成字符串
+
             return ('_result[#_result+1] = [[%s]]'):format(PLUGIN_LIST[plugin_name]({}))
         end
     end,
@@ -150,18 +146,16 @@ local VIEW_ACTIONS = {
 }
 
 
-
-
--- 注：此类的实例是一个View函数，用于接收表参数产生具体的页面内容。
+-- NOTE: the instance of this class is a function
 local View = Object:extend {
     __tag = "Bamboo.View";
     __name = 'View';
     ------------------------------------------------------------------------
-    -- 从默认的TEMPLATES路径中找到文件name，进行模板渲染
-    -- 如果ENV[PROD]有值，表示在产品模式中，那么它只会编译一次
-    -- 否则，就是在开发模式中，于是会在每次调用那个函数的时候，都会被编译。
-    -- @param name 模板文件名
-    -- @return 一个函数 这个函数在后面的使用中接收一个table作为参数，以完成最终的模板渲染
+    -- 
+    -- if ENV[PROD] is true, means it is in production mode, it will only be compiled once
+    -- else, it is in develop mode, it will be compiled every request coming in.
+    -- @param name:  the name of the template file
+    -- @return:  a function, this function can receive a table to finish the rendering procedure
     ------------------------------------------------------------------------
     init = function (self, name) 
         local tmpl_dir = findTemplDir(name)
@@ -182,12 +176,13 @@ local View = Object:extend {
     
     end;
     
-    preprocess = function(tmpl)
+	-- preprocess course
+	preprocess = function(tmpl)
 
 		local tmpl = removeComments(tmpl)
 		
 		if tmpl:match('{:') then
-            -- 如果页面中有继承符号（继承符号必须写在最前面）
+            -- if there is inherited tag in page, that tag must be put in the front of this file
             local block = tmpl:match("(%b{})")
             local headtwo = block:sub(1,2)
             local block_content = block:sub(3, -3)
@@ -196,19 +191,19 @@ local View = Object:extend {
             local act = VIEW_ACTIONS[headtwo]
             return act(block_content, tmpl)
         else
-            -- 如果页面没有继承，则直接返回
+
             return tmpl
         end
     end;
     
     ------------------------------------------------------------------------
-    -- 将一个模板字串解析编译，生成一个函数，这个函数代码中包含了这个模板的所有中间信息，
-    -- 进而最终转换成浏览器识别的html字串。
-    -- 返回一个函数，这个函数必须以一个table作为参数传入，以对其中的参数进行填充，
-    -- 这段代码设计得相当巧妙，值得仔细品味。
-    -- @param tmpl 模板字符串，是从存储空间加载到内存中的模板数据
-    -- @param name 模板文件名
-    -- @return 一个函数 这个函数在后面的使用中接收一个table作为参数，以完成最终的模板渲染
+    -- compile template string to a middle function
+    -- use this function to receive a table to finish rendering to html
+    -- 
+	-- this snippet is very concise and powerful!
+    -- @param tmpl:  template string read from file
+    -- @param name:  template file name
+    -- @return: middle rendering function
     ------------------------------------------------------------------------
     compileView = function (tmpl, name)
         local tmpl = ('%s{}'):format(tmpl)
@@ -230,7 +225,6 @@ local View = Object:extend {
         code[#code+1] = 'return table.concat(_result)'
 
         code = table.concat(code, '\n')
-        --print(code:sub(1, 3000))
         local func, err = loadstring(code, name)
 
         if err then

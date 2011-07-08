@@ -1106,7 +1106,7 @@ Model = Object:extend {
 
 		elseif fld.st == 'MANY' then
 
-			local key = getFieldPattern(self)
+			local key = getFieldPattern(self, field)
 			-- update the new value to db, so later we don't need to do save
 			rdzset.add(key, new_id)
 
@@ -1114,14 +1114,14 @@ Model = Object:extend {
 			local length = fld.fifolen or 100
 			assert(length and type(length) == 'number' and length > 0 and length <= 10000, 
 				"[ERROR] In Fifo foreign, the 'fifolen' must be number greater than 0!")
-			local key = getFieldPattern(self)
+			local key = getFieldPattern(self, field)
 			rdfifo.push(key, length, new_id)
 
 		elseif fld.st == 'ZFIFO' then
 			local length = fld.fifolen or 100
 			assert(length and type(length) == 'number' and length > 0 and length <= 10000, 
 				"[ERROR] In Zfifo foreign, the 'fifolen' must be number greater than 0!")
-			local key = getFieldPattern(self)
+			local key = getFieldPattern(self, field)
 			-- in zset, the newest member have the higher score
 			-- but use getForeign, we retrieve them from high to low, so newest is at left of result
 			rdzfifo.push(key, length, new_id)

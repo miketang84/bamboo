@@ -3,7 +3,7 @@ module('bamboo.errors', package.seeall)
 
 local View = require 'bamboo.view'
 
--- 错误信息模板
+-- Error info template
 local ERROR_PAGE = View.compileView [[
 <html><head><title>Tir Error</title></head> 
 <body>
@@ -38,10 +38,10 @@ function reportError(conn, request, err, state)
     end
 
     if info.source:match("@.+$") then
-		-- 如果代码chunk来自文件，就显示这个文件的关于这个出错的函数代码部分
+		-- if code comes from file, display the code lines errored in that file
         source = io.loadLines(info.source:sub(2), info.linedefined, info.lastlinedefined)
     else
-        -- 如果代码chunk不是来自文件
+        -- if code doesn't come from file
 		source = info.source
     end
 

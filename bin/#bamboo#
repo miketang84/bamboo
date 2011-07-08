@@ -1,0 +1,528 @@
+#!/usr/bin/env lua
+
+require 'posix'
+require 'signal'
+require 'bamboo'
+require 'redis'
+
+        
+local env = {}
+BAMBOO_DB = nil
+SCRIPT_PIDS = {}
+
+
+signal.signal("SIGINT", function (...)
+    for script, pid in pairs(SCRIPT_PIDS) do
+        posix.kill(pid)
+    end
+end)
+
+------------------------------------------------------------------------------
+-- 加载配置
+local config = {}
+-- 此处，只支持在工程目录下启动
+local setting_file = loadfile('settings.lua') or loadfile('../settings.lua')
+if not setting_file then
+	print [[
+[ERROR] You should make sure the existance of settings.lua in your workspace!
+
+The content of the settings.lua can be like following, 
+copy them to your 'settings.lua' file, if it doesn't exist, create it:
+
+------------------------------------------------------
+monserver_dir = "$your_mongrel2_server's_directory"
+bamboo_dir = "$the_directory_bamboo_installed"
+------------------------------------------------------
+	]]
+
+	os.exit()
+end
+setfenv(assert(setting_file), config)()
+local bamboo_dir = config.bamboo_dir or '/usr/local/share/lua/5.1/bamboo/'
+local monserver_dir = config.monserver_dir or '/root/workspace/monserver/'
+
+if monserver_dir == "$your_mongrel2_server's_directory" 
+or bamboo_dir == "$the_directory_bamboo_installed" 
+then
+	print [[
+[ERROR] You should make sure the validation of the bamboo_dir and monserver_dir!
+
+Change the value of them like following:
+	bamboo_dir = "/usr/local/share/lua/5.1/bamboo/"
+	monserver_dir = "/root/workspace/monserver/"
+
+	]]
+
+	os.exit()
+end
+
+------------------------------------------------------------------------------
+--
+function parse_args(arg)
+    if #arg == 0 then return nil end
+
+	-- if has only command
+	if #arg == 1 then return arg[1], {} end
+	-- arg[1] is the command name
+    local cmd = table.remove(arg, 1)
+    local settings = {}
+    local last_opt = nil
+
+	-- make the liner command line args become key value pairs
+	local function beatArgs(arg)
+		for i, opt in ipairs(arg) do
+		    local token = opt:match("\-+([a-z\-]+)")
+
+		    if token then
+		        last_opt = token
+		    else
+		        settings[last_opt] = opt
+		    end
+		end
+	end
+
+	local kv_start = -1
+    -- all command options are allowed in two style: -xx yy -foo bar or xx yy zz
+	-- now, arg[1] is the options
+	if arg[1]:sub(1, 1) == '-' then 
+		beatArgs(arg)
+	else
+		-- if arg[1] doesn't start with -, 
+		-- if the lenght of arg is larger than 2, check the following args
+		for i = 1, #arg do
+			if arg[i]:sub(1,1) == '-' then
+				kv_start = i
+				break
+			end
+		end 
+
+		-- the linear part
+		if kv_start < 0 then
+			-- push all args into setting
+			for i = 1, #arg do
+				settings[#settings + 1] = arg[i]
+			end
+		else
+			-- push the following args into settings linearly
+			for i = 1, kv_start - 1 do
+				settings[#settings + 1] = arg[i]
+			end
+		end
+
+		if kv_start > 0 then
+			-- the key value part
+			local rest = {}
+			for i = kv_start, #arg do
+				rest[#rest + 1] = arg[i]
+			end
+
+			-- put the rest part to settings
+			beatArgs(rest)		
+		end
+    end
+
+    return cmd, settings
+end
+
+
+local function run_script(app_dir, script)
+    local pid = posix.fork()
+
+    if pid == 0 then
+        -- in pid, run the script
+        --posix.execp("lua", script)
+        -- 这里，这个script就是要执行的handler文件名
+        posix.execp("bamboo_handler", app_dir, script)
+    else
+        print("Started " .. script .. " PID " .. pid)
+        SCRIPT_PIDS[script] = pid
+    end
+
+    return pid
+end
+
+
+local function run_app(app_dir, targets)
+    local pid
+    local running = {}
+
+    for script, pid in pairs(SCRIPT_PIDS) do
+        running[script] = posix.kill(pid, 0) == 0
+    end
+
+    for _, script in ipairs(targets) do
+        if not running[script] then
+            run_script(app_dir, script)
+        end
+    end
+end
+
+local function run_tests(test_dir, full)
+    print("\n---------------- TESTS -----------------")
+    local tests = posix.glob(test_dir .. "/**/*_tests.lua")
+
+    if tests then
+        local cmd = "tsc "
+        if full then cmd = cmd .. "-f " end
+
+        os.execute(cmd .. table.concat(tests, ' '))
+    else
+        print("\n-------------- NO TESTS ----------------")
+        print("  You must work at a startup.")
+    end
+end
+
+local function wait_on_children()
+    local dead_count = 0
+    local child_count = 0
+    local p, msg, ret
+
+    repeat
+        p, msg, ret = posix.wait(-1)
+    until p
+
+    for script, pid in pairs(SCRIPT_PIDS) do
+        if p == pid then
+            print("CHILD DIED " .. script .. " PID " .. p ..":", msg)
+            SCRIPT_PIDS[pid] = nil
+            return script, pid
+        end
+    end
+end
+
+local function makemd5()
+    require 'md5'
+
+    math.randomseed(os.time())
+    local num = math.random(1000000, 10000000)
+    local md5_str = md5.sumhexa(num)
+    local result = ('%s-%s-%s-%s-%s'):format(md5_str:sub(1, 8), md5_str:sub(9, 12), md5_str:sub(13, 16), md5_str:sub(17, 20), md5_str:sub(21, 32))
+    -- print(result)
+    return result
+end
+
+
+COMMANDS = {
+    test = function(settings)
+        local target = settings.from or "tests"
+        if not os.getenv('PROD') then
+            run_tests(target, settings.full ~= nil)
+        else
+            print "Running in PROD mode, won't run tests."
+        end
+    end,
+
+    start = function(settings)
+        --for i,v in pairs(settings) do print(i,v) end
+        -- 这里，这个app是一个搜索文件的一个模式匹配字符串，给glob用的
+        -- 按我的理解，settings.app应该是应用的路径更好
+        local app_dir = settings.app or './'
+        local app = ('%s%s'):format((settings.app or "./"), 'app/handler_*.lua')
+        local script_times = {}
+
+        while true do
+            local targets = assert(posix.glob(app))
+
+            for _, script in ipairs(targets) do
+                if not script_times[script] then
+                    script_times[script] = os.time() 
+                end
+            end
+
+            run_app(app_dir, targets)
+            local script, pid = wait_on_children()
+            local tick = os.time()
+
+            if tick - script_times[script] < 1 then
+                print("SCRIPT " .. script .. " RESTARTING TOO FAST. Pausing while you fix stuff.")
+                posix.sleep(10)
+                tick = os.time()
+            end
+
+            script_times[script] = tick
+        end
+    end,
+
+    help = function(settings)
+        print("AVAILABLE COMMANDS:")
+        for k,v in pairs(COMMANDS) do
+            print(k)
+        end
+    end,
+    
+    createapp = function(settings)
+        -- 原型开发
+        -- 这里要进行appname参数的判断
+        -- 还要做的几件事情：
+        -- 1. 对appname的解析；
+        -- 2. 对cmd_tmpls路径的读取；
+        -- 3. 对monserver_dir的读取；
+        -- 4. 对app/settings/中的md5码的填充；
+        local appname = settings[1] or 'bambooapp'
+        
+        -- 创建目录
+		-- 确保没有同名目录存在
+        assert(posix.stat(appname) == nil, '[Error] Some file or directory of this name exists！')
+        posix.mkdir(appname)
+        -- 拷贝文件
+        local cmdstr = ('cp -rf %s/cmd_tmpls/createapp/* ./%s/'):format(bamboo_dir, appname)
+        os.execute(cmdstr)
+        -- 创建资源目录
+        local mediadir = ('%s/sites/%s'):format(monserver_dir, appname)
+        --posix.mkdir(mediadir)
+        os.execute(('mkdir -p %s'):format(mediadir))
+        local cmdstr = ('cp -rf %s/cmd_tmpls/media/*  %s/'):format(bamboo_dir, mediadir)
+        os.execute(cmdstr)
+        -- 制作链接
+        os.execute(('ln -sdf %s %s/media'):format(mediadir, appname))        
+
+        -- 修改appname/app/settings.lua中的md5字串
+        local fd = io.open(('%s/settings.lua'):format(appname), 'r')
+		local ctx = fd:read('*all')
+		fd:close()
+
+		ctx = ([[
+project_name = "%s"
+bamboo_dir = "%s"
+monserver_dir = "%s"
+]]):format(appname, bamboo_dir, monserver_dir) .. ctx
+		
+		local md5str = makemd5()
+		ctx = ctx:gsub('####', md5str)
+
+		local fd = io.open(('%s/settings.lua'):format(appname), 'w')
+		fd:write(ctx)
+		fd:close()
+		
+        print(('[OK] Successfully created application %s.'):format(appname))
+    end;
+    
+    createplugin = function(settings)
+        -- 要求，此命令必须在工程目录下执行，不然没有效果
+        local plugin_name = settings[1] or 'bambooplugin'
+        
+        -- 获取工程名字
+        --local appdir = posix.getcwd()
+        --print(appdir)
+        --local appname = appdir:match('/([%w_%-]+)$')
+        local appname = config.project_name
+        --print(appname)
+        
+        -- 创建目录
+		-- 确保没有同名目录存在
+        assert(posix.stat(plugin_name) == nil, '[Error] Some file or directory has this name already！')
+        posix.mkdir(plugin_name)
+        -- 拷贝文件
+        local cmdstr = ('cp -rf %s/cmd_tmpls/createplugin/* ./%s/'):format(bamboo_dir, plugin_name)
+        os.execute(cmdstr)
+        -- 创建资源目录
+        local mediadir = ('%s/sites/%s/plugins/%s/'):format(monserver_dir, appname, plugin_name)
+        --posix.mkdir(mediadir)
+        os.execute(('mkdir -p %s'):format(mediadir))
+        
+        local cmdstr = ('cp -rf %s/cmd_tmpls/pluginmedia/*  %s'):format(bamboo_dir, mediadir)
+        os.execute(cmdstr)
+        -- 制作链接
+        os.execute(('ln -sdf %s %s/media'):format(mediadir, plugin_name)) 
+        
+        print(('[OK] Successfully created plugin %s.'):format(plugin_name))  
+    end;
+    
+    createmodel = function(settings)
+        -- 要求，此命令必须在工程目录下执行，不然没有效果
+        local model_name = settings[1] or 'bamboomodel'
+        
+        local newfile = ('./%s.lua'):format(model_name:lower())
+        -- 拷贝文件
+        local cmdstr = ('cp -rf %s/cmd_tmpls/createmodel/newmodel.lua %s'):format(bamboo_dir, newfile)
+        os.execute(cmdstr)
+
+        -- 修改appname/app/settings.lua中的md5字串
+        local fd = io.open(newfile, 'r')
+		local ctx = fd:read('*all')
+		fd:close()
+		ctx = ctx:gsub('%$MODEL', model_name)
+
+		local fd = io.open(newfile, 'w')
+		fd:write(ctx)
+		fd:close()
+        
+        print(('[OK] Successfully created model %s.'):format(model_name))  
+    end;
+    
+    initdb = function (settings)
+        local data_file = settings[1] or 'initial.data'
+        -- 加载并运行这个文件，释放数据到env中
+        local env = setmetatable({}, {__index=_G})
+        setfenv(assert(loadfile(data_file)), env)()
+        assert(env['DATA'], '[ERROR] There must be DATA variable in initial data file.')
+
+        local params = {
+            host = env.DB_HOST or settings.DB_HOST or '127.0.0.1',
+            port = env.DB_PORT or settings.DB_PORT or 6379,
+        }
+        local which = env.WHICH_DB or settings.WHICH_DB or 0
+
+        local redis_db = Redis.connect(params)
+        redis_db:select(which)
+
+        for k, v in pairs(env.DATA) do
+            if type(v) ~= 'table' then
+				-- store the string
+                redis_db:set(tostring(k), tostring(v))
+            else
+            	-- store the item
+                for kk, vv in pairs(v) do
+                    redis_db:hset(tostring(k), tostring(kk), tostring(vv))
+                end
+
+                -- k is the format of User:1
+				local model_name, num = k:match('([%w_]+):(%d+)')
+				if model_name and type(tonumber(num)) == 'number' then
+					-- update the latest __counter value of that model
+					local key_list = redis_db:keys(model_name + ':[0-9]*')
+					redis_db:set(model_name + ':__counter', #key_list)
+					-- add item zset cache 
+					-- maybe we should delete the same score item first
+					redis_db:zremrangebyscore(model_name + ':__index', num, num)
+					-- add it
+					redis_db:zadd(model_name + ':__index', num, v.name or num)
+				end
+            end
+
+        end
+
+        BAMBOO_DB = redis_db
+        if env.SCRIPTS then
+			for _, script in ipairs(env.SCRIPTS) do
+				-- load the external code in initial data file
+				local f = assert(loadstring(script))
+				-- execute it
+				f()
+			end
+        end
+        
+        print('OK')
+    end;
+
+	-- push new data to database
+    pushdb = function (settings)
+        local data_file = settings[1] or 'initial.data'
+        -- 加载并运行这个文件，释放数据到env中
+        local env = setmetatable({}, {__index=_G})
+        setfenv(assert(loadfile(data_file)), env)()
+        assert(env['DATA'], '[ERROR] There must be DATA variable in initial data file.')
+
+        local params = {
+            host = env.DB_HOST or settings.DB_HOST or '127.0.0.1',
+            port = env.DB_PORT or settings.DB_PORT or 6379,
+        }
+        local which = env.WHICH_DB or settings.WHICH_DB or 0
+
+        local redis_db = Redis.connect(params)
+        redis_db:select(which)
+        -- Global variable BAMBOO_DB, to use bamboo's model function, must specify it
+        BAMBOO_DB = redis_db
+
+		-- 定义一个新环境
+		local childenv = {}
+		-- 加载目标handler_xxx.lua文件，将其环境设为childenv，
+		-- 目的是将那个文件中定义的全局变量释放到childenv来
+		setfenv(assert(loadfile('app/handler_entry.lua') or loadfile('../app/handler_entry.lua')), setmetatable(childenv, {__index=_G}))()
+
+		-- 先检查同名对象是否存在
+		for k, v in pairs(DATA) do
+			if type(v) == 'table' then
+				local model = bamboo.getModelByName(k)
+				for i, item in ipairs(v) do
+					local ori_obj = model:getByName(item.name)
+					-- here using isEmpty is enough
+					assert(isEmpty(ori_obj), ("[ERROR] The same name object %s exists."):format(item.name))
+				end
+			end
+		end
+
+		-- 前面检查了后，已经确保没有同名对象存在了，直接写入
+		for k, v in pairs(DATA) do
+			if type(v) == 'table' then
+				local model = bamboo.getModelByName(k)
+				local obj
+	
+				for i, item in ipairs(v) do
+					print(item.name)
+					obj = model(item)
+					obj:save()
+				end
+			else
+				-- do nothing now
+			end
+		end
+        
+        print('OK')
+    end;
+
+    clearmodel = function (settings)
+		local model_name = settings[1]
+		assert(model_name, '[ERROR] model_name must be specified!')
+        
+        local params = {
+            host = settings.DB_HOST or '127.0.0.1',
+            port = settings.DB_PORT or 6379,
+        }
+        local which = settings.WHICH_DB or 0
+
+        local redis_db = Redis.connect(params)
+        redis_db:select(which)
+
+		local key_list = redis_db:keys( model_name + ':*')
+		for i, v in ipairs(key_list) do
+			print(v)
+			redis_db:del(v)
+		end
+
+		print('OK.')
+    end;
+
+    shell = function (settings)
+		local shell_file = bamboo_dir + '/bin/shell.lua'
+		local host = settings.DB_HOST or '127.0.0.1'
+        local port = settings.DB_PORT or 6379
+        local which = settings.WHICH_DB or 0
+		
+        os.execute('lua -i ' + shell_file + (' %s %s %s'):format(host, port, which))
+
+        print('Return.')
+		
+    end;
+    
+}
+
+
+
+
+
+
+function run(cmd, settings)
+    local cmd_to_run = COMMANDS[cmd]
+
+    if cmd_to_run then
+        cmd_to_run(settings)
+    else
+        print("ERROR: that's not a valid command")
+        print("USAGE: bamboo <command> <options>")
+        print("Please input 'bamboo help' to list all available commands.")
+    end
+end
+
+
+local cmd, settings = parse_args(arg)
+
+-- 将全局的一个配置加载进来
+
+if not cmd then print('No cmd input.'); return  end
+--for i, v in pairs(settings) do
+--	print(i, v)
+--end
+
+run(cmd, settings)
+

@@ -1,6 +1,4 @@
-require 'tir/engine'
-
-module('Tir.Tests', package.seeall)
+module(..., package.seeall)
 
 local CONFIG_FILE = "conf/testing.lua"
 local TEMPLATES = "views/"
