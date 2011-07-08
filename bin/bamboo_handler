@@ -195,6 +195,7 @@ local DEFAULT_ALLOWED_METHODS = {GET = true, POST = true, PUT = true, JSON = tru
 -- @param action_func	state对象操作函数，由外部传入
 -- @return true|false 是否执行成功的标志及错误信息
 ------------------------------------------------------------------------
+--[[
 local function execState(state, req, before, after, action_func)
     local good, err
 
@@ -268,6 +269,8 @@ local function runCoro(conn, main, req, conn_id, path, before, after)
 		STATE[path] = nil
     end
 end
+--]]
+
 
 ------------------------------------------------------------------------
 -- 无状态编程。无状态编程的控制函数。
@@ -367,13 +370,14 @@ function run(conn, config)
 					
 					-- 状态保护，如果在一个系列状态中途执行其它操作，则清空这个状态，重新开始
 					local session_id = req.session_id
-					local prev_path = PREV_PATH[session_id]
-					if prev_path and prev_path ~= req.path and STATE[prev_path] and STATE[prev_path][session_id] then
-						if not STATE[prev_path] then STATE[prev_path] = {} end
-						STATE[prev_path][session_id] = nil
-					else
-						PREV_PATH[session_id] = req.path
-					end
+
+					--local prev_path = PREV_PATH[session_id]
+					--if prev_path and prev_path ~= req.path and STATE[prev_path] and STATE[prev_path][session_id] then
+					--	if not STATE[prev_path] then STATE[prev_path] = {} end
+					--	STATE[prev_path][session_id] = nil
+					--else
+					--	PREV_PATH[session_id] = req.path
+					--end
 					--ptable(BAMBOO_DB:hgetall('session:'+req.session_id))	-- for test
 					-------------------------------------------------
 					-- 根据来的PATH，找到对应的handler，如果没有找到，就报错（目前来讲是这样，但后面应该返回一个404页面）。
@@ -386,7 +390,7 @@ function run(conn, config)
 						
 						-- 状态编程
 						if state_flag then
-							runCoro(conn, main, req, conn_id, path, before, after)
+							--runCoro(conn, main, req, conn_id, path, before, after)
 						-- 无状态编程
 						else
 							runStateless(conn, main, req, before, after)
