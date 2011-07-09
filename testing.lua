@@ -1,6 +1,12 @@
+-- execute the bootup file
+dofile('/usr/local/bin/bamboo_handler')
+
 module(..., package.seeall)
 
-local CONFIG_FILE = "conf/testing.lua"
+local Form = require 'bamboo.form'
+local borrowed = bamboo.EXPORT_FOR_TESTING
+
+local CONFIG_FILE = "settings.lua"
 local TEMPLATES = "views/"
 
 -- These globals are used to implement fake state for requests.
@@ -17,12 +23,12 @@ local DEFAULT_UAGENT = "curl/7.19.7 (i486-pc-linux-gnu) libcurl/7.19.7 OpenSSL/0
 -- This constructs a fake mongrel2 connection that allows for running
 -- a handler but yields to receive a request and stuffs all the responses
 -- into RESPONSES for later inspection.
-local function FakeConnect(config)
+local function makeFakeConnect(config)
     local conn = {config = config}
 
     function conn:recv()
         local req = coroutine.yield()
-        assert(req.headers.PATH:match(self.config.route), ("Invalid request %q sent to handler: %q"):format(req.headers.PATH, self.config.route))
+        assert(req.headers.PATH:match(self.config.route), ("[ERROR] Invalid request %q sent to handler: %q"):format(req.headers.PATH, self.config.route))
         return req
     end
 
@@ -103,24 +109,24 @@ local function FakeConnect(config)
 end
 
 -- Replaces the base start with one that creates a fake m2 connection.
-Tir.start = function(config)
-    config = Tir.update_config(config, 'conf/testing.lua')
+local start = function(config)
+	local config = config or borrowed.updateConfig(config, CONFIG_FILE)
 
-    config.methods = config.methods or Tir.DEFAULT_ALLOWED_METHODS
+    config.methods = config.methods or borrowed.DEFAULT_ALLOWED_METHODS
 
-    config.ident = config.ident or Tir.default_ident
+    config.ident = config.ident or borrowed.default_ident
 
-    local conn = FakeConnect(config)
+    local conn = makeFakeConnect(config)
 
-    local runner = coroutine.wrap(Tir.run)
+    local runner = coroutine.wrap(borrowed.run)
     runner(conn, config)
 
-    -- This runner is used later to feed fake requests to the Tir.run loop.
+    -- This runner is used later to feed fake requests to the run loop.
     RUNNERS[config.route] = runner
 end
 
 -- Makes fake requests with all the right stuff in them.
-function fake_request(session, method, path, query, body, headers, data)
+function makeFakeRequest(session, method, path, query, body, headers, data)
     local req = {
         conn_id = CONN_ID,
         sender = SENDER_ID,
@@ -146,20 +152,20 @@ function fake_request(session, method, path, query, body, headers, data)
         URI = query and (path .. '?' .. query) or path,
     }
 
-    Tir.update(req.headers, headers or {})
+    table.update(req.headers, headers or {})
 
     return req
 end
 
 
-function route_request(req)
+function routeRequest(req)
     for pattern, runner in pairs(RUNNERS) do
         if req.headers.PATH:match(pattern) then
             return runner(req)
         end
     end
 
-    assert(false, ("Request for %q path didn't match any loaded handlers."):format(req.headers.PATH))
+    assert(false, ("[ERROR] Request for %q path didn't match any loaded handlers."):format(req.headers.PATH))
 end
 
 
@@ -178,7 +184,7 @@ function browser(name, session_id, conn_id)
     }
 
     function Browser:send(method, path, query, body, headers, data)
-        route_request(fake_request(self, method, path, query, body, headers, data))
+        routeRequest(makeFakeRequest(self, method, path, query, body, headers, data))
 
         local resp_count = #RESPONSES
 
@@ -190,9 +196,9 @@ function browser(name, session_id, conn_id)
             self.RESPONSES[#self.RESPONSES] = resp
         end
 
-        assert(resp_count > 0, ("Your application did not send a response to %q, that'll cause your browser to stall."):format(path))
+        assert(resp_count > 0, ("[ERROR] Your application did not send a response to %q, that'll cause your browser to stall."):format(path))
 
-        assert(resp_count == 1, ("A request for %q sent %d responses, that'll make the browser do really weird things."):format(path, resp_count))
+        assert(resp_count == 1, ("[ERROR] A request for %q sent %d responses, that'll make the browser do really weird things."):format(path, resp_count))
 
     end
 
@@ -204,7 +210,7 @@ function browser(name, session_id, conn_id)
 
             if pattern then
                 if not tostring(v):match(tostring(pattern)) then
-                    error(("[%s] Failed expect: %q did not match %q but was %q:%q"
+                    error(("[ERROR] [%s] Failed expect: %q did not match %q but was %q:%q"
                         ):format(self.name, k, pattern, v, last.body))
                 end
             end
@@ -215,7 +221,7 @@ function browser(name, session_id, conn_id)
 
 
     function Browser:exited()
-        return self.SESSION_ID and not Tir.get_state(self.SESSION_ID)
+        return self.SESSION_ID  -- and not .get_state(self.SESSION_ID)
     end
 
     function Browser:extract_cookie(headers)
@@ -223,7 +229,7 @@ function browser(name, session_id, conn_id)
 
         if cookie and cookie ~= self.COOKIE then
             self.COOKIE = cookie
-            self.SESSION_ID = Tir.parse_session_id(cookie)
+            self.SESSION_ID = borrowed.parseSessionId(cookie)
         end
     end
 
@@ -233,7 +239,7 @@ function browser(name, session_id, conn_id)
     end
 
     function Browser:submit(path, form, expect, headers)
-        local body = Tir.form_encode(form)
+        local body = Form:encode(form)
         headers = headers or {}
 
         expect = expect or {code = 200}
@@ -254,10 +260,15 @@ function browser(name, session_id, conn_id)
     end
 
     function Browser:query(path, params, expect)
-        local query = Tir.form_encode(form)
+        local query = Form:encode(form)
         self:send("GET", path, query)
         return self:expect(expect or { code = 200 })
     end
 
     return Browser
 end
+
+-------------------------------------------------------------------
+-- here, boot the testing server
+start(borrowed.config)
+-------------------------------------------------------------------

@@ -55,7 +55,7 @@ local makeSessionCookie = function (ident)
         (ident or makeSessionId()), makeExpires())
 end
 
-local parseSessionId = function (cookie)
+local function parseSessionId (cookie)
     if not cookie then return nil end
 
     return cookie:match('session="(APP-[a-z0-9\-]+)";?')
@@ -200,6 +200,7 @@ local Session = Object:extend {
         end
     end;
 
+	parseSessionId = parseSessionId;
 }
 
 

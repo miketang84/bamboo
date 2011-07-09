@@ -129,9 +129,7 @@ local function run_script(app_dir, script)
     local pid = posix.fork()
 
     if pid == 0 then
-        -- in pid, run the script
-        --posix.execp("lua", script)
-        -- 这里，这个script就是要执行的handler文件名
+        -- script is the file name to execute
         posix.execp("bamboo_handler", app_dir, script)
     else
         print("Started " .. script .. " PID " .. pid)
@@ -159,7 +157,7 @@ end
 
 local function run_tests(test_dir, full)
     print("\n---------------- TESTS -----------------")
-    local tests = posix.glob(test_dir .. "/**/*_tests.lua")
+    local tests = posix.glob(test_dir .. "/*_tests.lua")
 
     if tests then
         local cmd = "tsc "
@@ -214,8 +212,7 @@ COMMANDS = {
 
     start = function(settings)
         --for i,v in pairs(settings) do print(i,v) end
-        -- 这里，这个app是一个搜索文件的一个模式匹配字符串，给glob用的
-        -- 按我的理解，settings.app应该是应用的路径更好
+        -- here, app is a directory pattern string, for glob
         local app_dir = settings.app or './'
         local app = ('%s%s'):format((settings.app or "./"), 'app/handler_*.lua')
         local script_times = {}

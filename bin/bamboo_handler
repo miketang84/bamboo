@@ -16,14 +16,20 @@ local redis = require 'bamboo.redis'
 _G['web'] = nil
 _G['req'] = nil
 
-USERDEFINED_VIEWS = './views/'
-
+USERDEFINED_VIEWS = 'views/'
+local DEFAULT_ALLOWED_METHODS = {GET = true, POST = true, PUT = true, JSON = true, XML = true}
 
 ------------------------------------------------------------------------
+local istesting = false
 -- APP_DIR: application directory, default is './', because we start it in application directory
-local APP_DIR = arg[1]
+APP_DIR = './'
+if arg[1]:startsWith('tests/') then
+	istesting = true
+else
+	APP_DIR = arg[1] or './'
+end
 -- arg[2]: target file, every process handle one entry file, arg[2] is that file, default is 'handler_entry.lua'
-local handler_file = arg[2]
+local handler_file = arg[2] or 'app/handler_entry.lua'
 
 -- settings.lua is the configuration file of one app, it sets at APP_DIR/settings.lua
 local CONFIG_FILE = APP_DIR + "settings.lua"
@@ -182,33 +188,30 @@ end
 -- local STATE = createStateRecorder(setmetatable({}, {__mode="k"}), MappingTableConcrete)
 
 
-local DEFAULT_ALLOWED_METHODS = {GET = true, POST = true, PUT = true, JSON = true, XML = true}
+
 
 
 
 ------------------------------------------------------------------------
--- 状态编程。执行传入的函数
--- @param state  	记录状态的Web对象
--- @param req	请求来源对象
--- @param before	执行对象操作函数前的处理函数，由外部传入
--- @param after		执行对象操作函数后的处理函数，由外部传入
--- @param action_func	state对象操作函数，由外部传入
--- @return true|false 是否执行成功的标志及错误信息
+-- execute passed in function
+-- @param state:  	web object
+-- @param req:		request object
+-- @param before:	before function
+-- @param after:	after function
+-- @param action_func:	  action function
+-- @return true|false 
 ------------------------------------------------------------------------
 local function execState(state, req, before, after, action_func)
     local good, err
 
-    -- 如果定义了前置处理函数的话，就保护模式调用，并检查其返回值
 	if before then
         good, err = pcall(before, state, req)
         if not good then return good, err end
         if not err then return false end
     end
 	
-	-- 操作state对象
     good, err = action_func(state, req)
    
-	-- 如果定义了后置处理函数的话，就保护模式调用，并检查其返回值
     if after then
         local after_good, after_err = pcall(after, state, req)
         if not after_good then return after_good, after_err end
@@ -273,16 +276,17 @@ end
 
 
 ------------------------------------------------------------------------
--- 无状态编程。无状态编程的控制函数。
--- @param conn  	连接对象
--- @param main		由上层开发人员写的handler的主函数
--- @param req	请求对象
--- @param before	执行对象操作函数前的处理函数，由外部传入
--- @param after		执行对象操作函数后的处理函数，由外部传入
--- @return 无
+-- stateless programming
+-- @param conn:		connection object
+-- @param main:		application main function
+-- @param req:		request object
+-- @param before:	before function
+-- @param after:	after function
+-- @return: none
 ------------------------------------------------------------------------
 local function runStateless(conn, main, req, before, after)
     local state = Web(conn, main, req, false)
+	-- update the latest web state to global variale web
 	_G['web'] = state
 	
     local good, err = execState(state, req, before, after, function(s,r)
@@ -296,81 +300,55 @@ end
 
 
 ------------------------------------------------------------------------
--- Bamboo框架的主循环。在Bamboo中，每一个handler都是独立的进程。所以都有一个主循环存在
--- @param conn  	连接对象
--- @param config	从start函数传过来
--- @return 无
+-- Bamboo's main loop for every bamboo process
+-- @param conn:	 	connection object
+-- @param config:	config table from external
+-- @return:			none
 ------------------------------------------------------------------------
-function run(conn, config)
+local function run(conn, config)
     local main, ident, disconnect = config.main, config.ident, config.disconnect
     local before, after = config.before, config.after
     local good, err
     local req, msg_type, controller
     local conn_id, path
-	local PREV_PATH = {}
+--	local PREV_PATH = {}
 	
-    -- 主循环
+    -- main loop
 	while true do
-        -- Get a message from the Mongrel2 server
-		-- 从Mongrel2 server那获得一条消息，没有的话就阻塞等待
+        -- Get a message from the Mongrel2 server, if have no, block to wait
         req, err = conn:recv()
+		-- update the latest request object to global request reference
 		_G['req'] = req
 
         if req and not err then
-			-- 如果HTTP指令不在限制范围内，直接报错
+			-- if http directive is not in the range of bamboo specified 
             if not config.methods[req.headers.METHOD] then
                 basicError(conn, req, "Method Not Allowed",
                     405, "Method Not Allowed", {Allow = config.allowed_methods_header})
             else
                 msg_type = req.data.type
 				
-				-- 客户端已经断掉连接
+				-- if client close the connection
                 if msg_type == 'disconnect' then
                     if disconnect then disconnect(req) end
                     print("DISCONNECT", req.conn_id)
                 else
-					-- 这里产生conn_id，这个id就是cookie码，也是session码
+					-- here generate connection id, that is cookie identifier, and also session id
                     conn_id = ident(req)
-					-- 注意path的格式，这里确保path最后一个字符是'/'
+					-- normalize the path's format
 					path = trailingPath(req.path)
-					req.path = path
-                    print(("req %s: %s"):format(config.route, req.conn_id), os.date(), req.headers.PATH, req.headers.METHOD, req.session_id)
-					
-					--ptable(req)
-					--ptable(req.headers)
-					--ptable(req.data)
-					-------------------------------------------------
-					-- 我们在这里临时在请求中增加一些我们自定义的键值
-					-- session 
-					-- req.session = {}
-					-- METHOD
+
 					req.METHOD = req.headers.METHOD
+					req.path = path
 					if req.headers['x-requested-with'] == 'XMLHttpRequest' then
 						req['ajax'] = true
 					end
-					-- 经过这里定义后，req中能直接获得的属性有：
-					-- conn_id		连接唯一编码，如：5
-					-- path			访问路径，如：/arc
-					-- session_id	session_id编码，如：APP-f4a619a2f181ccccd4812e9f664e9029
-					-- data			一个表，里面放置一些数据
-					-- body			当请求为POST时，这个里面放置上传数据
-					-- METHOD		请求方法，如：GET
-					-- sender		zmq的通道靠近客户的那一端的唯一编码，如：e884a439-31be-4f74-8050-a93565795b25
-					-- session		表。放置会话相关数据
-					-- headers		消息头。里面有更多数据，要用的话，可以继续参考里面的
-					-------------------------------------------------
-					-- 数据库的session记录
-					-- 这句使进来的请求的req.session表的内容，总是与数据库中的数据同步的
-					-- 经过这一步后，req中会获得如下属性
-					-- session 当前session表					
-					Session:set(req)
-					-- 这一句执行后，req中会带一个user属性，如果Session中有user_id这个键值的话
-					-- 禁止执行这一句，这一句就限定死了必须使用User模型，而不能用User的扩展模型
-					-- User:set(req)
-					
-					-- 状态保护，如果在一个系列状态中途执行其它操作，则清空这个状态，重新开始
-					local session_id = req.session_id
 
+					print(("req %s: %s"):format(config.route, req.conn_id), os.date(), req.path, req.METHOD, req.session_id)
+					
+					-- record session
+					Session:set(req)
+					
 					--local prev_path = PREV_PATH[session_id]
 					--if prev_path and prev_path ~= req.path and STATE[prev_path] and STATE[prev_path][session_id] then
 					--	if not STATE[prev_path] then STATE[prev_path] = {} end
@@ -379,104 +357,106 @@ function run(conn, config)
 					--	PREV_PATH[session_id] = req.path
 					--end
 					--ptable(BAMBOO_DB:hgetall('session:'+req.session_id))	-- for test
+
 					-------------------------------------------------
-					-- 根据来的PATH，找到对应的handler，如果没有找到，就报错（目前来讲是这样，但后面应该返回一个404页面）。
-					local main_t, state_flag = getHandlerByPath(path)
-					if not main_t then
+					-- according coming path, find the corresponding handler function
+					local main, state_flag = getHandlerByPath(path)
+					if not main then
+					   	-- return 404 page
 						print(('[WARNING] No handler to process this path: %s.'):format(path))
 						conn:reply_http(req, '<h2>Page Not Found.</h2>', 404, 'Not Found', req.headers)
 					else
-						main = main_t
 						
-						-- 状态编程
 						if state_flag then
-							--runCoro(conn, main, req, conn_id, path, before, after)
-						-- 无状态编程
+						   -- temporarily disable it
+						   --runCoro(conn, main, req, conn_id, path, before, after)
 						else
+							-- this is the default way
 							runStateless(conn, main, req, before, after)
 						end
 					end
 
                 end
             end
-        -- 请求错误，打印一条信息，并不处理，然后继续下一条请求处理
 		else
             print("FATAL ERROR", good, req, err)
         end
     end
 end
 
+local m2 = require 'bamboo.m2'
 
+local function collectConfig(config)
 
-------------------------------------------------------------------------
--- Bamboo框架启动接口
--- @param config	从外部上层应用的handler的调用中传入的配置文件
--- @return 无		一直保持循环等待，不会退出这个函数
-------------------------------------------------------------------------
--- Starts a Tir engine, wiring up all the stuff we need for this process
--- using the given config.  The config is expected to have at least
--- {route='/path', main=handler_func}.  In addition to that you can put
--- other settings that are common to all handlers in CONFIG_FILE.
--- Options you can override are: templates, ident, sender_id, sub_addr, pub_addr, io_threads
-function start(config)
-	local m2 = require 'bamboo.m2'
-	-- 配置可以有4处地方：
-	-- 一是在启动进程的时候，作为函数参数传入；
-	-- 二是在参数中自己定义一个配置文件的路径；
-	-- 三是使用默认配置文件；
-	-- 四是mongrel2使用的sqlite3数据库中的配置；
-	
-	-- 等式右侧的URLS是前面定义的局部变量，从handler文件中传来
-	config = config or {}
+	-- config can be from three places:
+	-- 1. application settings.lua
+	-- 2. default values bamboo defined
+	-- 3. mognrel2's config sqlite3 file
+	local config = config or {}
 	config.APP_DIR = APP_DIR
-	-- 需要这个变量来从sqlite3数据库中找到传输通道
+	-- bamboo app and mongrel2's interface
 	config.route = router
 	config.MappingTableConcrete = MappingTableConcrete
 	config.MappingTablePattern = MappingTablePattern
 	
-    --config = updateConfig(config, config.config_file or CONFIG_FILE)
-    -- 模板路径（用户定义，或默认）
-	config.templates = config.templates or (APP_DIR + "views/")
-    -- 标识码产生器，为一函数（用户定义，或默认）
+    -- templates' directory
+	config.templates = config.templates or (APP_DIR + USERDEFINED_VIEWS)
+	config.views = config.views or config.templates
+	USERDEFINED_VIEWS = config.views
+	
+    -- identifier generator, user can define their own
 	config.ident = config.ident or Session.identRequest
-
-    -- HTTP指令白名单，可用户自定义
+    -- HTTP directive white list, user can define their own
     config.methods = config.methods or DEFAULT_ALLOWED_METHODS
-	-- allowed表中存储的是允许的HTTP指令
+
     local allowed = {}
     for m, yes in pairs(config.methods) do
         if yes then allowed[#allowed + 1] = m end
     end
-
-    -- allowed_methods_header字段是一个字符串
+    -- make allowed_methods_header
 	config.allowed_methods_header = table.concat(allowed, ' ')
 	
 	if config.monserver_dir then
-		-- 形成完整路径
+		-- format full directory of config_db, to find mongrel2's configuration in that sqlite3 db file
 		config.config_db = config.monserver_dir + '/' + config.config_db
 	end
-	
-	if not isFalse(config.views) then
-		config.views = APP_DIR + config.views
-		_G['USERDEFINED_VIEWS'] = config.views
-	end
-	
-	
-	
-	-- 加载sqlite3中的配置
-    m2.loadConfig(config)
-	-- 产生一个连接，作为handler进程与mongrel2的交流通道
-    local conn = assert(m2.connect(config), "Failed to connect to Mongrel2.")
 
-    -- 启动引擎，开始运行。这里实际是个尾调用。
-	-- 这里调用后，此处的start函数已经找不到了，即run如果返回，不会再回到start函数了
-    run(conn, config)
+	return config
 end
 
 
---------------
--- 启动handler
---------------
-start(config)
+------------------------------------------------------------------------
+-- Bamboo start interface
+-- @param config:	configuration table from application
+-- @return:			none
+------------------------------------------------------------------------
+local function start(config)
+	-- load sqlite3 configuration, update to config table
+    m2.loadConfig(config)
+	-- make a connection as the pipe interact with mongrel2
+    local conn = assert(m2.connect(config), "Failed to connect to Mongrel2.")
+
+    -- boot main loop
+    run(conn, config)
+end
+
+collectConfig(config)
+bamboo.EXPORT_FOR_TESTING = {
+	config = config,
+	run = run,
+	updateConfig = updateConfig,
+	DEFAULT_ALLOWED_METHODS = DEFAULT_ALLOWED_METHODS,
+	ident = Session.identRequest,
+	parseSessionId = Session.parseSessionId,
+--	getState = getState,
+}
 
 
+------------------------------------------------------------
+-- START BAMBOO
+------------------------------------------------------------
+-- normal case
+if not istesting then
+   start(config)
+end
+   
