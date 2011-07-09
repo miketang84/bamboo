@@ -22,7 +22,7 @@ local DEFAULT_ALLOWED_METHODS = {GET = true, POST = true, PUT = true, JSON = tru
 ------------------------------------------------------------------------
 local istesting = false
 -- APP_DIR: application directory, default is './', because we start it in application directory
-APP_DIR = './'
+local APP_DIR = './'
 if arg[1]:startsWith('tests/') then
 	istesting = true
 else
