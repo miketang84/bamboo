@@ -1,7 +1,6 @@
 module(..., package.seeall)
 
 local PLUGIN_LIST = bamboo.PLUGIN_LIST
-local G_TMPL_DIR = 'views/'
 
 
 
@@ -41,7 +40,7 @@ local VIEW_ACTIONS = {
     ['{%'] = function(code)
         -- add new generated local variable to _G enviroment
         local varstr
-        local morestr = ''
+        local morestr = " local _env = getfenv();"
         for _, pattern in ipairs(localvars_pattern_list) do
             varstr = code:match(pattern)
             if varstr then
@@ -49,7 +48,7 @@ local VIEW_ACTIONS = {
                 for _, v in ipairs(varlist) do
                     local t = v:trim()
                     if not isFalse(t) and t ~= '_' then
-                        morestr = morestr + (" _G['%s'] = %s; "):format(t, t)
+                        morestr = morestr + (" _env['%s'] = %s; "):format(t, t)
                     end
                 end
             end
