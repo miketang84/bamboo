@@ -217,8 +217,11 @@ COMMANDS = {
         local app = ('%s%s'):format((settings.app or "./"), 'app/handler_*.lua')
         local script_times = {}
 
-        while true do
-            local targets = assert(posix.glob(app))
+        -- while true do
+		local prod_mode = os.getenv('PROD')
+
+		local function runit()
+		    local targets = assert(posix.glob(app))
 
             for _, script in ipairs(targets) do
                 if not script_times[script] then
@@ -238,6 +241,12 @@ COMMANDS = {
 
             script_times[script] = tick
         end
+		
+		if prod_mode then
+		    while true do runit() end
+		else
+		    runit()
+		end 
     end,
 
     help = function(settings)
