@@ -11,6 +11,7 @@ local TEMPLATES = "views/"
 
 -- These globals are used to implement fake state for requests.
 local SENDER_ID = "3ddfbc58-a249-45c9-9446-00b73de18f7c"
+local SESSION_ID = "d257873dfdc254ff6ff930a1c44aa6a9"
 
 local CONN_ID = 1
 
@@ -178,8 +179,8 @@ function browser(name, session_id, conn_id)
 
     local Browser = {
         RESPONSES = {},
-        COOKIE = nil,
-        SESSION_ID = nil,
+        COOKIE = ('session="APP-%s"'):format(session_id or SESSION_ID),
+        SESSION_ID = session_id or SESSION_ID,
         name = name,
     }
 

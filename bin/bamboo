@@ -160,7 +160,7 @@ local function run_tests(test_dir, full)
     local tests = posix.glob(test_dir .. "/*_tests.lua")
 
     if tests then
-        local cmd = "tsc "
+        local cmd = "tsc -f "
         if full then cmd = cmd .. "-f " end
 
         os.execute(cmd .. table.concat(tests, ' '))

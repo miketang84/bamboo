@@ -26,7 +26,7 @@ local ERROR_PAGE = View.compileView [[
 
 -- Reports errors back to the browser so the user has something to work with.
 function reportError(conn, request, err, state)
-    local pretty_req = toString {"Request", request}
+    local pretty_req = "Request\n " +  seri(request or {})
     local trace = debug.traceback(state.controller, err)
     local info
     local source = nil

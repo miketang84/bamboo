@@ -23,13 +23,17 @@ local DEFAULT_ALLOWED_METHODS = {GET = true, POST = true, PUT = true, JSON = tru
 local istesting = false
 -- APP_DIR: application directory, default is './', because we start it in application directory
 local APP_DIR = './'
-if arg[1]:startsWith('tests/') then
+--print(arg[1], arg[2])
+if arg[1] == '-f' and arg[2]:startsWith('tests/') then
 	istesting = true
 else
 	APP_DIR = arg[1] or './'
 end
 -- arg[2]: target file, every process handle one entry file, arg[2] is that file, default is 'handler_entry.lua'
-local handler_file = arg[2] or 'app/handler_entry.lua'
+local handler_file = 'app/handler_entry.lua'
+if not istesting and arg[2] then
+   handler_file = arg[2]
+end
 
 -- settings.lua is the configuration file of one app, it sets at APP_DIR/settings.lua
 local CONFIG_FILE = APP_DIR + "settings.lua"
@@ -62,7 +66,6 @@ BAMBOO_DB = redis.connect {host=DB_HOST, port=DB_PORT, which = WHICH_DB}
 
 local Web = require 'bamboo.web'
 local Session = require 'bamboo.session'
-local User = require 'bamboo.models.user'
 
 ------------------------------------------------------------------------
 -- URLS combination

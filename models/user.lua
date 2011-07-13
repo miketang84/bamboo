@@ -87,15 +87,23 @@ local User = Model:extend {
 		
 		return user
 	end;
-	
+
+	-- deprecated api
 	getFromReq = function (self)
 		I_AM_CLASS(self)
 		if not req.user then return nil end
 		
 		local id = req.user.id
-		return self:getById (id)
+		return self:getById(id)
 	end;
-	
+
+	pick = function (self)
+	    I_AM_CLASS(self)
+	    if not req.user then return nil end
+
+	    local id = req.user.id
+	    return self:getById(id)
+    end;
 	
 	
 	-- 类函数，此处的self是User本身
