@@ -150,19 +150,36 @@ end
 -- The bellow four assertations, they are called only by class, instance or query set
 --
 _G['I_AM_CLASS'] = function (self)
-	assert(self:isClass(), 'This function is only allowed to be called by class singleton.')
+	local ok = self:isClass() 
+	if not ok then
+		print(debug.traceback())
+		error('[ERROR] This function is only allowed to be called by class.', 3)
+	end
 end
 
 _G['I_AM_CLASS_OR_QUERY_SET'] = function (self)
-	assert(self:isClass() or self.__spectype == 'QuerySet', 'This function is only allowed to be called by class singleton or query set.')
+	local ok = self:isClass() or self.__spectype == 'QuerySet'
+	if not ok then
+		print(debug.traceback())
+		error('[ERROR] This function is only allowed to be called by class or query set.', 3)
+	end
+
 end
 
 _G['I_AM_INSTANCE'] = function (self)
-	assert(self:isInstance(), 'This function is only allowed to be called by instance of class.')
+	local ok = self:isInstance()
+	if not ok then
+		print(debug.traceback())
+		error('[ERROR] This function is only allowed to be called by instance.', 3)
+	end
 end
 
 _G['I_AM_INSTANCE_OR_QUERY_SET'] = function (self)
-	assert(self:isInstance() or self.__spectype == 'QuerySet', 'This function is only allowed to be called by instance of class.')
+	local ok = self:isInstance() or self.__spectype == 'QuerySet'
+	if not ok then
+		print(debug.traceback())
+		error('[ERROR] This function is only allowed to be called by instance or query set.', 3)
+	end
 end
 
 -------------------------------------------

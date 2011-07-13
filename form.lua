@@ -67,48 +67,6 @@ end;
 -- Form类定义
 local Form = Object:extend {
     __tag = 'Bamboo.Form';
-    init = function (self, required_fields)
-            self.required_fields = required_fields
-            return self
-    end;
-
-    requires = function (self, params)
-        local errors = {}
-        local had_errors = false
-
-        for _, field in ipairs(self.required_fields) do
-            if not params[field] or #params[field] == 0 then
-                errors[field] = 'This is required.'
-                had_errors = true
-            end
-        end
-
-        if had_errors then
-            params.errors = json.encode(errors)
-            return false
-        else
-            params.errors = nil
-            return true
-        end
-    end;
-
-    clear = function (self, params)
-        params.errors = nil
-    end;
-
-    valid = function (self, params)
-        local has_required = self:requires(params)
-
-        if has_required and self.required_fields.validator then
-            return self.required_fields.validator(params)
-        else
-            return has_required
-        end
-    end;
-
-    ---------------------------------------------------
-    -- 类全局函数
-    ---------------------------------------------------
     
     ------------------------------------------------------------------------
     -- 处理请求中的表单内容，不是很完备
@@ -155,6 +113,7 @@ local Form = Object:extend {
 	-- 这个时候，就调用这个函数来获取这些额外参数
 	-- 上传的时候，不应该调用 Form:parse() 函数来处理文件，而应该使用
 	-- process和getURLParams两个函数来获取
+	-- deprecated
 	parseQuery = function (self, req)
 		I_AM_CLASS(self)
 		if req.headers.QUERY then
