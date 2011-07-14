@@ -240,6 +240,7 @@ function browser(name, session_id, conn_id)
     end
 
     function Browser:submit(path, form, expect, headers)
+		local form = form or {}
         local body = Form:encode(form)
         headers = headers or {}
 
@@ -260,11 +261,29 @@ function browser(name, session_id, conn_id)
         return self:expect(expect or { code = 200 })
     end
 
-    function Browser:query(path, params, expect)
-        local query = Form:encode(form)
-        self:send("GET", path, query)
+    function Browser:query(path, params, expect, headers)
+		local params = params or {}
+        local query = Form:encode(params)
+        self:send("GET", path, query, nil, headers)
         return self:expect(expect or { code = 200 })
     end
+
+	function Browser:ajaxGet(path, params, expect, headers)
+		local headers = {['x-requested-with'] = "XMLHttpRequest"}
+        local resp = self:query(path, params, expect, headers)
+		local res = json.decode(resp.body)
+		checkType(res, 'table')
+		return res
+	end
+		
+	function Browser:ajaxPost(path, form, expect, headers)
+		local headers = {['x-requested-with'] = "XMLHttpRequest"}
+        local resp = self:submit(path, form, expect, headers)
+		local res = json.decode(resp.body)
+		checkType(res, 'table')
+		return res
+	end 
+	
 
     return Browser
 end

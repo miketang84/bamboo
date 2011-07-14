@@ -111,7 +111,7 @@ local User = Model:extend {
 		I_AM_CLASS(self)
 		local user_id = req.session['user_id']
 		if user_id then
-			req.user = self:getById ( user_id )
+			req.user = self:getById(user_id)
 		else
 			req.user = nil
 		end

@@ -118,7 +118,7 @@ local Upload = Model:extend {
 	-- batch只适合存储传统表单文件数据，使用xhr时不能用这个函数处理
 	-- 因为xhr上传总是一个一个上传，不会出现多个合在一起的情况
 	batch = function (self, req, params, dest_dir, prefix, postfix)
-		local file_objs = {}
+		local file_objs = List()
 		for i, v in ipairs(params) do
 			local path, name = savefile { req = req, file_obj = v, dest_dir = dest_dir, prefix = prefix, postfix = postfix }
 			-- 创建各个文件对象实例
@@ -126,7 +126,7 @@ local Upload = Model:extend {
 			if file_instance then
 				-- 保存到数据库
 				file_instance:save()
-				table.append(file_objs, file_instance)
+				file_objs:append(file_instance)
 			else
 				-- 一旦发现file_instance为nil，则说明没有上传成功（可能被中断了），直接返回nil
 				return nil

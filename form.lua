@@ -130,7 +130,7 @@ local Form = Object:extend {
         local result = {}
 
         for k,v in pairs(data) do
-            result[#result + 1] = ('%s=%s'):format(http.encodeURL(k), http.encodeURL(v))
+            result[#result + 1] = ('%s=%s'):format(http.encodeURL(tostring(k)), http.encodeURL(tostring(v)))
         end
 
         return table.concat(result, sep or '&')
