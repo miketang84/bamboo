@@ -10,11 +10,11 @@ local Image = Upload:extend {
 		['width'] = {},
 		['height'] = {},
 		
-		['name'] = {},				-- 此文件的名字
-		['path'] = {},			-- 此文件的可访问URI
-		['size'] = {},				-- 此文件大小，以字节计算
-		['timestamp'] = {}, 			-- 上传成功的时间戳
-		['desc'] = {},			-- 此文件的描述
+		['name'] = {},
+		['path'] = {},
+		['size'] = {},
+		['timestamp'] = {},
+		['desc'] = {},
 	
 	};
 	

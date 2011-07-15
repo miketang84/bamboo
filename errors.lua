@@ -5,7 +5,7 @@ local View = require 'bamboo.view'
 
 -- Error info template
 local ERROR_PAGE = View.compileView [[
-<html><head><title>Tir Error</title></head> 
+<html><head><title>Bamboo Error</title></head> 
 <body>
 <p>There was an error processing your request.</p>
 <h1>Stack Trace</h1>

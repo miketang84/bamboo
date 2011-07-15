@@ -18,9 +18,9 @@ signal.signal("SIGINT", function (...)
 end)
 
 ------------------------------------------------------------------------------
--- 加载配置
+-- load configuration
 local config = {}
--- 此处，只支持在工程目录下启动
+-- only support boot in app directory
 local setting_file = loadfile('settings.lua') or loadfile('../settings.lua')
 if not setting_file then
 	print [[
@@ -257,32 +257,26 @@ COMMANDS = {
     end,
     
     createapp = function(settings)
-        -- 原型开发
-        -- 这里要进行appname参数的判断
-        -- 还要做的几件事情：
-        -- 1. 对appname的解析；
-        -- 2. 对cmd_tmpls路径的读取；
-        -- 3. 对monserver_dir的读取；
-        -- 4. 对app/settings/中的md5码的填充；
         local appname = settings[1] or 'bambooapp'
-        
-        -- 创建目录
-		-- 确保没有同名目录存在
+
+		-- create directory
         assert(posix.stat(appname) == nil, '[Error] Some file or directory of this name exists！')
         posix.mkdir(appname)
-        -- 拷贝文件
+
+		-- copy files
         local cmdstr = ('cp -rf %s/cmd_tmpls/createapp/* ./%s/'):format(bamboo_dir, appname)
         os.execute(cmdstr)
-        -- 创建资源目录
+
+		-- create media directory and copy files to it
         local mediadir = ('%s/sites/%s'):format(monserver_dir, appname)
-        --posix.mkdir(mediadir)
         os.execute(('mkdir -p %s'):format(mediadir))
         local cmdstr = ('cp -rf %s/cmd_tmpls/media/*  %s/'):format(bamboo_dir, mediadir)
         os.execute(cmdstr)
-        -- 制作链接
+
+        -- make link
         os.execute(('ln -sdf %s %s/media'):format(mediadir, appname))        
 
-        -- 修改appname/app/settings.lua中的md5字串
+        -- modify the md5 string in appname/app/settings.lua
         local fd = io.open(('%s/settings.lua'):format(appname), 'r')
 		local ctx = fd:read('*all')
 		fd:close()
@@ -304,46 +298,35 @@ monserver_dir = "%s"
     end;
     
     createplugin = function(settings)
-        -- 要求，此命令必须在工程目录下执行，不然没有效果
         local plugin_name = settings[1] or 'bambooplugin'
         
-        -- 获取工程名字
-        --local appdir = posix.getcwd()
-        --print(appdir)
-        --local appname = appdir:match('/([%w_%-]+)$')
         local appname = config.project_name
-        --print(appname)
         
-        -- 创建目录
-		-- 确保没有同名目录存在
+        -- create dir
         assert(posix.stat(plugin_name) == nil, '[Error] Some file or directory has this name already！')
         posix.mkdir(plugin_name)
-        -- 拷贝文件
+
         local cmdstr = ('cp -rf %s/cmd_tmpls/createplugin/* ./%s/'):format(bamboo_dir, plugin_name)
         os.execute(cmdstr)
-        -- 创建资源目录
+
         local mediadir = ('%s/sites/%s/plugins/%s/'):format(monserver_dir, appname, plugin_name)
-        --posix.mkdir(mediadir)
         os.execute(('mkdir -p %s'):format(mediadir))
         
         local cmdstr = ('cp -rf %s/cmd_tmpls/pluginmedia/*  %s'):format(bamboo_dir, mediadir)
         os.execute(cmdstr)
-        -- 制作链接
+
         os.execute(('ln -sdf %s %s/media'):format(mediadir, plugin_name)) 
         
         print(('[OK] Successfully created plugin %s.'):format(plugin_name))  
     end;
     
     createmodel = function(settings)
-        -- 要求，此命令必须在工程目录下执行，不然没有效果
         local model_name = settings[1] or 'bamboomodel'
         
         local newfile = ('./%s.lua'):format(model_name:lower())
-        -- 拷贝文件
         local cmdstr = ('cp -rf %s/cmd_tmpls/createmodel/newmodel.lua %s'):format(bamboo_dir, newfile)
         os.execute(cmdstr)
 
-        -- 修改appname/app/settings.lua中的md5字串
         local fd = io.open(newfile, 'r')
 		local ctx = fd:read('*all')
 		fd:close()
@@ -358,7 +341,7 @@ monserver_dir = "%s"
     
     initdb = function (settings)
         local data_file = settings[1] or 'initial.data'
-        -- 加载并运行这个文件，释放数据到env中
+
         local env = setmetatable({}, {__index=_G})
         setfenv(assert(loadfile(data_file)), env)()
         assert(env['DATA'], '[ERROR] There must be DATA variable in initial data file.')
@@ -414,7 +397,7 @@ monserver_dir = "%s"
 	-- push new data to database
     pushdb = function (settings)
         local data_file = settings[1] or 'initial.data'
-        -- 加载并运行这个文件，释放数据到env中
+
         local env = setmetatable({}, {__index=_G})
         setfenv(assert(loadfile(data_file)), env)()
         assert(env['DATA'], '[ERROR] There must be DATA variable in initial data file.')
@@ -430,13 +413,9 @@ monserver_dir = "%s"
         -- Global variable BAMBOO_DB, to use bamboo's model function, must specify it
         BAMBOO_DB = redis_db
 
-		-- 定义一个新环境
 		local childenv = {}
-		-- 加载目标handler_xxx.lua文件，将其环境设为childenv，
-		-- 目的是将那个文件中定义的全局变量释放到childenv来
 		setfenv(assert(loadfile('app/handler_entry.lua') or loadfile('../app/handler_entry.lua')), setmetatable(childenv, {__index=_G}))()
 
-		-- 先检查同名对象是否存在
 		for k, v in pairs(DATA) do
 			if type(v) == 'table' then
 				local model = bamboo.getModelByName(k)
@@ -448,7 +427,7 @@ monserver_dir = "%s"
 			end
 		end
 
-		-- 前面检查了后，已经确保没有同名对象存在了，直接写入
+		-- we have ensure no same name key exists
 		for k, v in pairs(DATA) do
 			if type(v) == 'table' then
 				local model = bamboo.getModelByName(k)
@@ -522,13 +501,7 @@ end
 
 
 local cmd, settings = parse_args(arg)
-
--- 将全局的一个配置加载进来
-
 if not cmd then print('No cmd input.'); return  end
---for i, v in pairs(settings) do
---	print(i, v)
---end
 
 run(cmd, settings)
 
