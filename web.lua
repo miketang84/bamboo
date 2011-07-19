@@ -74,6 +74,11 @@ local Web = Object:extend {
 		self:json { success = false, err_code = err_code, err_desc = err_desc }	
 	end;
 
+	jsonSuccess = function (self, tbl)
+		tbl['success'] = true
+		self:json(tbl)
+	end;
+	
     redirect = function (self, url)
         self:page("", 303, "See Other", {Location=url, ['content-type'] = false})
         return true

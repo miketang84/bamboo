@@ -24,7 +24,7 @@ local config = {}
 local setting_file = loadfile('settings.lua') or loadfile('../settings.lua')
 if not setting_file then
 	print [[
-[ERROR] You should make sure the existance of settings.lua in your workspace!
+[Warning] You should make sure the existance of settings.lua in your workspace!
 
 The content of the settings.lua can be like following, 
 copy them to your 'settings.lua' file, if it doesn't exist, create it:

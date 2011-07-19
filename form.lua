@@ -77,7 +77,7 @@ local Form = Object:extend {
         elseif headers.METHOD == 'POST' then
             local ctype = headers['content-type'] or ""
             local encoding, encparams = ctype:match(ENCODING_MATCH)
-            encoding = encoding:lower()
+            if encoding then encoding = encoding:lower() end
 
             if encoding == URL_ENCODED_FORM then
                 if req.body then
@@ -88,7 +88,7 @@ local Form = Object:extend {
                 params = extractMultiparts(req.body, encparams)
                 params.multipart = true
             else
-                error(("POST RECEIVED BUT NO CONTENT TYPE WE UNDERSTAND: %s."):format(ctype))
+                print(("POST RECEIVED BUT NO CONTENT TYPE WE UNDERSTAND: %s."):format(ctype))
             end
         end
         

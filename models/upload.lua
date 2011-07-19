@@ -25,12 +25,12 @@ local function calcNewFilename(oldname)
 end
 
 --- here, we temprorily only consider the file data is passed wholly by zeromq
---  and save by bamboo
--- @field t.req  :
--- @field t.file_obj :
--- @field t.dest_dir :
--- @field t.prefix :
--- @field t.postfix :
+-- and save by bamboo
+-- @field t.req 
+-- @field t.file_obj
+-- @field t.dest_dir
+-- @field t.prefix
+-- @field t.postfix
 -- 
 local function savefile(t)
 	local req, file_obj = t.req, t.file_obj

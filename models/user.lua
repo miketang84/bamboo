@@ -95,7 +95,8 @@ local User = Model:extend {
 	    if not req.user then return nil end
 
 	    local id = req.user.id
-	    return self:getById(id)
+		req.user = self:getById(id)
+		return req.user
     end;
 	
 	set = function (self, req)
