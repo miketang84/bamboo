@@ -34,8 +34,14 @@ end
 -- 
 local function savefile(t)
 	local req, file_obj = t.req, t.file_obj
-	local dest_dir = (t.dest_dir and 'media/uploads/' + t.dest_dir) or 'media/uploads/'
+	local monserver_dir = bamboo.config.monserver_dir
+	local project_name = bamboo.config.project_name
+	assert(monserver_dir)
+	assert(project_name)
+	local dest_dir = (t.dest_dir and monserver_dir + '/sites/' + project_name + '/uploads/' + t.dest_dir)
 	dest_dir = string.trailingPath(dest_dir)
+	local url_prefix = 'media/uploads/' + t.dest_dir + '/'
+	url_prefix = string.trailingPath(url_prefix)
 	local prefix = t.prefix or ''
 	local postfix = t.postfix or ''
 	local filename = ''
@@ -67,13 +73,15 @@ local function savefile(t)
 
 	local newbasename, ext = calcNewFilename(filename)
 	local newname = prefix + newbasename + postfix + ext
-	local path = dest_dir + newname
+	local disk_path = dest_dir + newname
+	local url_path = url_prefix + newname
+
 	-- write file to disk
-	local fd = io.open(path, "wb")
+	local fd = io.open(disk_path, "wb")
 	fd:write(body)
 	fd:close()
 	
-	return path, newname
+	return disk_path, newname, url_path
 end
 
 
@@ -95,7 +103,7 @@ local Upload = Model:extend {
 		if not t then return self end
 		
 		self.name = t.name or self.name
-		self.path = t.path
+		self.path = t.url_path
 		self.size = posix.stat(t.path).size
 		self.timestamp = os.time()
 		-- according the current design, desc field is nil
@@ -111,10 +119,10 @@ local Upload = Model:extend {
 		local file_objs = List()
 		-- file data are stored as arraies in params
 		for i, v in ipairs(params) do
-			local path, name = savefile { req = req, file_obj = v, dest_dir = dest_dir, prefix = prefix, postfix = postfix }
+			local path, name, url_path = savefile { req = req, file_obj = v, dest_dir = dest_dir, prefix = prefix, postfix = postfix }
 			if not path or not name then return nil end
 			-- create file instance
-			local file_instance = self { name = name, path = path }
+			local file_instance = self { name = name, path = path, url_path = url_path }
 			if file_instance then
 				-- store to db
 				file_instance:save()
@@ -140,10 +148,10 @@ local Upload = Model:extend {
 	    -- if upload in html5 way
 	    if req.headers['x-requested-with'] then
 			-- stored to disk
-			local path, name = savefile { req = req, dest_dir = dest_dir, prefix = prefix, postfix = postfix }    
+			local path, name, url_path = savefile { req = req, dest_dir = dest_dir, prefix = prefix, postfix = postfix }    
 			if not path or not name then return nil, '[ERROR] empty file.' end
 			
-			local file_instance = self { name = name, path = path }
+			local file_instance = self { name = name, path = path, url_path = url_path }
 			if file_instance then
 				file_instance:save()
 				return file_instance, 'single'
