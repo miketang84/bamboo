@@ -20,9 +20,10 @@ local function findTemplDir( name )
 
 end
 
-local function removeComments(tmpl)
+local function removeSnippets(tmpl)
 	-- for html
 	return tmpl:gsub('%<%!%-%-.-%-%-%>', '')
+	-- :gsub("%<script *[%w=\'\"]*%>.-%</script%>", ''):gsub("%<style%>.-%</style%>", '')
 
 end
 
@@ -89,7 +90,7 @@ local VIEW_ACTIONS = {
         local name = unseri(code)
         local tmpl_dir = findTemplDir(name)
         local base_page = io.loadFile(tmpl_dir, name)
-        local new_page = removeComments(base_page)
+        local new_page = removeSnippets(base_page)
         for block in new_page:gmatch("({%[[%s_%w%.%-\'\"]+%]})") do
             -- remove the outer tags
             local block_content = block:sub(3, -3):trim()
@@ -178,7 +179,7 @@ local View = Object:extend {
 	-- preprocess course
 	preprocess = function(tmpl)
 
-		local tmpl = removeComments(tmpl)
+		local tmpl = removeSnippets(tmpl)
 		
 		if tmpl:match('{:') then
             -- if there is inherited tag in page, that tag must be put in the front of this file

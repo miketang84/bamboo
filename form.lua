@@ -92,8 +92,6 @@ local Form = Object:extend {
             end
         end
         
-        -- here, params contain the uploaded form data
-        params.__session = req.session_id
 
         return params
     end;

@@ -274,7 +274,7 @@ COMMANDS = {
         os.execute(cmdstr)
 
         -- make link
-        os.execute(('ln -sdf %s %s/media'):format(mediadir, appname))        
+        -- os.execute(('ln -sdf %s %s/media'):format(mediadir, appname))        
 
         -- modify the md5 string in appname/app/settings.lua
         local fd = io.open(('%s/settings.lua'):format(appname), 'r')

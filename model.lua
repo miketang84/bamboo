@@ -398,11 +398,28 @@ _G['uninset'] = function (...)
 
 end
 
+
+
+------------------------------------------------------------------------
+-- 
+------------------------------------------------------------------------
+local Model 
+local function makeQuerySet(list)
+	local list = list or List()
+	-- create a query set	
+	local query_set = setProto(list, Model)
+	-- add it to fit the check of isClass function
+	query_set.__spectype = 'QuerySet'
+	
+	return query_set
+end
+
 ------------------------------------------------------------------------
 -- Model Define
 -- Model is the basic object of Bamboo Database Abstract Layer
 ------------------------------------------------------------------------
-local Model 
+
+
 Model = Object:extend {
 	__tag = 'Bamboo.Model';
 	-- ATTEN: __name's value is not neccesary be equal strictly to the last word of __tag
@@ -519,7 +536,7 @@ Model = Object:extend {
 	-- 
 	all = function (self, is_rev)
 		I_AM_CLASS(self)
-		local all_instaces = List()
+		local all_instaces = makeQuerySet()
 		local _name = self.__name + ':'
 		
 		local index_name = getIndexName(self)
@@ -541,7 +558,7 @@ Model = Object:extend {
 	slice = function (self, start, stop, is_rev)
 		I_AM_CLASS(self)
 		local all_ids = self:sliceIds(start, stop, is_rev)
-		local objs = List()
+		local objs = makeQuerySet()
 		local getById = self.getById 
 
 		for _, id in ipairs(all_ids) do
@@ -1407,5 +1424,7 @@ Model = Object:extend {
 	end;
 
 }
+
+
 
 return Model

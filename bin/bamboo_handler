@@ -421,6 +421,7 @@ local function start(config)
 end
 
 collectConfig(config)
+bamboo.config = config
 bamboo.EXPORT_FOR_TESTING = {
 	config = config,
 	run = run,
