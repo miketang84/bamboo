@@ -1,7 +1,6 @@
 module(..., package.seeall)
 
 
-local db = BAMBOO_DB
 local Model = require 'bamboo.model'
 local Session = require 'bamboo.session'
 local md5 = require 'md5'

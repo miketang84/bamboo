@@ -8,13 +8,13 @@ local Form = require 'bamboo.form'
 
 
 
-local function calcNewFilename(oldname)
+local function calcNewFilename(dest_dir, oldname)
 	-- separate the base name and extense name of a filename
 	local main, ext = oldname:match('^(.+)(%.%w+)$')
 	-- check if exists the same name file
 	local tstr = ''
 	local i = 0
-	while posix.stat( main + tstr + ext ) do
+	while posix.stat( dest_dir + main + tstr + ext ) do
 		i = i + 1
 		tstr = '_' + tostring(i)
 	end
@@ -61,7 +61,7 @@ local function savefile(t)
 		-- this pattern rule can deal with the windows style directory delimiter
 		-- file_obj['content-disposition'] contains many file associated info
 		filename = file_obj['content-disposition'].filename:sub(2, -2):match('\\?([^\\]-%.%w+)$')
-		--print(filename)
+
 		body = file_obj.body
 	end
 	if isFalse(filename) or isFalse(body) then return nil, nil end
@@ -71,7 +71,8 @@ local function savefile(t)
 		os.execute('mkdir -p ' + dest_dir)
 	end
 
-	local newbasename, ext = calcNewFilename(filename)
+	local newbasename, ext = calcNewFilename(dest_dir, filename)
+
 	local newname = prefix + newbasename + postfix + ext
 	local disk_path = dest_dir + newname
 	local url_path = url_prefix + newname
@@ -89,7 +90,7 @@ end
 local Upload = Model:extend {
 	__tag = 'Bamboo.Model.Upload';
 	__name = 'Upload';
-	__desc = "User\'s upload files.";
+	__desc = "User's upload files.";
 	__fields = {
 		['name'] = {},
 		['path'] = {},
@@ -172,8 +173,8 @@ local Upload = Model:extend {
 	
 	end;
 	
-	calcNewFilename = function (self, oldname)
-		return calcNewFilename(oldname)
+	calcNewFilename = function (self, dest_dir, oldname)
+		return calcNewFilename(dest_dir, oldname)
 	end;
 	
 	-- this function, encorage override by child model, to execute their own delete action
