@@ -28,6 +28,17 @@ local function calcNewFilename(dest_dir, oldname)
 	return newbasename, ext
 end
 
+
+local function absoluteDirPrefix()
+	local monserver_dir = bamboo.config.monserver_dir
+	local project_name = bamboo.config.project_name
+	assert(monserver_dir)
+	assert(project_name)
+	return  monserver_dir + '/sites/' + project_name + '/uploads/'
+end
+
+
+
 --- here, we temprorily only consider the file data is passed wholly by zeromq
 -- and save by bamboo
 -- @field t.req 
@@ -38,12 +49,9 @@ end
 -- 
 local function savefile(t)
 	local req, file_obj = t.req, t.file_obj
-	local monserver_dir = bamboo.config.monserver_dir
-	local project_name = bamboo.config.project_name
-	assert(monserver_dir)
-	assert(project_name)
-	local dest_dir = (t.dest_dir and monserver_dir + '/sites/' + project_name + '/uploads/' + t.dest_dir)
+	local dest_dir = t.dest_dir and absoluteDirPrefix() + t.dest_dir
 	dest_dir = string.trailingPath(dest_dir)
+--	print(dest_dir)
 	local url_prefix = 'media/uploads/' + t.dest_dir + '/'
 	url_prefix = string.trailingPath(url_prefix)
 	local prefix = t.prefix or ''
@@ -179,6 +187,10 @@ local Upload = Model:extend {
 	
 	calcNewFilename = function (self, dest_dir, oldname)
 		return calcNewFilename(dest_dir, oldname)
+	end;
+	
+	absoluteDirPrefix = function (self)
+		return absoluteDirPrefix()
 	end;
 	
 	-- this function, encorage override by child model, to execute their own delete action
