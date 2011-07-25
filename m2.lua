@@ -17,9 +17,8 @@ function findHandler(m2conf, route, host_name)
     return nil
 end
 
-------------------------------------------------------------------------
--- 从Mongrel2的配置文件中加载handler（处理子）的配置
--- @return 返回cookie id，也即session id值
+--- load configuration from mongrel2's config.sqlite
+-- 
 ------------------------------------------------------------------------
 function loadConfig(config)
     local m2conf = assert(mconfig.read(config.config_db),
@@ -31,16 +30,16 @@ function loadConfig(config)
 
     config.sub_addr = handler.send_spec
     config.pub_addr = handler.recv_spec
+
+	return config
 end
 
 
-------------------------------------------------------------------------
--- 创建一个新的连接，连接到zmq管道上。这是mongrel2-lua之上的又一层封装（mongrel2-lua对lua-zmq
--- 又做了一次封装），是bamboo Web开发框架与底层沟通的接口
--- @return 新创建的连接
+
+--- create a new connection between bamboo and mognrel2 (via zeromq)
+-- @return conn: new created connection
 ------------------------------------------------------------------------
 function connect(config)
-    -- 如果存在非默认目录的全局应用路径，则对之前定义的zmp信息通道的路径做相应修改
     local sub_addr, pub_addr = config.sub_addr, config.pub_addr
     print("CONNECTING", config.route, config.sender_id, sub_addr, pub_addr)
   

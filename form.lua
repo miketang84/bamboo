@@ -11,11 +11,10 @@ local MULTIPART_ENCODED_FORM = 'multipart/form-data'
 
 
 
-------------------------------------------------------------------------
--- 解析HTTP头的字符串，返回解析后的table字典表
--- @param head		原始的HTTP header字符串
--- @return result	table字典，head头信息
-------------------------------------------------------------------------
+
+--- parse http headers, transform it to lua table
+-- @param head:	original HTTP header string
+-- @return result: lua table
 local parseHeaders = function (head)
     local result = {}
     head = ('%s\r\n'):format(head)
@@ -27,34 +26,32 @@ local parseHeaders = function (head)
     return result
 end;
 
-------------------------------------------------------------------------
--- 解析HTTP头的字符串，返回解析后的table字典表
--- @param body		原始的HTTP body字符串（注，这个body中包含头信息，详见http协议）
--- @param params	不同部分之间分隔字符串
--- @return result	table字典，head头信息
-------------------------------------------------------------------------
-local extractMultiparts = function (body, params)
-    -- 目前非常简单，需要整个文件都加载到内存中去
-    params = ('%s;'):format(params)
-    local boundary = ('%%-%%-%s'):format(params:match('^.*boundary=(.-);.*$'):gsub('%-', '%%-'))
+
+--- parse multipart form string format
+-- now it's very simple, load whole file into memory
+-- @param body:		original HTTP body string
+-- @param sepstr:	
+-- @return result:	
+local extractMultiparts = function (body, sepstr)
+    sepstr = ('%s;'):format(sepstr)
+    local boundary = ('%%-%%-%s'):format(sepstr:match('^.*boundary=(.-);.*$'):gsub('%-', '%%-'))
     local results = {}
 
-    -- body的不同的part之间以boundary分隔，遍历所有parts
+    -- body use boundary to seperate each part，iterate them
     for part in body:gmatch(('(.-)%s'):format(boundary)) do
-        -- 每一个part中，head和piece之间用两个\r\n分隔，piece之后有一个\r\n
+        -- in every part, head and piece are divided by two '\r\n'，piece has one '\r\n' followed it
         local head, piece = part:match('^(.-)\r\n\r\n(.*)\r\n$')
 
         if head then
-            -- 执行下面的函数之前，head是字符串，执行后，head是table
             head = parseHeaders(head)
 
             local cdisp = head['content-disposition']
             if cdisp and cdisp.name and cdisp[1] == 'form-data' and not head['content-type'] then
-                -- 存储form中有名字的变量值，为一个dict
+                -- store named variable in form，as a dict
                 results[cdisp.name:match('"(.-)"')] = piece
             else
                 head.body = piece
-                -- 存储form中无名字的变量值，为一个list
+                -- store none named variable in form, as a list
                 results[#results + 1] = head
             end
         end
@@ -64,55 +61,41 @@ local extractMultiparts = function (body, params)
 end;
 
 
--- Form类定义
 local Form = Object:extend {
     __tag = 'Bamboo.Form';
     
-    ------------------------------------------------------------------------
-    -- 处理请求中的表单内容，不是很完备
-    -- @param req		请求对象
-    -- @return result	table字典，head头信息
-    ------------------------------------------------------------------------
     parse = function (self, req)
         I_AM_CLASS(self)
         local headers = req.headers
         local params = {}
 
         if headers.METHOD == 'GET' then
-            -- headers.QUERY是请求参数字符串，跟在url后面的
             if headers.QUERY then
-                -- params中存储的就是解析后的参数字典
+                -- params is the dictory of query
                 params = http.parseURL(headers.QUERY)
             end
         elseif headers.METHOD == 'POST' then
             local ctype = headers['content-type'] or ""
             local encoding, encparams = ctype:match(ENCODING_MATCH)
-            encoding = encoding:lower()
+            if encoding then encoding = encoding:lower() end
 
             if encoding == URL_ENCODED_FORM then
                 if req.body then
-                    -- POST上传的参数是写在body中的
+                    -- POST data is placed in body
                     params = http.parseURL(req.body)
                 end
             elseif encoding == MULTIPART_ENCODED_FORM then
                 params = extractMultiparts(req.body, encparams)
                 params.multipart = true
             else
-                error(("POST RECEIVED BUT NO CONTENT TYPE WE UNDERSTAND: %s."):format(ctype))
+                print(("POST RECEIVED BUT NO CONTENT TYPE WE UNDERSTAND: %s."):format(ctype))
             end
         end
         
-        -- params此时已经包含从提交的form中的数据
-        params.__session = req.session_id
 
         return params
     end;
 
-    
-    -- 当使用Html5 POST上传时，Upload:process过程不会顾虑到放在URL中的query参数，
-	-- 这个时候，就调用这个函数来获取这些额外参数
-	-- 上传的时候，不应该调用 Form:parse() 函数来处理文件，而应该使用
-	-- process和getURLParams两个函数来获取
 	-- deprecated
 	parseQuery = function (self, req)
 		I_AM_CLASS(self)
@@ -124,7 +107,6 @@ local Form = Object:extend {
 	end;
 
     
-    -- 对form中的数据进行编码，一般用在testing中
     encode = function (self, data, sep)
         I_AM_CLASS(self)
         local result = {}

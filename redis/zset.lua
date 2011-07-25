@@ -29,11 +29,17 @@ function add( key, val )
 	local score = db:zscore(key, val)
 	-- is exist, do nothing, else redis will update the score of val
 	if score then return nil end
+	
 	-- get the current element in zset
 	local n = db:zcard(key)
-	-- give the new added element score n+1
-	db:zadd(key, n + 1, val)
-	
+	if n == 0 then
+		db:zadd(key, 1, val)
+	else
+		local lastscore = db:zrange(key, -1, -1, 'withscores')[1][2]
+		-- give the new added element score n+1
+		db:zadd(key, lastscore + 1, val)
+	end	
+
 	-- return the score 
 	return db:zscore(key, val)
 end

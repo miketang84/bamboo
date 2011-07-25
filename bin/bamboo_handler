@@ -187,11 +187,7 @@ end
 --	return STATE
 -- end
 
--- STATE是一个二组数组。第一维是path，即URL PATH部分，第二维是conn_id
 -- local STATE = createStateRecorder(setmetatable({}, {__mode="k"}), MappingTableConcrete)
-
-
-
 
 
 
@@ -224,36 +220,20 @@ local function execState(state, req, before, after, action_func)
     return good, err
 end
 
-------------------------------------------------------------------------
--- 状态编程。状态编程的控制函数。
--- @param main		由上层开发人员写的handler的主函数
--- @param conn  	连接对象
--- @param req	请求对象
--- @param conn_id	连接id（是cookie唯一编号吗？）
--- @param before	执行对象操作函数前的处理函数，由外部传入
--- @param after		执行对象操作函数后的处理函数，由外部传入
--- @return 无
-------------------------------------------------------------------------
 --[[
 local function runCoro(conn, main, req, conn_id, path, before, after)
-    -- 进入这个函数，意味着客户端发送了一个数据过来
-	-- 从状态机中获得一个状态
     local state = STATE and STATE[path] and STATE[path][conn_id]
     local good, err
 
-    -- 如果客户端是第一次发送数据过来，那么新创建一个状态（在这个状态中创建了一个协程）
     if not state then
-		-- 创建一个Web对象实例，命名为state
         state = Web(conn, main, req, true)
 		_G['web'] = state
-        -- 在状态机中记录下这个对象实例，以连接编码为key
 		STATE[path] = {}
 		STATE[path][conn_id] = state
         good, err = execState(state, req, before, after,
             function (s, r)
                 return coroutine.resume(state.controller, state, req) 
             end)
-    -- 如果客户端不是第一次发送数据过来，就直接唤醒
 	else
         state.req = req
 
@@ -263,14 +243,11 @@ local function runCoro(conn, main, req, conn_id, path, before, after)
             end)
     end
 
-	-- 如果在执行的过程中出现了错误，就通过返回错误页面报错
     if not good and err then
         errors.reportError(conn, req, err, state)
     end
 
-    -- 如果主函数已经完成或执行过程中出了错误，那么结束对客户端连接的跟踪
     if not good or coroutine.status(state.controller) == "dead" then
-        -- 将客户端从状态集中清除即是
 		STATE[path][conn_id] = nil
 		STATE[path] = nil
     end
@@ -444,6 +421,7 @@ local function start(config)
 end
 
 collectConfig(config)
+bamboo.config = config
 bamboo.EXPORT_FOR_TESTING = {
 	config = config,
 	run = run,
