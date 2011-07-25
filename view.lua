@@ -208,20 +208,42 @@ local View = Object:extend {
     compileView = function (tmpl, name)
         local tmpl = ('%s{}'):format(tmpl)
         local code = {'local _result, _children = {}, {}\n'}
+		local loc_b, loc_e = 1, 1
+		local text, block
+		-- :gsub("", ''):gsub("%<style%>.-%</style%>", '')
+		
+		loc_b, loc_e, script_snippet  = tmpl:find("(%<script *[%w=\'\"]*%>.-%</script%>)", loc_e)
 
-        for text, block in tmpl:gmatch("([^{]-)(%b{})") do
-            local act = VIEW_ACTIONS[block:sub(1,2)]
+		while true do
+			loc_b, loc_e, text, block = tmpl:find("([^{]-)(%b{})", loc_e)
+			if not loc_b then break end
+			
+			local script_b, script_e, script_tag = tmpl:find("%<(/?script)[ %w=\'\"]*%>", loc_e)
+			
+			if script_b and script_tag == '/script' then
+				-- skip the <script> part
+				loc_e = script_e + 1
+			else
+				local css_b, css_e, css_tag = tmpl:find("%<(/?style)%>", loc_e)
+				if css_b and css_tag == '/style' then
+					-- skip the <style> part
+					loc_e = css_e + 1
+				else
+					local act = VIEW_ACTIONS[block:sub(1,2)]
 
-            if act then
-                code[#code+1] =  '_result[#_result+1] = [[' + text + ']]'
-                code[#code+1] = act(block:sub(3,-3))
-            elseif #block > 2 then
-                code[#code+1] = '_result[#_result+1] = [[' + text + block + ']]'
-            else
-                code[#code+1] =  '_result[#_result+1] = [[' + text + ']]'
-            end
-        end
-
+					if act then
+						code[#code+1] =  '_result[#_result+1] = [[' + text + ']]'
+						code[#code+1] = act(block:sub(3,-3))
+					elseif #block > 2 then
+						code[#code+1] = '_result[#_result+1] = [[' + text + block + ']]'
+					else
+						code[#code+1] =  '_result[#_result+1] = [[' + text + ']]'
+					end
+				end
+			end
+			
+		end
+		
         code[#code+1] = 'return table.concat(_result)'
 
         code = table.concat(code, '\n')
