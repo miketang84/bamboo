@@ -11,6 +11,10 @@ local Form = require 'bamboo.form'
 local function calcNewFilename(dest_dir, oldname)
 	-- separate the base name and extense name of a filename
 	local main, ext = oldname:match('^(.+)(%.%w+)$')
+	if not ext then 
+		main = oldname
+		ext = ''
+	end
 	-- check if exists the same name file
 	local tstr = ''
 	local i = 0
