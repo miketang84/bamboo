@@ -34,7 +34,7 @@ local function absoluteDirPrefix()
 	local project_name = bamboo.config.project_name
 	assert(monserver_dir)
 	assert(project_name)
-	return  monserver_dir + '/sites/' + project_name + '/uploads/'
+	return  string.trailingPath(monserver_dir + '/sites/' + project_name + '/uploads/')
 end
 
 
@@ -106,6 +106,7 @@ local Upload = Model:extend {
 	__fields = {
 		['name'] = {},
 		['path'] = {},
+		['absolute_path'] = {},
 		['size'] = {},
 		['timestamp'] = {},
 		['desc'] = {},
@@ -117,6 +118,7 @@ local Upload = Model:extend {
 		
 		self.name = t.name or self.name
 		self.path = t.url_path
+		self.absolute_path = t.path
 		self.size = posix.stat(t.path).size
 		self.timestamp = os.time()
 		-- according the current design, desc field is nil
