@@ -134,10 +134,10 @@ local Upload = Model:extend {
 		local file_objs = List()
 		-- file data are stored as arraies in params
 		for i, v in ipairs(params) do
-			local path, name, url_path = savefile { req = req, file_obj = v, dest_dir = dest_dir, prefix = prefix, postfix = postfix }
-			if not path or not name then return nil end
+			local disk_path, name, url_path = savefile { req = req, file_obj = v, dest_dir = dest_dir, prefix = prefix, postfix = postfix }
+			if not disk_path or not name then return nil end
 			-- create file instance
-			local file_instance = self { name = name, path = path, url_path = url_path }
+			local file_instance = self { name = name, disk_path = disk_path, url_path = url_path }
 			if file_instance then
 				-- store to db
 				file_instance:save()
@@ -163,10 +163,10 @@ local Upload = Model:extend {
 	    -- if upload in html5 way
 	    if req.headers['x-requested-with'] then
 			-- stored to disk
-			local path, name, url_path = savefile { req = req, dest_dir = dest_dir, prefix = prefix, postfix = postfix }    
-			if not path or not name then return nil, '[ERROR] empty file.' end
+			local disk_path, name, url_path = savefile { req = req, dest_dir = dest_dir, prefix = prefix, postfix = postfix }    
+			if not disk_path or not name then return nil, '[ERROR] empty file.' end
 			
-			local file_instance = self { name = name, path = path, url_path = url_path }
+			local file_instance = self { name = name, disk_path = disk_path, url_path = url_path }
 			if file_instance then
 				file_instance:save()
 				return file_instance, 'single'
@@ -199,7 +199,7 @@ local Upload = Model:extend {
 	specDelete = function (self)
 		I_AM_INSTANCE()
 		-- remove file from disk
-		os.execute('mkdir -p ' + self.path)
+		os.execute('rm ' + self.absolute_path)
 		return self
 	end;
 	
