@@ -86,15 +86,15 @@ local function savefile(t)
 	local newbasename, ext = calcNewFilename(dest_dir, filename)
 
 	local newname = prefix + newbasename + postfix + ext
-	local disk_path = dest_dir + newname
+	local absolute_path = dest_dir + newname
 	local url_path = url_prefix + newname
 
 	-- write file to disk
-	local fd = io.open(disk_path, "wb")
+	local fd = io.open(absolute_path, "wb")
 	fd:write(body)
 	fd:close()
 	
-	return disk_path, newname, url_path
+	return absolute_path, newname, url_path
 end
 
 
@@ -118,8 +118,8 @@ local Upload = Model:extend {
 		
 		self.name = t.name or self.name
 		self.path = t.url_path
-		self.absolute_path = t.disk_path
-		self.size = posix.stat(t.disk_path).size
+		self.absolute_path = t.absolute_path
+		self.size = posix.stat(t.absolute_path).size
 		self.timestamp = os.time()
 		-- according the current design, desc field is nil
 		self.desc = t.desc or ''
@@ -134,10 +134,10 @@ local Upload = Model:extend {
 		local file_objs = List()
 		-- file data are stored as arraies in params
 		for i, v in ipairs(params) do
-			local disk_path, name, url_path = savefile { req = req, file_obj = v, dest_dir = dest_dir, prefix = prefix, postfix = postfix }
-			if not disk_path or not name then return nil end
+			local absolute_path, name, url_path = savefile { req = req, file_obj = v, dest_dir = dest_dir, prefix = prefix, postfix = postfix }
+			if not absolute_path or not name then return nil end
 			-- create file instance
-			local file_instance = self { name = name, disk_path = disk_path, url_path = url_path }
+			local file_instance = self { name = name, absolute_path = absolute_path, url_path = url_path }
 			if file_instance then
 				-- store to db
 				file_instance:save()
@@ -163,10 +163,10 @@ local Upload = Model:extend {
 	    -- if upload in html5 way
 	    if req.headers['x-requested-with'] then
 			-- stored to disk
-			local disk_path, name, url_path = savefile { req = req, dest_dir = dest_dir, prefix = prefix, postfix = postfix }    
-			if not disk_path or not name then return nil, '[ERROR] empty file.' end
+			local absolute_path, name, url_path = savefile { req = req, dest_dir = dest_dir, prefix = prefix, postfix = postfix }    
+			if not absolute_path or not name then return nil, '[ERROR] empty file.' end
 			
-			local file_instance = self { name = name, disk_path = disk_path, url_path = url_path }
+			local file_instance = self { name = name, absolute_path = absolute_path, url_path = url_path }
 			if file_instance then
 				file_instance:save()
 				return file_instance, 'single'
