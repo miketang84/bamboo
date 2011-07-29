@@ -270,11 +270,9 @@ COMMANDS = {
 		-- create media directory and copy files to it
         local mediadir = ('%s/sites/%s'):format(monserver_dir, appname)
         os.execute(('mkdir -p %s'):format(mediadir))
-        local cmdstr = ('cp -rf %s/cmd_tmpls/media/*  %s/'):format(bamboo_dir, mediadir)
-        os.execute(cmdstr)
 
-        -- make link
-        -- os.execute(('ln -sdf %s %s/media'):format(mediadir, appname))        
+        -- do mount --bind
+        os.execute(('mount -B %s/media %s'):format(appname, mediadir))        
 
         -- modify the md5 string in appname/app/settings.lua
         local fd = io.open(('%s/settings.lua'):format(appname), 'r')
