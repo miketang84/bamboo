@@ -8,7 +8,7 @@ local Form = require 'bamboo.form'
 
 
 
-local function calcNewFilename(dest_dir, oldname)
+local function calcNewFilename(absolute_dir, oldname)
 	-- separate the base name and extense name of a filename
 	local main, ext = oldname:match('^(.+)(%.%w+)$')
 	if not ext then 
@@ -18,7 +18,7 @@ local function calcNewFilename(dest_dir, oldname)
 	-- check if exists the same name file
 	local tstr = ''
 	local i = 0
-	while posix.stat( dest_dir + main + tstr + ext ) do
+	while posix.stat( absolute_dir + main + tstr + ext ) do
 		i = i + 1
 		tstr = '_' + tostring(i)
 	end
@@ -27,6 +27,17 @@ local function calcNewFilename(dest_dir, oldname)
 
 	return newbasename, ext
 end
+
+
+local function absoluteDirPrefix()
+	local monserver_dir = bamboo.config.monserver_dir
+	local project_name = bamboo.config.project_name
+	assert(monserver_dir)
+	assert(project_name)
+	return  string.trailingPath(monserver_dir + '/sites/' + project_name + '/uploads/')
+end
+
+
 
 --- here, we temprorily only consider the file data is passed wholly by zeromq
 -- and save by bamboo
@@ -38,14 +49,12 @@ end
 -- 
 local function savefile(t)
 	local req, file_obj = t.req, t.file_obj
-	local monserver_dir = bamboo.config.monserver_dir
-	local project_name = bamboo.config.project_name
-	assert(monserver_dir)
-	assert(project_name)
-	local dest_dir = (t.dest_dir and monserver_dir + '/sites/' + project_name + '/uploads/' + t.dest_dir)
-	dest_dir = string.trailingPath(dest_dir)
-	local url_prefix = 'media/uploads/' + t.dest_dir + '/'
-	url_prefix = string.trailingPath(url_prefix)
+	t.dest_dir = string.trailingPath(t.dest_dir and (t.dest_dir + '/') or '')
+
+	local absolute_dir = absoluteDirPrefix() + t.dest_dir
+	absolute_dir = string.trailingPath(absolute_dir)
+
+	local url_prefix = 'media/uploads/'
 	local prefix = t.prefix or ''
 	local postfix = t.postfix or ''
 	local filename = ''
@@ -70,23 +79,26 @@ local function savefile(t)
 	end
 	if isFalse(filename) or isFalse(body) then return nil, nil end
 	
-	if not posix.stat(dest_dir) then
+	if not posix.stat(absolute_dir) then
 		-- why posix have no command like " mkdir -p "
-		os.execute('mkdir -p ' + dest_dir)
+		os.execute('mkdir -p ' + absolute_dir)
 	end
 
-	local newbasename, ext = calcNewFilename(dest_dir, filename)
-
+	local newbasename, ext = calcNewFilename(absolute_dir, filename)
 	local newname = prefix + newbasename + postfix + ext
-	local disk_path = dest_dir + newname
-	local url_path = url_prefix + newname
+	
+	-- xxxx
+	local path = t.dest_dir + newname
+	local url_path = url_prefix + path
+	local absolute_path = absolute_dir + newname
+
 
 	-- write file to disk
-	local fd = io.open(disk_path, "wb")
+	local fd = io.open(absolute_path, "wb")
 	fd:write(body)
 	fd:close()
 	
-	return disk_path, newname, url_path
+	return newname, path, url_path, absolute_path
 end
 
 
@@ -98,6 +110,8 @@ local Upload = Model:extend {
 	__fields = {
 		['name'] = {},
 		['path'] = {},
+		['url_path'] = {},
+		['absolute_path'] = {},
 		['size'] = {},
 		['timestamp'] = {},
 		['desc'] = {},
@@ -108,8 +122,10 @@ local Upload = Model:extend {
 		if not t then return self end
 		
 		self.name = t.name or self.name
-		self.path = t.url_path
-		self.size = posix.stat(t.path).size
+		self.path = t.path
+		self.url_path = 'media/uploads/' + t.path
+		self.absolute_path = absoluteDirPrefix() + t.path
+		self.size = posix.stat(self.absolute_path).size
 		self.timestamp = os.time()
 		-- according the current design, desc field is nil
 		self.desc = t.desc or ''
@@ -124,10 +140,10 @@ local Upload = Model:extend {
 		local file_objs = List()
 		-- file data are stored as arraies in params
 		for i, v in ipairs(params) do
-			local path, name, url_path = savefile { req = req, file_obj = v, dest_dir = dest_dir, prefix = prefix, postfix = postfix }
-			if not path or not name then return nil end
+			local name, path, url_path, absolute_path = savefile { req = req, file_obj = v, dest_dir = dest_dir, prefix = prefix, postfix = postfix }
+			if not absolute_path or not name then return nil end
 			-- create file instance
-			local file_instance = self { name = name, path = path, url_path = url_path }
+			local file_instance = self { name = name, path = path }
 			if file_instance then
 				-- store to db
 				file_instance:save()
@@ -153,10 +169,10 @@ local Upload = Model:extend {
 	    -- if upload in html5 way
 	    if req.headers['x-requested-with'] then
 			-- stored to disk
-			local path, name, url_path = savefile { req = req, dest_dir = dest_dir, prefix = prefix, postfix = postfix }    
-			if not path or not name then return nil, '[ERROR] empty file.' end
+			local name, path, url_path, absolute_path = savefile { req = req, dest_dir = dest_dir, prefix = prefix, postfix = postfix }    
+			if not absolute_path or not name then return nil, '[ERROR] empty file.' end
 			
-			local file_instance = self { name = name, path = path, url_path = url_path }
+			local file_instance = self { name = name, path = path }
 			if file_instance then
 				file_instance:save()
 				return file_instance, 'single'
@@ -181,11 +197,15 @@ local Upload = Model:extend {
 		return calcNewFilename(dest_dir, oldname)
 	end;
 	
+	absoluteDirPrefix = function (self)
+		return absoluteDirPrefix()
+	end;
+	
 	-- this function, encorage override by child model, to execute their own delete action
 	specDelete = function (self)
 		I_AM_INSTANCE()
 		-- remove file from disk
-		os.execute('mkdir -p ' + self.path)
+		os.execute('rm ' + self.absolute_path)
 		return self
 	end;
 	
