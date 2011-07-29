@@ -118,8 +118,8 @@ local Upload = Model:extend {
 		
 		self.name = t.name or self.name
 		self.path = t.url_path
-		self.absolute_path = t.path
-		self.size = posix.stat(t.path).size
+		self.absolute_path = t.disk_path
+		self.size = posix.stat(t.disk_path).size
 		self.timestamp = os.time()
 		-- according the current design, desc field is nil
 		self.desc = t.desc or ''
