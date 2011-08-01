@@ -1414,6 +1414,13 @@ Model = Object:extend {
 		end
 	end;
 
+	--- return the class name of an instance
+	class = function (self)
+		I_AM_INSTANCE(self)
+		
+		return getClassName(self)
+	end;
+
 	--- return the field description table
 	-- if have, return table
 	-- if no, return nil
@@ -1422,7 +1429,7 @@ Model = Object:extend {
 		
 		return self.__fields[field]
 	end;
-
+	
 }
 
 
