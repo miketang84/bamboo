@@ -111,11 +111,13 @@ local Session = Object:extend {
 
         local session = db:hgetall(session_key)
         -- in session, we could not use User model to record something,
-		-- because session is lower api, and sholdn't be limited as User model
+		-- because session is lower api, and shouldn't be limited as User model
         if session['user_id'] then
-            local id = session['user_id']
-            -- here，req.user is not a true uesr object, it is only a table
-            req['user'] = db:hgetall('User:' + id)
+            local user_id = session['user_id']
+            local model_name, id = user_id:match('^(%w+):(%d+)$')
+            local model = bamboo.getModelByName(model_name)
+            -- get the real user instance, assign it to req.user
+            req['user'] = model:getById(id)
         end
 
         db:expire(session_key, SMALL_EXPIRE_TIME)

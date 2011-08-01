@@ -1415,8 +1415,8 @@ Model = Object:extend {
 	end;
 
 	--- return the class name of an instance
-	class = function (self)
-		I_AM_INSTANCE(self)
+	classname = function (self)
+		-- I_AM_INSTANCE(self)
 		
 		return getClassName(self)
 	end;

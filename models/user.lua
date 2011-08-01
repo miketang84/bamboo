@@ -58,7 +58,7 @@ local User = Model:extend {
 		local authed, user = self:authenticate(params)
 		if not authed then return nil end
 
-		Session:setKey('user_id', user.id)
+		Session:setKey('user_id', self:classname() + ':' + user.id)
 		return user
 	end;
 	
