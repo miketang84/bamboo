@@ -15,6 +15,7 @@ local User = Model:extend {
 		['username'] = { required=true },
 		['password'] = { required=true },
 		['email'] = { required=true },
+		['forwhat'] = {},
 		['is_manager'] = {},
 		['is_active'] = {},	
 		['created_date'] = {},
