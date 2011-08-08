@@ -115,7 +115,9 @@ local Session = Object:extend {
         if session['user_id'] then
             local user_id = session['user_id']
             local model_name, id = user_id:match('^(%w+):(%d+)$')
+            assert(model_name and id, "[ERROR] Session user_id format is not right.")
             local model = bamboo.getModelByName(model_name)
+            assert(model, "[ERROR] This user model doesn't registerd.")
             -- get the real user instance, assign it to req.user
             req['user'] = model:getById(id)
         end
