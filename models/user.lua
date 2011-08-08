@@ -15,6 +15,7 @@ local User = Model:extend {
 		['username'] = { required=true },
 		['password'] = { required=true },
 		['email'] = { required=true },
+		['forwhat'] = {},
 		['is_manager'] = {},
 		['is_active'] = {},	
 		['created_date'] = {},
@@ -58,7 +59,7 @@ local User = Model:extend {
 		local authed, user = self:authenticate(params)
 		if not authed then return nil end
 
-		Session:setKey('user_id', user.id)
+		Session:setKey('user_id', self:classname() + ':' + user.id)
 		return user
 	end;
 	

@@ -211,6 +211,19 @@ COMMANDS = {
     end,
 
     start = function(settings)
+		local appname = config.project_name
+       
+		local fd = io.popen('mount', 'r')
+		local content = fd:read('*a')
+		fd:close()
+
+		local matched = content:match(("media on %ssites/%s type none"):format(monserver_dir, appname))
+		if not matched then
+			-- mount it
+			local cmdstr = ("mount -B media  %ssites/%s"):format(monserver_dir, appname)
+			os.execute(cmdstr)
+		end
+
         --for i,v in pairs(settings) do print(i,v) end
         -- here, app is a directory pattern string, for glob
         local app_dir = settings.app or './'
@@ -270,11 +283,9 @@ COMMANDS = {
 		-- create media directory and copy files to it
         local mediadir = ('%s/sites/%s'):format(monserver_dir, appname)
         os.execute(('mkdir -p %s'):format(mediadir))
-        local cmdstr = ('cp -rf %s/cmd_tmpls/media/*  %s/'):format(bamboo_dir, mediadir)
-        os.execute(cmdstr)
 
-        -- make link
-        -- os.execute(('ln -sdf %s %s/media'):format(mediadir, appname))        
+        -- do mount --bind
+        os.execute(('mount -B %s/media %s'):format(appname, mediadir))        
 
         -- modify the md5 string in appname/app/settings.lua
         local fd = io.open(('%s/settings.lua'):format(appname), 'r')

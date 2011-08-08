@@ -94,7 +94,8 @@ local VIEW_ACTIONS = {
         for block in new_page:gmatch("({%[[%s_%w%.%-\'\"]+%]})") do
             -- remove the outer tags
             local block_content = block:sub(3, -3):trim()
-            local this_part = this_page:match('{%[%s*======*%s*' + block_content + '%s*======*%s+(.+)%s*%]}')
+            local this_part = this_page:match('{%[%s*======*%s*' + block_content +
+            '%s*======*%s+(.-)%s*%]}')
 
             if this_part then
 
