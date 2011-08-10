@@ -4,6 +4,7 @@ require 'posix'
 require 'signal'
 require 'bamboo'
 require 'redis'
+local mconfig = require 'mongrel2.config'
 
         
 local env = {}
@@ -20,10 +21,12 @@ end)
 ------------------------------------------------------------------------------
 -- load configuration
 local config = {}
--- only support boot in app directory
-local setting_file = loadfile('settings.lua') or loadfile('../settings.lua')
-if not setting_file then
-	print [[
+
+local function readSettings()
+	-- only support boot in app directory
+	local setting_file = loadfile('settings.lua') or loadfile('../settings.lua')
+	if not setting_file then
+		print [[
 [Warning] You should make sure the existance of settings.lua in your workspace!
 
 The content of the settings.lua can be like following, 
@@ -33,29 +36,29 @@ copy them to your 'settings.lua' file, if it doesn't exist, create it:
 monserver_dir = "$your_mongrel2_server's_directory"
 bamboo_dir = "$the_directory_bamboo_installed"
 ------------------------------------------------------
-	]]
+]]
 
-	os.exit()
-end
-setfenv(assert(setting_file), config)()
-local bamboo_dir = config.bamboo_dir or '/usr/local/share/lua/5.1/bamboo/'
-local monserver_dir = config.monserver_dir or '/root/workspace/monserver/'
+		os.exit()
+	end
+	setfenv(assert(setting_file), config)()
+	config.bamboo_dir = config.bamboo_dir or '/usr/local/share/lua/5.1/bamboo/'
+	config.monserver_dir = config.monserver_dir or '/root/workspace/monserver/'
 
-if monserver_dir == "$your_mongrel2_server's_directory" 
-or bamboo_dir == "$the_directory_bamboo_installed" 
-then
-	print [[
+	if config.monserver_dir == "$your_mongrel2_server's_directory" 
+	or config.bamboo_dir == "$the_directory_bamboo_installed" 
+	then
+		print [[
 [ERROR] You should make sure the validation of the bamboo_dir and monserver_dir!
 
 Change the value of them like following:
 	bamboo_dir = "/usr/local/share/lua/5.1/bamboo/"
 	monserver_dir = "/root/workspace/monserver/"
+]]
 
-	]]
+		os.exit()
+	end
 
-	os.exit()
 end
-
 ------------------------------------------------------------------------------
 --
 function parse_args(arg)
@@ -211,7 +214,9 @@ COMMANDS = {
     end,
 
     start = function(settings)
+		readSettings()
 		local appname = config.project_name
+		local monserver_dir = config.monserver_dir
        
 		local fd = io.popen('mount', 'r')
 		local content = fd:read('*a')
@@ -271,6 +276,9 @@ COMMANDS = {
     
     createapp = function(settings)
         local appname = settings[1] or 'bambooapp'
+		readSettings()
+		local monserver_dir = config.monserver_dir
+		local bamboo_dir = config.bamboo_dir
 
 		-- create directory
         assert(posix.stat(appname) == nil, '[Error] Some file or directory of this name exists！')
@@ -310,8 +318,10 @@ monserver_dir = "%s"
     
     createplugin = function(settings)
         local plugin_name = settings[1] or 'bambooplugin'
-        
+   		readSettings()
         local appname = config.project_name
+		local monserver_dir = config.monserver_dir
+		local bamboo_dir = config.bamboo_dir
         
         -- create dir
         assert(posix.stat(plugin_name) == nil, '[Error] Some file or directory has this name already！')
@@ -333,6 +343,8 @@ monserver_dir = "%s"
     
     createmodel = function(settings)
         local model_name = settings[1] or 'bamboomodel'
+   		readSettings()
+		local bamboo_dir = config.bamboo_dir
         
         local newfile = ('./%s.lua'):format(model_name:lower())
         local cmdstr = ('cp -rf %s/cmd_tmpls/createmodel/newmodel.lua %s'):format(bamboo_dir, newfile)
@@ -358,10 +370,10 @@ monserver_dir = "%s"
         assert(env['DATA'], '[ERROR] There must be DATA variable in initial data file.')
 
         local params = {
-            host = env.DB_HOST or settings.DB_HOST or '127.0.0.1',
-            port = env.DB_PORT or settings.DB_PORT or 6379,
+            host = env.DB_HOST or settings.db_host or '127.0.0.1',
+            port = env.DB_PORT or settings.db_port or 6379,
         }
-        local which = env.WHICH_DB or settings.WHICH_DB or 0
+        local which = env.WHICH_DB or settings.which_db or 0
 
         local redis_db = Redis.connect(params)
         redis_db:select(which)
@@ -414,10 +426,10 @@ monserver_dir = "%s"
         assert(env['DATA'], '[ERROR] There must be DATA variable in initial data file.')
 
         local params = {
-            host = env.DB_HOST or settings.DB_HOST or '127.0.0.1',
-            port = env.DB_PORT or settings.DB_PORT or 6379,
+            host = env.DB_HOST or settings.db_host or '127.0.0.1',
+            port = env.DB_PORT or settings.db_port or 6379,
         }
-        local which = env.WHICH_DB or settings.WHICH_DB or 0
+        local which = env.WHICH_DB or settings.which_db or 0
 
         local redis_db = Redis.connect(params)
         redis_db:select(which)
@@ -462,10 +474,10 @@ monserver_dir = "%s"
 		assert(model_name, '[ERROR] model_name must be specified!')
         
         local params = {
-            host = settings.DB_HOST or '127.0.0.1',
-            port = settings.DB_PORT or 6379,
+            host = settings.db_host or '127.0.0.1',
+            port = settings.db_port or 6379,
         }
-        local which = settings.WHICH_DB or 0
+        local which = settings.which_db or 0
 
         local redis_db = Redis.connect(params)
         redis_db:select(which)
@@ -480,15 +492,88 @@ monserver_dir = "%s"
     end;
 
     shell = function (settings)
+   		readSettings()
+		local bamboo_dir = config.bamboo_dir
+
 		local shell_file = bamboo_dir + '/bin/shell.lua'
-		local host = settings.DB_HOST or '127.0.0.1'
-        local port = settings.DB_PORT or 6379
-        local which = settings.WHICH_DB or 0
+		local host = settings.db_host or config.DB_HOST or '127.0.0.1'
+        local port = settings.db_port or config.DB_PORT or 6379
+        local which = settings.which_db or config.WHICH_DB or 0
 		
         os.execute('lua -i ' + shell_file + (' %s %s %s'):format(host, port, which))
 
         print('Return.')
 		
+    end;
+    
+	startserver = function (settings)
+		local servername = settings[1]
+		local config_db = settings.db or 'conf/config.sqlite'
+		local m2conf = assert(mconfig.read(config_db),
+					"Failed to load the mongrel2 config: " .. config_db) 
+		
+		if not servername then
+			print("You can start the following servers:")
+			print('', 'all')
+			for _, server in ipairs(m2conf.servers) do
+				print('', server.name)
+			end
+		elseif servername == 'all' then
+			print("================== Ready to start servers ===================")
+			for _, server in ipairs(m2conf.servers) do
+				assert(server and server.name, '[ERROR] server or server.name is nil.')
+				os.execute(('m2sh start --db %s -name %s'):format(config_db, server.name))
+				print('------------------------ Successful -------------------------')
+			end
+			print("OK.")
+		else
+			print("================== Ready to start servers ===================")
+			for _, server in ipairs(m2conf.servers) do
+				if server and server.name == servername then
+					os.execute(('m2sh start --db %s -name %s'):format(config_db, server.name))
+					print('------------------------ Successful -------------------------')
+				end
+			end
+			print("OK.")
+		end
+		
+	end;
+	
+	stopserver = function (settings)
+		local servername = settings[1]
+		local config_db = settings.db or 'conf/config.sqlite'
+		local m2conf = assert(mconfig.read(config_db),
+					"Failed to load the mongrel2 config: " .. config_db) 
+					
+		if not servername then
+			print("You can stop the following servers:")
+			print('', 'all')
+			for _, server in ipairs(m2conf.servers) do
+				print('', server.name)
+			end
+		elseif servername == 'all' then
+			print("==== Ready to stop servers ====")
+			for _, server in ipairs(m2conf.servers) do
+				os.execute(('m2sh stop --db %s -name %s'):format(config_db, server.name))
+			end
+			print("OK.")
+		else
+			print("==== Ready to stop servers ====")
+			for _, server in ipairs(m2conf.servers) do
+				if server and server.name == servername then
+					os.execute(('m2sh stop --db %s -name %s'):format(config_db, server.name))
+				end
+			end
+			print("OK.")
+		end
+		
+	end;
+    
+    loadconfig = function (settings)
+		local servername = settings[1] or 'conf/mongrel2.conf'
+		local config_db = settings[2] or 'conf/config.sqlite'
+		
+		os.execute(("m2sh load -config %s -db %s"):format(servername, config_db))
     end;
     
 }

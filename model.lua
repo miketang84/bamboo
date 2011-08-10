@@ -678,7 +678,7 @@ Model = Object:extend {
 		end
 		
 		-- if query table is empty, return all instances
-		if isEmpty(query_args) then return self:all() end
+		if isFalse(query_args) then return self:all() end
 
 		-- normalize the 'and' and 'or' logic
 		local logic = 'and'
@@ -745,7 +745,7 @@ Model = Object:extend {
 			end
 			assert(not isObjEmpty(obj), "[ERROR] object must not be empty.")
 			local fields = obj.__fields
-			assert(not isEmpty(fields), "[ERROR] object's description table must not be blank.")
+			assert(not isFalse(fields), "[ERROR] object's description table must not be blank.")
 			
 			for k, v in pairs(query_args) do
 				-- to redundant query condition, once meet, jump immediately
