@@ -204,6 +204,13 @@ end
 
 
 COMMANDS = {
+    help = function(settings)
+        print("AVAILABLE COMMANDS:")
+        for k,v in pairs(COMMANDS) do
+            print(k)
+        end
+    end,
+
     test = function(settings)
         local target = settings.from or "tests"
         if not os.getenv('PROD') then
@@ -267,12 +274,38 @@ COMMANDS = {
 		end 
     end,
 
-    help = function(settings)
-        print("AVAILABLE COMMANDS:")
-        for k,v in pairs(COMMANDS) do
-            print(k)
-        end
-    end,
+    stop = function (settings)
+		local fd = io.popen('ps e|grep $(pwd)', 'r')
+		local output = fd:read("*a")
+		fd:close()
+		--print(output)
+
+		local pattern = "%s*(%d+)%s+[%w/]+%s+[%w%+]+%s+[%d:]+%s+lua%s+/usr/local/bin/bamboo[%s_]+(%w+)"
+		local flag = true
+		local findit = false
+		for pid, cmd in output:gmatch(pattern) do
+			-- print(pid, cmd)
+			if cmd == "start" or cmd == 'handler' then
+				findit = true
+				local ret = os.execute(('kill -9 %s'):format(pid))
+				if ret ~= 0 and flag == true then 
+					flag = false
+				end
+			end
+		end
+		
+		if findit then
+			if flag then
+				print("OK. I did it.")
+			else
+				print("[ERROR] Failed to stop the bamboo server for this application, you'd better use 'ps e|grep lua' to check.")
+			end
+		else
+			print('OK. No running bamboo processes for this application.')
+		end
+
+    end;
+
     
     createapp = function(settings)
         local appname = settings[1] or 'bambooapp'
@@ -575,6 +608,7 @@ monserver_dir = "%s"
 		
 		os.execute(("m2sh load -config %s -db %s"):format(servername, config_db))
     end;
+
     
 }
 
