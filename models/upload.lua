@@ -88,9 +88,10 @@ local Upload = Model:extend {
 	__tag = 'Bamboo.Model.Upload';
 	__name = 'Upload';
 	__desc = "User's upload files.";
+	__indexfd = "path";
 	__fields = {
 		['name'] = {},
-		['path'] = {},
+		['path'] = {unique=true},
 		['size'] = {},
 		['timestamp'] = {},
 		['desc'] = {},
@@ -100,7 +101,7 @@ local Upload = Model:extend {
 	init = function (self, t)
 		if not t then return self end
 		
-		self.name = t.name or self.name
+		self.name = t.name
 		self.path = t.path
 		self.size = posix.stat(self.path).size
 		self.timestamp = os.time()

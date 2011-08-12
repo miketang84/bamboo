@@ -31,6 +31,3 @@ local Image = Upload:extend {
 
 return Image
 
-
-
-
