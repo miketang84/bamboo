@@ -232,7 +232,7 @@ COMMANDS = {
 		local matched = content:match(("media on %ssites/%s type none"):format(monserver_dir, appname))
 		if not matched then
 			-- mount it
-			local cmdstr = ("mount -B media  %ssites/%s"):format(monserver_dir, appname)
+			local cmdstr = ("sudo mount -B media  %ssites/%s"):format(monserver_dir, appname)
 			os.execute(cmdstr)
 		end
 
