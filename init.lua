@@ -78,12 +78,20 @@ registerModule = function (mdl, extra_params)
 							filter_flag = true
 							-- execute all filters bound to this handler
 							for _, filter_name in ipairs(action.filters) do
-								print('--------', filter_name)
-								local filter = getFilterByName(filter_name)
+								local name_part, args_part = filter_name:trim():match("^(%w+):? *([%w ]*)")
+								local args_list = {}
+								if args_part then
+									args_list = args_part:trim():split(' +')
+								end
+								local filter = getFilterByName(name_part)
 								-- if filter is invalid, ignore it
 								if filter then 
-									local ret = filter(web, req)
-									if not ret then filter_flag = false; break end
+									local ret = filter(args_list)
+									if not ret then 
+										filter_flag = false 
+										print(("[Warning] Filter list was broken at %s"):format(filter_name))
+										break 
+									end
 								end
 							end
 							
@@ -105,10 +113,8 @@ registerModule = function (mdl, extra_params)
 				end
 			end
 			
-			print(nurl)
 			if mdl.init and type(mdl.init) == 'function' and not exclude_flag then
 				nfun = function (web, req)
-					print('====== 456')
 					local ret = mdl.init(extra_params)
 					if ret then
 						return actionTransform(web, req)(web, req)
@@ -118,7 +124,6 @@ registerModule = function (mdl, extra_params)
 					return false
 				end
 			else
-				print('======= 123')
 				nfun = actionTransform(web, req)
 			end
 

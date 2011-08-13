@@ -63,7 +63,7 @@ local WHICH_DB = config.WHICH_DB or 0
 BAMBOO_DB = redis.connect {host=DB_HOST, port=DB_PORT, which = WHICH_DB}
 
 
-
+local Model = require 'bamboo.model'
 local Web = require 'bamboo.web'
 local Session = require 'bamboo.session'
 
