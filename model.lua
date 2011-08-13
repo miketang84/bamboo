@@ -1043,6 +1043,9 @@ Model = Object:extend {
 		if isFalse(indexfd) or isFalse(self[indexfd]) then
 			db:zadd(index_key, self.id, self.id)
 		else
+			local score = db:zscore(index_key, self[indexfd])
+			-- is exist, return directely, else redis will update the score of val
+			if score then return nil end
 			db:zadd(index_key, self.id, self[indexfd])				
 		end
 
