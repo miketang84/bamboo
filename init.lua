@@ -9,8 +9,9 @@ require 'lglib'
 
 module('bamboo', package.seeall)
 
-------------------------------------------------------------------------
 URLS = {}
+
+------------------------------------------------------------------------
 PLUGIN_LIST = {}
 
 registerPlugin = function (name, mdl)
@@ -28,9 +29,7 @@ registerPlugin = function (name, mdl)
 end
 ------------------------------------------------------------------------
 
-
--- 
--- 
+MODULE_LIST = {}
 -- 
 registerModule = function (mdl, extra_params)
 	checkType(mdl, 'table')
@@ -38,14 +37,14 @@ registerModule = function (mdl, extra_params)
 	if mdl.URLS then
 		checkType(mdl.URLS, 'table')
 		
-		for url, fun in pairs(mdl.URLS) do
+		for url, action in pairs(mdl.URLS) do
 			local nurl = ''
-			if url == '/' or not url:startsWith('/') then
-				print(url)
+			if (url == '/' or not url:startsWith('/')) and mdl._NAME then
+				-- print(url)
 				-- make the relative url pattern to absolute url pattern
 				local module_name = mdl._NAME:match('%.([%w_]+)$')
 				nurl = ('/%s/%s'):format(module_name, url)
-				print(nurl)
+				-- print(nurl)
 			else
 				nurl = url
 			end
@@ -64,17 +63,63 @@ registerModule = function (mdl, extra_params)
 				end
 			end
 			
+			local function actionTransform(web, req)
+				if type(action) == 'function' then
+					return action
+				elseif type(action) == 'table' then
+					local fun = action.handler
+					checkType(fun, 'function')
+					
+					return function (web, req)
+						local filter_flag, permission_flag = true, true
+						if action.filters then
+							checkType(action.filters, 'table')
+							
+							filter_flag = true
+							-- execute all filters bound to this handler
+							for _, filter_name in ipairs(action.filters) do
+								print('--------', filter_name)
+								local filter = getFilterByName(filter_name)
+								-- if filter is invalid, ignore it
+								if filter then 
+									local ret = filter(web, req)
+									if not ret then filter_flag = false; break end
+								end
+							end
+							
+						end
+					
+						if action.perms then
+							checkType(action.perms, 'table')
+							-- TODO
+							--
+						end
+					
+						if filter_flag == true and permission_flag == true then
+							-- after execute filters and permissions check, pass here, then execute this handler
+							return fun(web, req)
+						else
+							return false
+						end
+					end
+				end
+			end
+			
+			print(nurl)
 			if mdl.init and type(mdl.init) == 'function' and not exclude_flag then
 				nfun = function (web, req)
+					print('====== 456')
 					local ret = mdl.init(extra_params)
 					if ret then
-						return fun(web, req)
+						return actionTransform(web, req)(web, req)
 					end
 					
+					-- make no sense
 					return false
 				end
 			else
-				nfun = fun
+				print('======= 123')
+				nfun = actionTransform(web, req)
 			end
 
 			URLS[nurl] = nfun
@@ -83,7 +128,7 @@ registerModule = function (mdl, extra_params)
 end
 
 ------------------------------------------------------------------------
-MODEL_MANAGEMENT = {}
+MODEL_LIST = {}
 
 local function getClassName(model)
 	return model.__tag:match('%.(%w+)$')
@@ -93,14 +138,36 @@ registerModel = function (model)
 	checkType(model, 'table')
 	assert( model.__tag, 'Registered model __tag must not be missing.' )
 	
-	MODEL_MANAGEMENT[getClassName(model)] = model
+	MODEL_LIST[getClassName(model)] = model
 end
 
 getModelByName = function (name)
 	checkType(name, 'string')
-	assert(MODEL_MANAGEMENT[name], ('[ERROR] This model %s is not registered!'):format(name))
-	return MODEL_MANAGEMENT[name]
+	assert(MODEL_LIST[name], ('[ERROR] This model %s is not registered!'):format(name))
+	return MODEL_LIST[name]
 end
+
+------------------------------------------------------------------------
+FILTER_LIST = {}
+
+registerFilter = function ( filter_name, filter_func)
+	checkType(filter_name, filter_func, 'string', 'function')
+	
+	FILTER_LIST[filter_name] = filter_func
+end
+
+getFilterByName = function ( filter_name )
+	checkType(filter_name, 'string')
+	
+	local filter = FILTER_LIST[filter_name]
+	if not filter then
+		print(("[Warning] This filter %s is not registered!"):format(filter_name))
+	end
+	
+	return filter
+end
+
+
 
 ------------------------------------------------------------------------
 -- MENUS is a list，rather than dict。every list item has a dict in it
