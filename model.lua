@@ -1049,6 +1049,7 @@ Model = Object:extend {
 			db:zadd(index_key, self.id, self[indexfd])				
 		end
 
+		--- save an hash object
 		-- 'id' are essential in an object instance
 		db:hset(model_key, 'id', self.id)
 
@@ -1126,6 +1127,7 @@ Model = Object:extend {
 		local fld = self.__fields[field]
 		assert(fld, ("[Error] Field %s doesn't be defined!"):format(field))
 		assert( fld.foreign, ("[Error] This field %s is not a foreign field."):format(field))
+		assert( fld.st, ("[Error] No store type setting for this foreign field %s."):format(field))
 		assert( fld.foreign == 'ANYSTRING' or obj.id, 
 			"[Error] This object doesn't contain id, it's not a valid object!")
 		assert( fld.foreign == 'ANYSTRING' or fld.foreign == 'UNFIXED' or fld.foreign == getClassName(obj), 
@@ -1143,7 +1145,7 @@ Model = Object:extend {
 		end
 		
 		
-		if not fld.st or fld.st == 'ONE' then
+		if fld.st == 'ONE' then
 			local model_key = getNameIdPattern(self)
 			-- record in db
 			db:hset(model_key, field, new_id)
@@ -1185,8 +1187,9 @@ Model = Object:extend {
 		local fld = self.__fields[field]
 		assert(fld, ("[Error] Field %s doesn't be defined!"):format(field))
 		assert(fld.foreign, ("[Error] This field %s is not a foreign field."):format(field))
-		
-		if (not fld.st) or fld.st == 'ONE' then
+		assert( fld.st, ("[Error] No store type setting for this foreign field %s."):format(field))
+				
+		if fld.st == 'ONE' then
 			if isFalse(self[field]) then return nil end
 
 			local model_key = getNameIdPattern(self)
@@ -1309,6 +1312,7 @@ Model = Object:extend {
 		local fld = self.__fields[field]
 		assert(fld, ("[Error] Field %s doesn't be defined!"):format(field))
 		assert( fld.foreign, ("[Error] This field %s is not a foreign field."):format(field))
+		assert( fld.st, ("[Error] No store type setting for this foreign field %s."):format(field))
 		assert( fld.foreign == 'ANYSTRING' or obj.id, "[Error] This object doesn't contain id, it's not a valid object!")
 		assert( fld.foreign == 'ANYSTRING' or fld.foreign == 'UNFIXED' or fld.foreign == getClassName(obj), ("[Error] This foreign field '%s' can't accept the instance of model '%s'."):format(field, getClassName(obj) or tostring(obj)))
 
@@ -1329,7 +1333,7 @@ Model = Object:extend {
 		end
 		
 		
-		if (not fld.st) or fld.st == 'ONE' then
+		if fld.st == 'ONE' then
 			-- we must check the equality of self[filed] and new_id before perform delete action
 			local key = getNameIdPattern(self)
 			if self[field] == new_id then
@@ -1363,6 +1367,7 @@ Model = Object:extend {
 		local fld = self.__fields[field]
 		assert(fld, ("[Error] Field %s doesn't be defined!"):format(field))
 		assert(fld.foreign, ("[Error] This field %s is not a foreign field."):format(field))
+		assert( fld.st, ("[Error] No store type setting for this foreign field %s."):format(field))
 		assert(fld.foreign == 'ANYSTRING' or obj.id, "[Error] This object doesn't contain id, it's not a valid object!")
 		assert(fld.foreign == 'ANYSTRING' or fld.foreign == 'UNFIXED' or fld.foreign == getClassName(obj),
 			   ("[Error] The foreign model (%s) of this field %s doesn't equal the object's model %s."):format(fld.foreign, field, link_model))
@@ -1382,7 +1387,7 @@ Model = Object:extend {
 		end
 
 		local model_key = getFieldPattern(self, field)
-		if (not fld.st) or fld.st == "ONE" then
+		if fld.st == "ONE" then
 			return self[field] == new_id
 		elseif fld.st == 'MANY' then
 			return rdzset.have(model_key, new_id)
@@ -1404,10 +1409,11 @@ Model = Object:extend {
 		local fld = self.__fields[field]
 		assert(fld, ("[Error] Field %s doesn't be defined!"):format(field))
 		assert( fld.foreign, ("[Error] This field %s is not a foreign field."):format(field))
+		assert( fld.st, ("[Error] No store type setting for this foreign field %s."):format(field))
 		-- if foreign field link is now null
 		if isFalse(self[field]) then return 0 end
 		
-		if (not fld.st) or fld.st == 'ONE' then
+		if fld.st == 'ONE' then
 			-- the ONE foreign field has only 1 element
 			return 1
 		else
