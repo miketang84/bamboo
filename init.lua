@@ -9,6 +9,9 @@ require 'lglib'
 
 module('bamboo', package.seeall)
 
+local Set = require 'lglib.set'
+
+
 URLS = {}
 
 ------------------------------------------------------------------------
@@ -63,6 +66,58 @@ registerModule = function (mdl, extra_params)
 				end
 			end
 			
+			local function permissionCheck(action_perms, perms)
+				if #perms > 0 then
+					local perm_list = {}
+					for _, perm in ipairs(perms) do
+						perm_list[#perm_list + 1] = perm.name
+					end
+					
+					local perms_setA = Set(perm_list)
+					local perms_setB = Set(action_perms)
+					local flag, diff_elem = perms_setB:isSub(perms_setA)
+					
+					if flag then
+						-- if action permissions are contained by given permissions
+						-- execute success function
+						-- TODO
+						local ret = nil
+						for _, perm_name in ipairs(action_perms) do
+							local perm_do = getPermissionByName(perm_name)
+							if perm_do and perm_do.success_func then
+								ret = perm_do.success_func()
+								-- once one permission success function return false
+								-- jump out
+								if not ret then
+									print(('[Prompt] permission check chains was broken at %s'):format(perm_name))
+									return false
+								end
+							end
+						end
+						
+						return true
+					else
+						-- execute failure function
+						local perm_not_fit = getPermissionByName(diff_elem)
+						if perm_not_fit and perm_not_fit.failure_func then
+							print(('[Prompt] enter failure function %s.'):format(diff_elem))
+							perm_not_fit.failure_func()
+						end
+
+						return false
+					end
+				else
+					print('here .....')
+					local first_perm = action_perms[1]
+					local perm_do = getPermissionByName(first_perm)
+					if perm_do and perm_do.failure_func then
+						perm_do.failure_func()
+					end
+					return false				
+				end
+			end
+			
+			
 			local function actionTransform(web, req)
 				if type(action) == 'function' then
 					return action
@@ -72,6 +127,7 @@ registerModule = function (mdl, extra_params)
 					
 					return function (web, req)
 						local filter_flag, permission_flag = true, true
+						
 						if action.filters then
 							checkType(action.filters, 'table')
 							
@@ -89,7 +145,7 @@ registerModule = function (mdl, extra_params)
 									local ret = filter(args_list)
 									if not ret then 
 										filter_flag = false 
-										print(("[Warning] Filter list was broken at %s"):format(filter_name))
+										print(("[Warning] Filter chains was broken at %s."):format(filter_name))
 										break 
 									end
 								end
@@ -101,12 +157,37 @@ registerModule = function (mdl, extra_params)
 							checkType(action.perms, 'table')
 							-- TODO
 							--
+							local user = req.user
+							if user then
+								-- check the user's permissions
+								if user.perms then
+									local perms = user:getForeign('perms')
+									permission_flag = permissionCheck(action.perms, perms)	
+									
+								end
+								
+								-- check groups' permissions
+								if user.groups then
+									local groups = user:getForeign('groups')
+									for _, group in ipairs(groups) do
+										if group then
+											if group.perms then
+												local group_perms = group:getForeign('perms')
+												local ret = permissionCheck(action.perms, group_perms)
+												-- once a group's permissions fit action_perms, return true
+												if ret then permission_flag = true; break end
+											end
+										end
+									end
+								end
+							end
 						end
 					
 						if filter_flag == true and permission_flag == true then
 							-- after execute filters and permissions check, pass here, then execute this handler
 							return fun(web, req)
 						else
+							print("[Prompt] user was denied to execute this handler.")
 							return false
 						end
 					end
@@ -173,6 +254,64 @@ getFilterByName = function ( filter_name )
 end
 
 
+--- used mainly in entry file and each module's initial function
+-- @filters   
+executeFilters = function ( filters )
+	checkType(filters, 'table')
+	for _, filter_name in ipairs(filters) do
+		local filter = getFilterByName(filter_name)
+		if filter then
+			-- now filter has no extra parameters
+			local ret = filter()
+			if not ret then
+				print(("[Warning] Filter chains was broken at %s."):format(filter_name))				
+				return false
+			end
+		end
+	
+	end
+
+end
+
+------------------------------------------------------------------------
+PERMISSION_LIST = {}
+
+registerPermission = function (name, desc, failure_func, success_func)
+	local Permission = require 'bamboo.models.permission'
+	checkType(name, 'string')
+	local desc = desc or ''
+	if failure_func then
+		checkType(failure_func, 'function')
+	end
+	
+	if success_func then
+		checkType(success_func, 'function')
+	end
+
+	Permission:add(name, desc)
+	PERMISSION_LIST[name] = {
+		name = name,
+		desc = desc,
+		failure_func = failure_func,
+		success_func = success_func
+	}
+
+end
+
+registerPermissions = function (perm_t)
+	checkType(perm_t, 'table')
+	for _, perm_params in ipairs(perm_t) do
+		registerPermission(perm_params.name, perm_params.desc, 
+			perm_params.failure_func, perm_params.success_func)
+	end
+
+end
+
+getPermissionByName = function (name)
+	checkType(name, 'string')
+	
+	return PERMISSION_LIST[name]
+end
 
 ------------------------------------------------------------------------
 -- MENUS is a list，rather than dict。every list item has a dict in it

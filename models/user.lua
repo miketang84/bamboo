@@ -22,8 +22,9 @@ local User = Model:extend {
 		['created_date'] = {},
 		['lastlogin_date'] = {},
 		['is_logined'] = {},
-		['perms'] = {},
-		['groups'] = {},
+		
+		['perms'] = { foreign="Permission", st="MANY" },
+		['groups'] = { foreign="Group", st="MANY" },
 	};
 	
 

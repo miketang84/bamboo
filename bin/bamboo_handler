@@ -7,9 +7,6 @@ require 'posix'
 require 'lglib'
 require 'bamboo'
 
-local errors = require 'bamboo.errors'
-local redis = require 'bamboo.redis'
-
 ------------------------------------------------------------------------
 --- Global variables delarations: in top project code, we can see these variables
 -- two important global variables
@@ -54,6 +51,9 @@ end
 local config = updateConfig({}, CONFIG_FILE)
 assert(config.monserver_dir, 'Mongrel2 directory "monserver_dir" must be specified.')
 
+
+local redis = require 'bamboo.redis'
+
 local DB_HOST = config.DB_HOST or '127.0.0.1'
 local DB_PORT = config.DB_PORT or 6379
 local WHICH_DB = config.WHICH_DB or 0
@@ -63,6 +63,7 @@ local WHICH_DB = config.WHICH_DB or 0
 BAMBOO_DB = redis.connect {host=DB_HOST, port=DB_PORT, which = WHICH_DB}
 
 
+local errors = require 'bamboo.errors'
 local Model = require 'bamboo.model'
 local Web = require 'bamboo.web'
 local Session = require 'bamboo.session'

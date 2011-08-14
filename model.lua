@@ -1045,10 +1045,14 @@ Model = Object:extend {
 		else
 			local score = db:zscore(index_key, self[indexfd])
 			-- is exist, return directely, else redis will update the score of val
-			if score then return nil end
+			if score then 
+				print("[Warning] save duplicate to an unique limited field, aborted!")
+				return nil 
+			end
 			db:zadd(index_key, self.id, self[indexfd])				
 		end
 
+		
 		--- save an hash object
 		-- 'id' are essential in an object instance
 		db:hset(model_key, 'id', self.id)
