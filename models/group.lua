@@ -13,7 +13,7 @@ Group = Model:extend {
 		['desc'] 	= 	{ newfield=true },
 		['created_date'] = { newfield=true },
 		
-		['perms'] 	= 	{ foreign="Permissions", st="MANY", newfield=true },
+		['perms'] 	= 	{ foreign="Permission", st="MANY", newfield=true },
 		['owner'] 	= 	{ foreign="User", st="ONE", newfield=true },
 		['managers'] 	= 	{ foreign="User", st="MANY", newfield=true },
 	};
