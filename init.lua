@@ -134,7 +134,7 @@ registerModule = function (mdl, extra_params)
 							filter_flag = true
 							-- execute all filters bound to this handler
 							for _, filter_name in ipairs(action.filters) do
-								local name_part, args_part = filter_name:trim():match("^([%w_]+):? *([%w_ ]*)")
+								local name_part, args_part = filter_name:trim():match("^([%w_]+):? *([%w_ /%-]*)")
 								local args_list = {}
 								if args_part then
 									args_list = args_part:trim():split(' +')
