@@ -84,7 +84,9 @@ registerModule = function (mdl, extra_params)
 						local ret = nil
 						for _, perm_name in ipairs(action_perms) do
 							local perm_do = getPermissionByName(perm_name)
-							if perm_do and perm_do.success_func then
+							if not perm_do then
+								print(('[Warning] This permission %s is not registered.'):format(perm_name))
+							elseif perm_do and perm_do.success_func then
 								ret = perm_do.success_func()
 								-- once one permission success function return false
 								-- jump out
@@ -107,12 +109,8 @@ registerModule = function (mdl, extra_params)
 						return false
 					end
 				else
-					print('here .....')
-					local first_perm = action_perms[1]
-					local perm_do = getPermissionByName(first_perm)
-					if perm_do and perm_do.failure_func then
-						perm_do.failure_func()
-					end
+					print('[Prompt] No permissions in the given list.')
+
 					return false				
 				end
 			end
@@ -128,7 +126,7 @@ registerModule = function (mdl, extra_params)
 					return function (web, req)
 						local filter_flag, permission_flag = true, true
 						
-						if action.filters then
+						if action.filters and #action.filters > 0 then
 							checkType(action.filters, 'table')
 							
 							filter_flag = true
@@ -148,12 +146,14 @@ registerModule = function (mdl, extra_params)
 										print(("[Warning] Filter chains was broken at %s."):format(filter_name))
 										break 
 									end
+								else
+									print(('[Warning] This filter %s is not registered.'):format(name_part))
 								end
 							end
 							
 						end
 					
-						if action.perms then
+						if action.perms and #action.perms > 0 then
 							checkType(action.perms, 'table')
 							-- TODO
 							--
