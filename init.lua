@@ -271,6 +271,7 @@ executeFilters = function ( filters )
 	
 	end
 
+	return true
 end
 
 ------------------------------------------------------------------------
