@@ -135,8 +135,8 @@ local Upload = Model:extend {
 	
 	process = function (self, web, req, dest_dir, prefix, postfix)
 		I_AM_CLASS(self)
-		assert(web, '[ERROR] Upload input parameter: "web" must be not nil.')
-		assert(req, '[ERROR] Upload input parameter: "req" must be not nil.')
+		assert(web, '[Error] Upload input parameter: "web" must be not nil.')
+		assert(req, '[Error] Upload input parameter: "req" must be not nil.')
 		-- current scheme: for those larger than PRESIZE, send a ABORT signal, and abort immediately
 		if req.headers['x-mongrel2-upload-start'] then
 			print('return blank to abort upload.')
@@ -148,7 +148,7 @@ local Upload = Model:extend {
 	    if req.headers['x-requested-with'] then
 			-- stored to disk
 			local name, path = savefile { req = req, dest_dir = dest_dir, prefix = prefix, postfix = postfix }    
-			if not path or not name then return nil, '[ERROR] empty file.' end
+			if not path or not name then return nil, '[Error] empty file.' end
 			
 			local file_instance = self { name = name, path = path }
 			if file_instance then
@@ -159,7 +159,7 @@ local Upload = Model:extend {
 		-- for uploading in html4 way
 			local params = Form:parse(req)
 			local files = self:batch ( req, params, dest_dir, prefix, postfix )
-			if not files then return nil, '[ERROR] empty file.' end
+			if isEmpty(files) then return nil, '[Error] empty file.' end
 			
 			if #files == 1 then
 				-- even only one file upload, batch function will return a list

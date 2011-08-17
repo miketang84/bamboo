@@ -843,11 +843,11 @@ Model = Object:extend {
 		else
 			checkType(val, 'table')
 			if st == 'list' then
-				rdlist.save(val)
+				rdlist.save(custom_key, val)
 			elseif st == 'set' then
-				rdset.save(val)
+				rdset.save(custom_key, val)
 			elseif st == 'zset' then
-				rdzset.save(val)
+				rdzset.save(custom_key, val)
 			else
 				error("[Error] st must be one of 'string', 'list', 'set' or 'zset'")
 			end
@@ -917,11 +917,11 @@ Model = Object:extend {
 		if store_type == 'string' then
 			db:set(custom_key, '')
 		elseif store_type == 'list' then
-			rdlist.remove(key, val)
+			rdlist.remove(custom_key, val)
 		elseif store_type == 'set' then
-			rdset.remove(key, val)
+			rdset.remove(custom_key, val)
 		elseif store_type == 'zset' then
-			rdzset.remove(key, val)
+			rdzset.remove(custom_key, val)
 		end 
 		
 	end;
@@ -935,11 +935,11 @@ Model = Object:extend {
 		if store_type == 'string' then
 			db:set(custom_key, val)
 		elseif store_type == 'list' then
-			rdlist.append(key, val)
+			rdlist.append(custom_key, val)
 		elseif store_type == 'set' then
-			rdset.add(key, val)
+			rdset.add(custom_key, val)
 		elseif store_type == 'zset' then
-			rdzset.add(key, val)
+			rdzset.add(custom_key, val)
 		end
 		
 	end;
@@ -953,11 +953,11 @@ Model = Object:extend {
 		if store_type == 'string' then
 			return 1
 		elseif store_type == 'list' then
-			return rdlist.len(key)
+			return rdlist.len(custom_key)
 		elseif store_type == 'set' then
-			return rdset.num(key)
+			return rdset.num(custom_key)
 		elseif store_type == 'zset' then
-			return rdzset.num(key)
+			return rdzset.num(custom_key)
 		end
 	end;
 	-----------------------------------------------------------------
