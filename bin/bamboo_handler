@@ -79,9 +79,10 @@ assert(not isFalse(childenv.URLS[1]), '[Error] URLS value is not right. URLS[1] 
 local router = childenv.URLS[1]
 childenv.URLS[1] = nil
 
+table.update(bamboo.URLS, childenv.URLS)
+childenv.URLS = bamboo.URLS
 
 bamboo.registerModule(childenv)
---table.update(bamboo.URLS, childenv.URLS)
 local URLS = bamboo.URLS
 
 
