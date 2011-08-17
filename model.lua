@@ -1226,9 +1226,9 @@ Model = Object:extend {
 			
 			if fld.foreign == 'ANYSTRING' then
 				-- return string list directly
-				return list
+				return QuerySet(list)
 			else
-				local obj_list = List()
+				local obj_list = QuerySet()
 				for _, v in ipairs(list) do
 					local link_model, linked_id = checkUnfixed(fld, v)
 
@@ -1256,9 +1256,9 @@ Model = Object:extend {
 	
 			if fld.foreign == 'ANYSTRING' then
 				-- 
-				return list
+				return QuerySet(list)
 			else
-				local obj_list = List()
+				local obj_list = QuerySet()
 				for _, v in ipairs(list) do
 					local link_model, linked_id = checkUnfixed(fld, v)
 
@@ -1288,9 +1288,9 @@ Model = Object:extend {
 	
 			if fld.foreign == 'ANYSTRING' then
 				--
-				return list
+				return QuerySet(list)
 			else
-				local obj_list = List()
+				local obj_list = QuerySet()
 				
 				for _, v in ipairs(list) do
 					local link_model, linked_id = checkUnfixed(fld, v)
