@@ -158,7 +158,7 @@ _G['I_AM_CLASS'] = function (self)
 end
 
 _G['I_AM_CLASS_OR_QUERY_SET'] = function (self)
-	local ok = self:isClass() or self.__spectype == 'QuerySet'
+	local ok = self:isClass() or getmetatable(self).__spectype == 'QuerySet'
 	if not ok then
 		print(debug.traceback())
 		error('[Error] This function is only allowed to be called by class or query set.', 3)
@@ -175,7 +175,7 @@ _G['I_AM_INSTANCE'] = function (self)
 end
 
 _G['I_AM_INSTANCE_OR_QUERY_SET'] = function (self)
-	local ok = self:isInstance() or self.__spectype == 'QuerySet'
+	local ok = self:isInstance() or getmetatable(self).__spectype == 'QuerySet'
 	if not ok then
 		print(debug.traceback())
 		error('[Error] This function is only allowed to be called by instance or query set.', 3)
@@ -399,14 +399,17 @@ end
 ------------------------------------------------------------------------
 -- 
 ------------------------------------------------------------------------
-local Model 
+local QuerySetMeta = {__spectype='QuerySet'}
+local Model
 
-local function makeQuerySet(list)
+local function QuerySet(list)
 	local list = list or List()
 	-- create a query set	
-	local query_set = setProto(list, Model)
 	-- add it to fit the check of isClass function
-	query_set.__spectype = 'QuerySet'
+	if not getmetatable(QuerySetMeta) then
+		QuerySetMeta = setProto(QuerySetMeta, Model)
+	end
+	local query_set = setProto(list, QuerySetMeta)
 	
 	return query_set
 end
@@ -534,7 +537,7 @@ Model = Object:extend {
 	-- 
 	all = function (self, is_rev)
 		I_AM_CLASS(self)
-		local all_instaces = makeQuerySet()
+		local all_instaces = QuerySet()
 		
 		local index_key = getIndexKey(self)
 		local all_ids = self:allIds(is_rev)
@@ -555,7 +558,7 @@ Model = Object:extend {
 	slice = function (self, start, stop, is_rev)
 		I_AM_CLASS(self)
 		local ids = self:sliceIds(start, stop, is_rev)
-		local objs = makeQuerySet()
+		local objs = QuerySet()
 		local getById = self.getById 
 
 		for _, id in ipairs(ids) do
@@ -687,10 +690,7 @@ Model = Object:extend {
 		end
 		
 		-- create a query set
-		local query_set = setProto(List(), Model)
-		-- add it to fit the check of isClass function
-		query_set.__spectype = 'QuerySet'
-		
+		local query_set = QuerySet()
 			
 		local all_ids
 		if is_query_set then
@@ -1104,7 +1104,7 @@ Model = Object:extend {
     del = function (self)
 		I_AM_INSTANCE_OR_QUERY_SET(self)
 		-- if self is query set
-		if self.__spectype == 'QuerySet' then
+		if getmetatable(self).__spectype == 'QuerySet' then
 			for _, v in ipairs(self) do
 				delFromRedis(v)
 				v = nil
