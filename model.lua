@@ -8,6 +8,7 @@ local rdset = require 'bamboo.redis.set'
 local rdzset = require 'bamboo.redis.zset'
 local rdfifo = require 'bamboo.redis.fifo'
 local rdzfifo = require 'bamboo.redis.zfifo'
+local rdhash = require 'bamboo.redis.hash'
 
 local getModelByName  = bamboo.getModelByName 
 
@@ -848,6 +849,8 @@ Model = Object:extend {
 				rdset.save(custom_key, val)
 			elseif st == 'zset' then
 				rdzset.save(custom_key, val)
+			elseif st == 'hash' then
+				rdhash.save(custom_key, val)
 			else
 				error("[Error] st must be one of 'string', 'list', 'set' or 'zset'")
 			end
@@ -874,6 +877,8 @@ Model = Object:extend {
 			return rdset.retrieve(custom_key), store_type
 		elseif store_type == 'zset' then
 			return rdzset.retrieve(custom_key), store_type
+		elseif store_type == 'hash' then
+			return rdhash.retrieve(custom_key), store_type
 		end
 
 		return nil
@@ -903,6 +908,8 @@ Model = Object:extend {
 				rdset.update(custom_key, val)
 			elseif store_type == 'zset' then
 				rdzset.update(custom_key, val)
+			elseif store_type == 'hash' then
+				rdhash.update(custom_key, val)
 			end
 		end
 				 
@@ -922,6 +929,8 @@ Model = Object:extend {
 			rdset.remove(custom_key, val)
 		elseif store_type == 'zset' then
 			rdzset.remove(custom_key, val)
+		elseif store_type == 'hash' then
+			rdhash.remove(custom_key, val)
 		end 
 		
 	end;
@@ -940,6 +949,8 @@ Model = Object:extend {
 			rdset.add(custom_key, val)
 		elseif store_type == 'zset' then
 			rdzset.add(custom_key, val)
+		elseif store_type == 'hash' then
+			rdhash.add(custom_key, val)
 		end
 		
 	end;
@@ -958,6 +969,8 @@ Model = Object:extend {
 			return rdset.num(custom_key)
 		elseif store_type == 'zset' then
 			return rdzset.num(custom_key)
+		elseif store_type == 'hash' then
+			return rdhash.num(custom_key)
 		end
 	end;
 	-----------------------------------------------------------------
