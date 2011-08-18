@@ -301,7 +301,7 @@ local function run(conn, config)
         if req and not err then
 			-- if http directive is not in the range of bamboo specified 
             if not config.methods[req.headers.METHOD] then
-                basicError(conn, req, "Method Not Allowed",
+                errors.basicError(conn, req, "Method Not Allowed",
                     405, "Method Not Allowed", {Allow = config.allowed_methods_header})
             else
                 msg_type = req.data.type
