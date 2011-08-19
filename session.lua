@@ -41,12 +41,13 @@ local makeSessionId = function ()
     return ('%s%s'):format('APP-', RNG())
 end
 
+
 local makeExpires = function (seconds)
-    return os.date("%Y-%m-%d %H:%M:%S", os.time() + (seconds or SMALL_EXPIRE_TIME))
+    return os.date("%a, %d-%b-%Y %X GMT", os.time() + (seconds or SMALL_EXPIRE_TIME))
 end
 
 local makeBigExpires = function (seconds)
-    return os.date("%Y-%m-%d %H:%M:%S", os.time() + (seconds or BIG_EXPIRE_TIME))
+    return os.date("%a, %d-%b-%Y %X GMT", os.time() + (seconds or BIG_EXPIRE_TIME))
 end
 
 local makeSessionCookie = function (ident)
