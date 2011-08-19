@@ -51,14 +51,14 @@ local makeBigExpires = function (seconds)
 end
 
 local makeSessionCookie = function (ident)
-    return ('session="%s"; version=1; path=/; expires=%s'):format(
+    return ('session=%s; version=1; path=/; expires=%s'):format(
         (ident or makeSessionId()), makeExpires())
 end
 
 local function parseSessionId (cookie)
     if not cookie then return nil end
 
-    return cookie:match('session="(APP-[a-z0-9\-]+)";?')
+    return cookie:match('session=(APP-[a-z0-9\-]+);?.*$')
 end
 
 

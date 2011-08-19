@@ -287,7 +287,7 @@ COMMANDS = {
 			-- print(pid, cmd)
 			if cmd == "start" or cmd == 'handler' then
 				findit = true
-				local ret = os.execute(('kill -9 %s'):format(pid))
+				local ret = os.execute(('sudo kill -9 %s'):format(pid))
 				if ret ~= 0 and flag == true then 
 					flag = false
 				end
@@ -326,7 +326,7 @@ COMMANDS = {
         os.execute(('mkdir -p %s'):format(mediadir))
 
         -- do mount --bind
-        os.execute(('mount -B %s/media %s'):format(appname, mediadir))        
+        -- os.execute(('sudo mount -B %s/media %s'):format(appname, mediadir))        
 
         -- modify the md5 string in appname/app/settings.lua
         local fd = io.open(('%s/settings.lua'):format(appname), 'r')
