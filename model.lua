@@ -150,6 +150,16 @@ end
 --------------------------------------------------------------------------------
 -- The bellow four assertations, they are called only by class, instance or query set
 --
+_G['I_AM_QUERY_SET'] = function (self)
+	if rawget(self, '__spectype') == nil 
+	and self.__spectype == 'QuerySet' 
+	and self.__typename == 'List' 
+	and self.__tag == 'Bamboo.Model'
+	then return true
+	else return false
+	end
+end
+
 _G['I_AM_CLASS'] = function (self)
 	local ok = self:isClass() 
 	if not ok then
@@ -159,7 +169,7 @@ _G['I_AM_CLASS'] = function (self)
 end
 
 _G['I_AM_CLASS_OR_QUERY_SET'] = function (self)
-	local ok = self:isClass() or self.__spectype == 'QuerySet'
+	local ok = self:isClass() or I_AM_QUERY_SET(self)
 	if not ok then
 		print(debug.traceback())
 		error('[Error] This function is only allowed to be called by class or query set.', 3)
@@ -176,7 +186,7 @@ _G['I_AM_INSTANCE'] = function (self)
 end
 
 _G['I_AM_INSTANCE_OR_QUERY_SET'] = function (self)
-	local ok = self:isInstance() or self.__spectype == 'QuerySet'
+	local ok = self:isInstance() or I_AM_QUERY_SET(self)
 	if not ok then
 		print(debug.traceback())
 		error('[Error] This function is only allowed to be called by instance or query set.', 3)
@@ -1117,7 +1127,7 @@ Model = Object:extend {
     del = function (self)
 		I_AM_INSTANCE_OR_QUERY_SET(self)
 		-- if self is query set
-		if self.__spectype == 'QuerySet' then
+		if I_AM_QUERY_SET(self) then
 			for _, v in ipairs(self) do
 				delFromRedis(v)
 				v = nil
