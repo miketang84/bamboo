@@ -1397,7 +1397,7 @@ Model = Object:extend {
 		assert( fld.st, ("[Error] No store type setting for this foreign field %s."):format(field))
 		assert(fld.foreign == 'ANYSTRING' or obj.id, "[Error] This object doesn't contain id, it's not a valid object!")
 		assert(fld.foreign == 'ANYSTRING' or fld.foreign == 'UNFIXED' or fld.foreign == getClassName(obj),
-			   ("[Error] The foreign model (%s) of this field %s doesn't equal the object's model %s."):format(fld.foreign, field, link_model))
+			   ("[Error] The foreign model (%s) of this field %s doesn't equal the object's model %s."):format(fld.foreign, field, getClassName(obj) or ''))
 		if isFalse(self[field]) then return nil end
 
 		local new_id
@@ -1407,7 +1407,7 @@ Model = Object:extend {
 		else
 			checkType(obj, 'table')
 			if fld.foreign == 'UNFIXED' then
-				new_id = getClassIdPattern(self)
+				new_id = getNameIdPattern(self)
 			else
 				new_id = tostring(obj.id)
 			end
@@ -1426,6 +1426,7 @@ Model = Object:extend {
 			return rdzfifo.have(model_key, new_id)
 		end 
 	
+		return false
 	end;
 
 	-- return the number of elements in the foreign list
