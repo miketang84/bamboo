@@ -244,6 +244,10 @@ COMMANDS = {
 
         -- while true do
 		local prod_mode = os.getenv('PROD')
+		local production = loadfile('/etc/bamboo_production')
+		if production then
+			prod_mode = true
+		end
 
 		local function runit()
 		    local targets = assert(posix.glob(app))
