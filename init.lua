@@ -41,6 +41,8 @@ registerModule = function (mdl, extra_params)
 		checkType(mdl.URLS, 'table')
 		
 		for url, action in pairs(mdl.URLS) do
+			local propagated_tbl
+
 			local nurl = ''
 			if (url == '/' or not url:startsWith('/')) and mdl._NAME then
 				-- print(url)
@@ -140,7 +142,8 @@ registerModule = function (mdl, extra_params)
 								local filter = getFilterByName(name_part)
 								-- if filter is invalid, ignore it
 								if filter then 
-									local ret = filter(args_list)
+									local ret
+									ret, propagated_tbl = filter(args_list, propagated_tbl)
 									if not ret then 
 										filter_flag = false 
 										print(("[Warning] Filter chains was broken at %s."):format(filter_name))
@@ -185,7 +188,7 @@ registerModule = function (mdl, extra_params)
 					
 						if filter_flag == true and permission_flag == true then
 							-- after execute filters and permissions check, pass here, then execute this handler
-							return fun(web, req)
+							return fun(propagated_tbl)
 						else
 							print("[Prompt] user was denied to execute this handler.")
 							return false
