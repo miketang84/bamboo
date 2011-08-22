@@ -44,6 +44,7 @@ local function savefile(t)
 	local postfix = t.postfix or ''
 	local filename = ''
 	local body = ''
+	local rename_func = t.rename_func or nil
 	
 	-- if upload in html5 way
 	if req.headers['x-requested-with'] then
@@ -67,6 +68,11 @@ local function savefile(t)
 	if not posix.stat(dest_dir) then
 		-- why posix have no command like " mkdir -p "
 		os.execute('mkdir -p ' + dest_dir)
+	end
+
+	-- if passed in a rename function, use it to replace the orignial filename
+	if rename_func and type(rename_func) == 'function' then
+		filename = rename_func(filename)
 	end
 
 	local newbasename, ext = calcNewFilename(dest_dir, filename)
@@ -113,12 +119,12 @@ local Upload = Model:extend {
 	
 	--- For traditional Html4 form upload 
 	-- 
-	batch = function (self, req, params, dest_dir, prefix, postfix)
+	batch = function (self, req, params, dest_dir, prefix, postfix, rename_func)
 		I_AM_CLASS(self)
 		local file_objs = List()
 		-- file data are stored as arraies in params
 		for i, v in ipairs(params) do
-			local name, path = savefile { req = req, file_obj = v, dest_dir = dest_dir, prefix = prefix, postfix = postfix }
+			local name, path = savefile { req = req, file_obj = v, dest_dir = dest_dir, prefix = prefix, postfix = postfix, rename_func }
 			if not path or not name then return nil end
 			-- create file instance
 			local file_instance = self { name = name, path = path }
@@ -133,7 +139,7 @@ local Upload = Model:extend {
 		return file_objs	
 	end;
 	
-	process = function (self, web, req, dest_dir, prefix, postfix)
+	process = function (self, web, req, dest_dir, prefix, postfix, rename_func)
 		I_AM_CLASS(self)
 		assert(web, '[Error] Upload input parameter: "web" must be not nil.')
 		assert(req, '[Error] Upload input parameter: "req" must be not nil.')
@@ -147,7 +153,7 @@ local Upload = Model:extend {
 	    -- if upload in html5 way
 	    if req.headers['x-requested-with'] then
 			-- stored to disk
-			local name, path = savefile { req = req, dest_dir = dest_dir, prefix = prefix, postfix = postfix }    
+			local name, path = savefile { req = req, dest_dir = dest_dir, prefix = prefix, postfix = postfix, rename_func = rename_func }    
 			if not path or not name then return nil, '[Error] empty file.' end
 			
 			local file_instance = self { name = name, path = path }
@@ -158,7 +164,7 @@ local Upload = Model:extend {
 		else
 		-- for uploading in html4 way
 			local params = Form:parse(req)
-			local files = self:batch ( req, params, dest_dir, prefix, postfix )
+			local files = self:batch ( req, params, dest_dir, prefix, postfix, rename_func )
 			if isEmpty(files) then return nil, '[Error] empty file.' end
 			
 			if #files == 1 then
@@ -168,7 +174,6 @@ local Upload = Model:extend {
 				return files, 'multiple'
 			end
 		end
-	
 	end;
 	
 	calcNewFilename = function (self, dest_dir, oldname)

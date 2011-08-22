@@ -22,9 +22,8 @@ end
 
 local function removeSnippets(tmpl)
 	-- for html
-	return tmpl:gsub('%<%!%-%-.-%-%-%>', '')
-	-- :gsub("%<script *[%w=\'\"]*%>.-%</script%>", ''):gsub("%<style%>.-%</style%>", '')
-
+	-- remove all comments except something like <!--[if lg IE 6]> <![endif]-->
+	return tmpl:gsub('%<%!%-%-[^%[].-[^%]]%-%-%>', '')
 end
 
 

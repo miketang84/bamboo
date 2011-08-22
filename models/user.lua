@@ -32,15 +32,18 @@ local User = Model:extend {
 		if not t then return self end
 		
 		self.username = t.username
-		self.password = md5.sumhexa(t.password)
 		self.email = t.email
 		self.nickname = t.nickname
 		self.forwhat = t.forwhat
 		self.is_manager = t.is_manager
 		self.is_active = t.is_active
 		self.created_date = os.time()
-		self.perms = t.perms
-		self.groups = t.groups
+
+		if t.encrypt and type(t.encrypt) == 'function' then
+			self.password = t.encrypt(t.password)
+		else
+			self.password = md5.sumhexa(t.password)
+		end
 		
 		return self
 	end;
