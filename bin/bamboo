@@ -308,6 +308,25 @@ COMMANDS = {
 			print('OK. No running bamboo processes for this application.')
 		end
 
+		-- umount
+		readSettings()
+		local appname = config.project_name
+		local monserver_dir = config.monserver_dir
+       
+		local fd = io.popen('mount', 'r')
+		local content = fd:read('*a')
+		fd:close()
+
+		local matched = content:match(("media on %ssites/%s type none"):format(monserver_dir, appname))
+		if matched then
+			-- umount it
+			local cmdstr = ("sudo umount %ssites/%s"):format(monserver_dir, appname)
+			local ret = os.execute(cmdstr)
+			if ret ~= 0 then
+				os.execute(("sudo umount -l %ssites/%s"):format(monserver_dir, appname))
+			end
+		end
+
     end;
 
     
