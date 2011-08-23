@@ -1068,8 +1068,11 @@ Model = Object:extend {
 			db:zremrangebyscore(index_key, self.id, self.id)
 		end
 		-- score is the instance's id, member is the instance's index value
-		if isFalse(indexfd) or isFalse(self[indexfd]) then
+		if isFalse(indexfd) then
 			db:zadd(index_key, self.id, self.id)
+		elseif isFalse(self[indexfd]) then
+			print("[Warning] index field value must not be blank.")
+			return nil
 		else
 			local score = db:zscore(index_key, self[indexfd])
 			-- is exist, return directely, else redis will update the score of val
