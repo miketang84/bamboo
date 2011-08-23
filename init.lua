@@ -41,7 +41,7 @@ registerModule = function (mdl, extra_params)
 		checkType(mdl.URLS, 'table')
 		
 		for url, action in pairs(mdl.URLS) do
-			local propagated_tbl
+			local propagated_params = {}
 
 			local nurl = ''
 			if (url == '/' or not url:startsWith('/')) and mdl._NAME then
@@ -125,7 +125,7 @@ registerModule = function (mdl, extra_params)
 					local fun = action.handler
 					checkType(fun, 'function')
 					
-					return function (web, req)
+					return function (web, req, propagated_params)
 						local filter_flag, permission_flag = true, true
 						
 						if action.filters and #action.filters > 0 then
@@ -143,7 +143,7 @@ registerModule = function (mdl, extra_params)
 								-- if filter is invalid, ignore it
 								if filter then 
 									local ret
-									ret, propagated_tbl = filter(args_list, propagated_tbl)
+									ret, propagated_params = filter(args_list, propagated_params)
 									if not ret then 
 										filter_flag = false 
 										print(("[Warning] Filter chains was broken at %s."):format(filter_name))
@@ -188,7 +188,7 @@ registerModule = function (mdl, extra_params)
 					
 						if filter_flag == true and permission_flag == true then
 							-- after execute filters and permissions check, pass here, then execute this handler
-							return fun(propagated_tbl)
+							return fun(web, req, propagated_params)
 						else
 							print("[Prompt] user was denied to execute this handler.")
 							return false
@@ -201,14 +201,14 @@ registerModule = function (mdl, extra_params)
 				nfun = function (web, req)
 					local ret = mdl.init(extra_params)
 					if ret then
-						return actionTransform(web, req)(web, req)
+						return actionTransform(web, req)(web, req, propagated_params)
 					end
 					
 					-- make no sense
 					return false
 				end
 			else
-				nfun = actionTransform(web, req)
+				nfun = actionTransform(web, req, propagated_params)
 			end
 
 			URLS[nurl] = nfun
