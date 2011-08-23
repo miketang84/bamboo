@@ -356,6 +356,18 @@ _G['contains'] = function (substr)
 	end
 end
 
+_G['uncontains'] = function (substr)
+	return function (v)
+		v = tostring(v)
+		if not v:contains(substr) then 
+			return true
+		else
+			return false
+		end
+	end
+end
+
+
 _G['startsWith'] = function (substr)
 	return function (v)
 		v = tostring(v)
@@ -367,10 +379,33 @@ _G['startsWith'] = function (substr)
 	end
 end
 
+_G['unstartsWith'] = function (substr)
+	return function (v)
+		v = tostring(v)
+		if not v:startsWith(substr) then 
+			return true
+		else
+			return false
+		end
+	end
+end
+
+
 _G['endsWith'] = function (substr)
 	return function (v)
 		v = tostring(v)
 		if v:endsWith(substr) then 
+			return true
+		else
+			return false
+		end
+	end
+end
+
+_G['unendsWith'] = function (substr)
+	return function (v)
+		v = tostring(v)
+		if not v:endsWith(substr) then 
 			return true
 		else
 			return false
