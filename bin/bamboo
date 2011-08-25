@@ -58,6 +58,12 @@ Change the value of them like following:
 		os.exit()
 	end
 
+	-- check whether have a global production setting
+	local production = loadfile('/etc/bamboo_production')
+	if production then
+		config.PRODUCTION = true
+	end
+
 end
 ------------------------------------------------------------------------------
 --
@@ -213,10 +219,10 @@ COMMANDS = {
 
     test = function(settings)
         local target = settings.from or "tests"
-        if not os.getenv('PROD') then
+        if not config.PRODUCTION then
             run_tests(target, settings.full ~= nil)
         else
-            print "Running in PROD mode, won't run tests."
+            print "[Warning] Running in PRODUCTION mode, won't run tests."
         end
     end,
 
@@ -243,11 +249,6 @@ COMMANDS = {
         local script_times = {}
 
         -- while true do
-		local prod_mode = os.getenv('PROD')
-		local production = loadfile('/etc/bamboo_production')
-		if production then
-			prod_mode = true
-		end
 
 		local function runit()
 		    local targets = assert(posix.glob(app))
@@ -271,7 +272,7 @@ COMMANDS = {
             script_times[script] = tick
         end
 		
-		if prod_mode then
+		if config.PRODUCTION then
 		    while true do runit() end
 		else
 		    runit()
