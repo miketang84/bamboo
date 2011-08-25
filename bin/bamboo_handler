@@ -51,6 +51,10 @@ end
 local config = updateConfig({}, CONFIG_FILE)
 assert(config.monserver_dir, 'Mongrel2 directory "monserver_dir" must be specified.')
 
+local is_production = loadfile('/etc/bamboo_production')
+if is_production then
+	config.PRODUCTION = true
+end
 
 local redis = require 'bamboo.redis'
 
@@ -272,7 +276,12 @@ local function runStateless(conn, main, req, before, after)
     end)
 
     if not good and err then
-        errors.reportError(conn, req, err, state)
+		if config.PRODUCTION then
+			web.conn:reply_http(req, '<h2>Page error.</h2>', 500, 'Page error.', req.headers)
+			print('[Error] Page error.')
+		else
+			errors.reportError(conn, req, err, state)
+		end
     end
 end
 
@@ -332,7 +341,7 @@ local function run(conn, config)
 					local main = getHandlerByPath(path)
 					if not main then
 					   	-- return 404 page
-						print(('[WARNING] No handler to process this path: %s.'):format(path))
+						print(('[Warning] No handler to process this path: %s.'):format(path))
 						conn:reply_http(req, '<h2>Page Not Found.</h2>', 404, 'Not Found', req.headers)
 					else
 						-- this is the default way
