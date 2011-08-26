@@ -161,6 +161,7 @@ _G['I_AM_QUERY_SET'] = function (self)
 end
 
 _G['I_AM_CLASS'] = function (self)
+	assert(self.isClass, '[Error] The caller is not a valid class.')
 	local ok = self:isClass() 
 	if not ok then
 		print(debug.traceback())
@@ -169,6 +170,7 @@ _G['I_AM_CLASS'] = function (self)
 end
 
 _G['I_AM_CLASS_OR_QUERY_SET'] = function (self)
+	assert(self.isClass, '[Error] The caller is not a valid class.')
 	local ok = self:isClass() or I_AM_QUERY_SET(self)
 	if not ok then
 		print(debug.traceback())
@@ -178,6 +180,7 @@ _G['I_AM_CLASS_OR_QUERY_SET'] = function (self)
 end
 
 _G['I_AM_INSTANCE'] = function (self)
+	assert(self.isInstance, '[Error] The caller is not a valid instance.')
 	local ok = self:isInstance()
 	if not ok then
 		print(debug.traceback())
@@ -186,6 +189,7 @@ _G['I_AM_INSTANCE'] = function (self)
 end
 
 _G['I_AM_INSTANCE_OR_QUERY_SET'] = function (self)
+	assert(self.isInstance, '[Error] The caller is not a valid instance.')
 	local ok = self:isInstance() or I_AM_QUERY_SET(self)
 	if not ok then
 		print(debug.traceback())
