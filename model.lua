@@ -1273,8 +1273,8 @@ Model = Object:extend {
 				local obj = link_model:getById (linked_id)
 				if not isValidInstance(obj) then
 					-- if get not, remove the empty foreign key
-					db:hset(model_key, field, '')
-					self[field] = ''
+					db:hdel(model_key, field)
+					self[field] = nil
 					return nil
 				else
 					return obj
@@ -1407,8 +1407,8 @@ Model = Object:extend {
 			-- we must check the equality of self[filed] and new_id before perform delete action
 			local key = getNameIdPattern(self)
 			if self[field] == new_id then
-				db:hset(key, field, '')
-				self[field] = ''
+				db:hdel(key, field)
+				self[field] = nil
 			end
 			
 		else
