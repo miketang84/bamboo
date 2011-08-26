@@ -733,7 +733,7 @@ Model = Object:extend {
 		end
 		
 		-- if query table is empty, return all instances
-		if isFalse(query_args) then return self:all() end
+		if isFalse(query_args) then return self:all(is_rev) end
 
 		-- normalize the 'and' and 'or' logic
 		local logic = 'and'
