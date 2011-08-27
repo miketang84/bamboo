@@ -112,6 +112,11 @@ registerModule = function (mdl, extra_params)
 					end
 				else
 					print('[Prompt] No permissions in the given list.')
+					local perm_not_fit = getPermissionByName(action_perms[1])
+					if perm_not_fit and perm_not_fit.failure_func then
+						print(('[Prompt] enter failure function %s.'):format(action_perms[1]))
+						perm_not_fit.failure_func()
+					end
 
 					return false				
 				end
