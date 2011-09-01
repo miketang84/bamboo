@@ -13,14 +13,17 @@ local rdhash = require 'bamboo.redis.hash'
 local getModelByName  = bamboo.getModelByName 
 
 
--- return the key of some string like 'User:__index'
---
-local function getIndexKey(self)
-	return self.__name  + ':__index'
-end
 
 local function getCounterName(self)
 	return self.__name + ':__counter'
+end 
+
+local function getNameIdPattern(self)
+	return self.__name + ':' + self.id
+end
+
+local function getFieldPattern(self, field)
+	return getNameIdPattern(self) + ':' + field
 end 
 
 -- return the key of some string like 'User'
@@ -30,17 +33,15 @@ local function getClassName(self)
 	return self.__tag:match('%.(%w+)$')
 end
 
+-- return the key of some string like 'User:__index'
+--
+local function getIndexKey(self)
+	return getClassName(self) + ':__index'
+end
+
 local function getClassIdPattern(self)
 	return getClassName(self) + self.id
 end
-
-local function getNameIdPattern(self)
-	return self.__name + ':' + self.id
-end
-
-local function getFieldPattern(self, field)
-	return getNameIdPattern(self) + ':' + field
-end 
 
 local function getCustomKey(self, key)
 	return getClassName(self) + ':custom:' + key
