@@ -1089,7 +1089,7 @@ Model = Object:extend {
 	-- Instance Functions
 	--------------------------------------------------------------------
     -- save instace's normal field
-    save = function (self)
+    save = function (self, params)
 		I_AM_INSTANCE(self)
         assert(self.id, "[Error] The main key 'id' field doesn't exist!")
         local indexfd = self.__indexfd
@@ -1126,6 +1126,15 @@ Model = Object:extend {
 		--- save an hash object
 		-- 'id' are essential in an object instance
 		db:hset(model_key, 'id', self.id)
+
+		-- if parameters exist, update it
+		if params and type(params) == 'table' then
+			for k, v in pairs(params) do
+				if k ~= 'id' and self[k] then
+					self[k] = v
+				end
+			end
+		end
 
 		for k, v in pairs(self) do
 			-- when save, need to check something
