@@ -1287,8 +1287,8 @@ Model = Object:extend {
 				local obj = link_model:getById (linked_id)
 				if not isValidInstance(obj) then
 					-- if get not, remove the empty foreign key
-					db:hdel(model_key, field)
-					self[field] = nil
+					-- db:hdel(model_key, field)
+					-- self[field] = nil
 					return nil
 				else
 					return obj
@@ -1316,7 +1316,7 @@ Model = Object:extend {
 					
 					if not isValidInstance(obj) then
 						-- if find no, remove this empty foreign key, by member
-						rdzset.remove(key, v)
+						-- rdzset.remove(key, v)
 					else
 						obj_list:append(obj)
 					end
@@ -1346,7 +1346,7 @@ Model = Object:extend {
 					-- 
 					if not isValidInstance(obj) then
 						-- if find no, remove this empty foreign
-						rdfifo.remove(key, v)
+						-- rdfifo.remove(key, v)
 					else
 						obj_list:append(obj)
 					end
@@ -1378,7 +1378,7 @@ Model = Object:extend {
 					local obj = link_model:getById(linked_id)
 					-- 
 					if not isValidInstance(obj) then
-						rdzfifo.remove(key, v)
+						-- rdzfifo.remove(key, v)
 					else
 						obj_list:append(obj)
 					end
