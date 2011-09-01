@@ -1152,7 +1152,7 @@ Model = Object:extend {
 		I_AM_INSTANCE(self)
 		checkType(field, new_value, 'string', 'string')
 		local fld = self.__fields[field]
-		assert(fld, ("[Error] Field %s doesn't be defined!"):format(field))
+		if not fld then print(("[Warning] Field %s doesn't be defined!"):format(field)); return nil end
 		assert( not fld.foreign, ("[Error] %s is a foreign field, shouldn't use update function!"):format(field))
 		local model_key = getNameIdPattern(self)
 		assert(db:exists(model_key), ("[Error] Key %s does't exist! Can't apply update."):format(model_key))
