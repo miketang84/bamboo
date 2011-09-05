@@ -67,6 +67,14 @@ local Web = Object:extend {
     end;
 
     json = function (self, data, ctype)
+		if type(data) == 'table' then
+			for k, v in pairs(data) do
+				if type(v) == 'table' and #v == 0 then
+					--data[k] = json.util.InitArray(v)
+					json.util.InitArray(v)
+				end
+			end
+		end
         self:page(json.encode(data), 200, "OK", {['content-type'] = ctype or 'application/json'})
     end;
 
