@@ -77,7 +77,7 @@ local Web = Object:extend {
 						--data[k] = json.util.InitArray(v)
 						json.util.InitArray(v)
 					else
-						for kk, vv in pairs(v) then
+						for kk, vv in pairs(v) do
 							if type(vv) == 'table' and table.isEmpty(vv) then
 								json.util.InitArray(vv)
 							end
