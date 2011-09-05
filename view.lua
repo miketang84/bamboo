@@ -23,7 +23,7 @@ end
 local function removeSnippets(tmpl)
 	-- for html
 	-- remove all comments except something like <!--[if lg IE 6]> <![endif]-->
-	return tmpl:gsub('%<%!%-%-[^%[]?.-[^%]]?%-%-%>', '')
+	return tmpl:gsub('%<%!%-%-[^%[ ].-[^%]]?%-%-%>', '')
 end
 
 
