@@ -1294,6 +1294,7 @@ Model = Object:extend {
 					-- if get not, remove the empty foreign key
 					-- db:hdel(model_key, field)
 					-- self[field] = nil
+					print('[Warning] invalid ONE foreign id or object.')
 					return nil
 				else
 					return obj
@@ -1322,6 +1323,7 @@ Model = Object:extend {
 					if not isValidInstance(obj) then
 						-- if find no, remove this empty foreign key, by member
 						-- rdzset.remove(key, v)
+						print('[Warning] invalid MANY foreign id or object.')
 					else
 						obj_list:append(obj)
 					end
@@ -1352,6 +1354,7 @@ Model = Object:extend {
 					if not isValidInstance(obj) then
 						-- if find no, remove this empty foreign
 						-- rdfifo.remove(key, v)
+					print('[Warning] invalid FIFO foreign id or object.')						
 					else
 						obj_list:append(obj)
 					end
@@ -1384,6 +1387,7 @@ Model = Object:extend {
 					-- 
 					if not isValidInstance(obj) then
 						-- rdzfifo.remove(key, v)
+						print('[Warning] invalid ZFIFO foreign id or object.')
 					else
 						obj_list:append(obj)
 					end
