@@ -96,7 +96,6 @@ local Form = Object:extend {
         return params
     end;
 
-	-- deprecated
 	parseQuery = function (self, req)
 		I_AM_CLASS(self)
 		if req.headers.QUERY then
