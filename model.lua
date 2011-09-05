@@ -612,6 +612,7 @@ Model = Object:extend {
 	-- slice instance object list, support negative index (-1)
 	-- 
 	slice = function (self, start, stop, is_rev)
+		-- !slice method won't be open to query set
 		I_AM_CLASS(self)
 		local ids = self:sliceIds(start, stop, is_rev)
 		local objs = QuerySet()
@@ -733,8 +734,12 @@ Model = Object:extend {
 			
 		end
 		
-		-- if query table is empty, return all instances
-		if isFalse(query_args) then return self:all(is_rev), 1 end
+		-- if query table is empty, return slice instances
+		if isFalse(query_args) then 
+			local stop = starti + length - 1
+			local nums = self:numbers()
+			return self:slice(starti, stop, is_rev), (stop < nums) and stop or nums 
+		end
 
 		-- normalize the 'and' and 'or' logic
 		local logic = 'and'
