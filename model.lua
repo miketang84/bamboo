@@ -8,30 +8,15 @@ local rdset = require 'bamboo.redis.set'
 local rdzset = require 'bamboo.redis.zset'
 local rdfifo = require 'bamboo.redis.fifo'
 local rdzfifo = require 'bamboo.redis.zfifo'
+local rdhash = require 'bamboo.redis.hash'
 
 local getModelByName  = bamboo.getModelByName 
 
 
--- return the key of some string like 'User:__index'
---
-local function getIndexName(self)
-	return self.__name  + ':__index'
-end
 
 local function getCounterName(self)
 	return self.__name + ':__counter'
 end 
-
--- return the key of some string like 'User'
---
-local function getClassName(self)
-	if type(self) ~= 'table' then return nil end
-	return self.__tag:match('%.(%w+)$')
-end
-
-local function getClassIdPattern(self)
-	return getClassName(self) + self.id
-end
 
 local function getNameIdPattern(self)
 	return self.__name + ':' + self.id
@@ -41,6 +26,23 @@ local function getFieldPattern(self, field)
 	return getNameIdPattern(self) + ':' + field
 end 
 
+-- return the key of some string like 'User'
+--
+local function getClassName(self)
+	if type(self) ~= 'table' then return nil end
+	return self.__tag:match('%.(%w+)$')
+end
+
+-- return the key of some string like 'User:__index'
+--
+local function getIndexKey(self)
+	return getClassName(self) + ':__index'
+end
+
+local function getClassIdPattern(self)
+	return getClassName(self) + self.id
+end
+
 local function getCustomKey(self, key)
 	return getClassName(self) + ':custom:' + key
 end
@@ -49,8 +51,8 @@ end
 -- check the existance of some member by its id (score)
 --
 local function checkExistanceById(self, id)
-	local index_name = getIndexName(self)
-	local r = db:zrangebyscore(index_name, id, id)
+	local index_key = getIndexKey(self)
+	local r = db:zrangebyscore(index_key, id, id)
 	if #r == 0 then 
 		return false, ''
 	else
@@ -74,7 +76,7 @@ local function checkUnfixed(fld, item)
 		link_model = getModelByName(link_model_str)
 	else 
 		link_model = getModelByName(foreign)
-		assert(link_model, ("[ERROR] The foreign part (%s) of this field is not a valid model."):format(foreign))
+		assert(link_model, ("[Error] The foreign part (%s) of this field is not a valid model."):format(foreign))
 		linked_id = item
 	end
 
@@ -88,7 +90,7 @@ end
 local getFromRedis = function (self, model_key)
 	-- here, the data table contain ordinary field, ONE foreign key, but not MANY foreign key 
 	local data = db:hgetall(model_key)
-	if isObjEmpty(data) then print("[WARNING] Can't get object by", model_key); return nil end
+	if not isValidInstance(data) then print("[Warning] Can't get object by", model_key); return nil end
 
 	local fields = self.__fields
 	for k, fld in pairs(fields) do
@@ -120,7 +122,7 @@ end
 --
 local delFromRedis = function (self)
 	local model_key = getNameIdPattern(self)
-	local index_name = getIndexName(self)
+	local index_key = getIndexKey(self)
 	
 	local fields = self.__fields
 	-- in redis, delete the associated foreign key-value store
@@ -141,7 +143,7 @@ local delFromRedis = function (self)
 	-- delete the key self
 	db:del(model_key)
 	-- delete the index in the global model index zset
-	db:zrem(index_name, self.name)
+	db:zremrangebyscore(index_key, self.id, self.id)
 	-- release the lua object
 	self = nil
 end
@@ -149,36 +151,50 @@ end
 --------------------------------------------------------------------------------
 -- The bellow four assertations, they are called only by class, instance or query set
 --
+_G['I_AM_QUERY_SET'] = function (self)
+	if rawget(self, '__spectype') == nil 
+	and self.__spectype == 'QuerySet' 
+	and self.__typename == 'List' 
+	and self.__tag == 'Bamboo.Model'
+	then return true
+	else return false
+	end
+end
+
 _G['I_AM_CLASS'] = function (self)
+	assert(self.isClass, '[Error] The caller is not a valid class.')
 	local ok = self:isClass() 
 	if not ok then
 		print(debug.traceback())
-		error('[ERROR] This function is only allowed to be called by class.', 3)
+		error('[Error] This function is only allowed to be called by class.', 3)
 	end
 end
 
 _G['I_AM_CLASS_OR_QUERY_SET'] = function (self)
-	local ok = self:isClass() or self.__spectype == 'QuerySet'
+	assert(self.isClass, '[Error] The caller is not a valid class.')
+	local ok = self:isClass() or I_AM_QUERY_SET(self)
 	if not ok then
 		print(debug.traceback())
-		error('[ERROR] This function is only allowed to be called by class or query set.', 3)
+		error('[Error] This function is only allowed to be called by class or query set.', 3)
 	end
 
 end
 
 _G['I_AM_INSTANCE'] = function (self)
+	assert(self.isInstance, '[Error] The caller is not a valid instance.')
 	local ok = self:isInstance()
 	if not ok then
 		print(debug.traceback())
-		error('[ERROR] This function is only allowed to be called by instance.', 3)
+		error('[Error] This function is only allowed to be called by instance.', 3)
 	end
 end
 
 _G['I_AM_INSTANCE_OR_QUERY_SET'] = function (self)
-	local ok = self:isInstance() or self.__spectype == 'QuerySet'
+	assert(self.isInstance, '[Error] The caller is not a valid instance.')
+	local ok = self:isInstance() or I_AM_QUERY_SET(self)
 	if not ok then
 		print(debug.traceback())
-		error('[ERROR] This function is only allowed to be called by instance or query set.', 3)
+		error('[Error] This function is only allowed to be called by instance or query set.', 3)
 	end
 end
 
@@ -216,23 +232,19 @@ end
 -- judge if it is an empty object.
 -- the empty rules are defined by ourselves, see follows.
 -- 
-_G['isObjEmpty'] = function (obj)
-	if isFalse(obj) then return true end
+_G['isValidInstance'] = function (obj)
+	if isFalse(obj) then return false end
 	checkType(obj, 'table')
 	
 	for k, v in pairs(obj) do
 		if type(k) == 'string' then
-			if not k:startsWith('_') 		-- remove field '_parent'
-			and type(v) ~= 'function' 		-- remove 'new' and 'extend' functions
-			and k ~= 'id'					-- remove field 'id', but in redis, we need more useful attributes
-			and k ~= 'name'					-- remove field 'name', but in redis, we need more useful attributes
-			then
-				return false
+			if k ~= 'id' then
+				return true
 			end
 		end
 	end
 	
-	return true
+	return false
 end;
 
 ------------------------------------------------------------------------
@@ -262,7 +274,8 @@ end
 
 _G['lt'] = function (limitation)
 	return function (v)
-		if tonumber(v) < limitation then
+		local nv = tonumber(v)
+		if nv and nv < limitation then
 			return true
 		else
 			return false
@@ -272,7 +285,8 @@ end
 
 _G['gt'] = function (limitation)
 	return function (v)
-		if tonumber(v) > limitation then
+		local nv = tonumber(v)
+		if nv and nv > limitation then
 			return true
 		else
 			return false
@@ -283,7 +297,8 @@ end
 
 _G['le'] = function (limitation)
 	return function (v)
-		if tonumber(v) <= limitation then
+		local nv = tonumber(v)	
+		if nv and nv <= limitation then
 			return true
 		else
 			return false
@@ -293,7 +308,8 @@ end
 
 _G['ge'] = function (limitation)
 	return function (v)
-		if tonumber(v) >= limitation then
+		local nv = tonumber(v)	
+		if nv and nv >= limitation then
 			return true
 		else
 			return false
@@ -303,7 +319,8 @@ end
 
 _G['bt'] = function (small, big)
 	return function (v)
-		if tonumber(v) > small and v < big then
+		local nv = tonumber(v)
+		if nv and nv > small and nv < big then
 			return true
 		else
 			return false
@@ -313,7 +330,8 @@ end
 
 _G['be'] = function (small, big)
 	return function (v)
-		if tonumber(v) >= small and v <= big then
+		local nv = tonumber(v)
+		if nv and nv >= small and nv <= big then
 			return true
 		else
 			return false
@@ -323,9 +341,8 @@ end
 
 _G['outside'] = function (small, big)
 	return function (v)
-		local v = tonumber(v)
-		
-		if v < small and v > big then
+		local nv = tonumber(v)
+		if nv and nv < small and nv > big then
 			return true
 		else
 			return false
@@ -344,6 +361,18 @@ _G['contains'] = function (substr)
 	end
 end
 
+_G['uncontains'] = function (substr)
+	return function (v)
+		v = tostring(v)
+		if not v:contains(substr) then 
+			return true
+		else
+			return false
+		end
+	end
+end
+
+
 _G['startsWith'] = function (substr)
 	return function (v)
 		v = tostring(v)
@@ -355,10 +384,33 @@ _G['startsWith'] = function (substr)
 	end
 end
 
+_G['unstartsWith'] = function (substr)
+	return function (v)
+		v = tostring(v)
+		if not v:startsWith(substr) then 
+			return true
+		else
+			return false
+		end
+	end
+end
+
+
 _G['endsWith'] = function (substr)
 	return function (v)
 		v = tostring(v)
 		if v:endsWith(substr) then 
+			return true
+		else
+			return false
+		end
+	end
+end
+
+_G['unendsWith'] = function (substr)
+	return function (v)
+		v = tostring(v)
+		if not v:endsWith(substr) then 
 			return true
 		else
 			return false
@@ -403,13 +455,17 @@ end
 ------------------------------------------------------------------------
 -- 
 ------------------------------------------------------------------------
-local Model 
-local function makeQuerySet(list)
+local QuerySetMeta = {__spectype='QuerySet'}
+local Model
+
+local function QuerySet(list)
 	local list = list or List()
 	-- create a query set	
-	local query_set = setProto(list, Model)
 	-- add it to fit the check of isClass function
-	query_set.__spectype = 'QuerySet'
+	if not getmetatable(QuerySetMeta) then
+		QuerySetMeta = setProto(QuerySetMeta, Model)
+	end
+	local query_set = setProto(list, QuerySetMeta)
 	
 	return query_set
 end
@@ -426,13 +482,13 @@ Model = Object:extend {
 	__name = 'Model';
 	__desc = 'Model is the base of all models.';
 	__fields = {};
+	__indexfd = "";
 
 	-- make every object creatation from here: every object has the 'id' and 'name' fields
 	init = function (self)
 		-- get the latest instance counter
 		self.id = self:getCounter() + 1
-		-- default case, the name value is equal to id value
-		self.name = self.id
+
 		return self 
 	end;
     
@@ -441,20 +497,21 @@ Model = Object:extend {
 	-- Class Functions. Called by class object.
 	--------------------------------------------------------------------
 
-	-- return id query by name
+	-- return id queried by index
 	--
-    getIdByName = function (self, name)
+    getIdByIndex = function (self, name)
 		I_AM_CLASS(self)
 		checkType(name, 'string')
 		
-		local index_name = getIndexName(self)
-		local idstr = db:zscore(index_name, name)
+		local index_key = getIndexKey(self)
+		-- id is the score of that index value
+		local idstr = db:zscore(index_key, name)
 		return tonumber(idstr)
     end;
     
     -- return name query by id
 	-- 
-    getNameById = function (self, id)
+    getIndexById = function (self, id)
 		I_AM_CLASS(self)
 		checkType(tonumber(id), 'number')
 		
@@ -473,7 +530,7 @@ Model = Object:extend {
 		-- check the existance in the index cache
 		if not checkExistanceById(self, id) then return nil end
 		-- and then check the existance in the key set
-		local key = self.__name + ':' + tostring(id)
+		local key = self.__name + ':' + id
 		if not db:exists(key) then return nil end
 
 		return getFromRedis(self, key)
@@ -481,9 +538,9 @@ Model = Object:extend {
 	
 	-- return instance object by name
 	--
-	getByName = function (self, name)
+	getByIndex = function (self, name)
 		I_AM_CLASS(self)
-		local id = self:getIdByName(name)
+		local id = self:getIdByIndex(name)
 		if not id then return nil end
 
 		return self:getById (id)
@@ -493,60 +550,59 @@ Model = Object:extend {
 	--
 	allIds = function (self, is_rev)
 		I_AM_CLASS(self)
-		local index_name = getIndexName(self)
+		local index_key = getIndexKey(self)
 		local all_ids 
-		if is_rev ~= 'rev' then
-			all_ids = db:zrange(index_name, 0, -1, 'withscores')
+		if is_rev == 'rev' then
+			all_ids = db:zrevrange(index_key, 0, -1, 'withscores')
 		else
-			all_ids = db:zrevrange(index_name, 0, -1, 'withscores')
+			all_ids = db:zrange(index_key, 0, -1, 'withscores')
 		end
-		local r = List()
+		local ids = List()
 		for _, v in ipairs(all_ids) do
-			-- v[1] is the 'name', v[2] is the 'id'
-			r:append(v[2])
+			-- v[1] is the 'index value', v[2] is the 'id'
+			ids:append(v[2])
 		end
 		
-		return r
+		return ids
 	end;
 	
-	-- slice the ids list, supoort negative index (-1)
+	-- slice the ids list, start from 1, support negative index (-1)
 	-- 
 	sliceIds = function (self, start, stop, is_rev)
 		I_AM_CLASS(self)
 		checkType(start, stop, 'number', 'number')
-		local index_name = getIndexName(self)
+		local index_key = getIndexKey(self)
 		if start > 0 then start = start - 1 end
 		if stop > 0 then stop = stop - 1 end
 		local all_ids
-		if not is_rev then
-			all_ids = db:zrange(index_name, start, stop, 'withscores')
+		if is_rev == 'rev' then
+			all_ids = db:zrevrange(index_key, start, stop, 'withscores')
 		else
-			all_ids = db:zrevrange(index_name, start, stop, 'withscores')
+			all_ids = db:zrange(index_key, start, stop, 'withscores')
 		end
-		local r = List()
+		local ids = List()
 		for _, v in ipairs(all_ids) do
-			-- v[1] is the 'name', v[2] is the 'id'
-			r:append(v[2])
+			-- v[1] is the 'index value', v[2] is the 'id'
+			ids:append(v[2])
 		end
 		
-		return r
+		return ids
 	end;	
 	
 	-- return all instance objects belong to this Model
 	-- 
 	all = function (self, is_rev)
 		I_AM_CLASS(self)
-		local all_instaces = makeQuerySet()
-		local _name = self.__name + ':'
+		local all_instaces = QuerySet()
 		
-		local index_name = getIndexName(self)
+		local index_key = getIndexKey(self)
 		local all_ids = self:allIds(is_rev)
 		local getById = self.getById 
 		
 		local obj, data
 		for _, id in ipairs(all_ids) do
 			local obj = getById(self, id)
-			if obj then
+			if isValidInstance(obj) then
 				all_instaces:append(obj)
 			end
 		end
@@ -556,14 +612,15 @@ Model = Object:extend {
 	-- slice instance object list, support negative index (-1)
 	-- 
 	slice = function (self, start, stop, is_rev)
+		-- !slice method won't be open to query set
 		I_AM_CLASS(self)
-		local all_ids = self:sliceIds(start, stop, is_rev)
-		local objs = makeQuerySet()
+		local ids = self:sliceIds(start, stop, is_rev)
+		local objs = QuerySet()
 		local getById = self.getById 
 
-		for _, id in ipairs(all_ids) do
+		for _, id in ipairs(ids) do
 			local obj = getById(self, id)
-			if obj then
+			if isValidInstance(obj) then
 				objs:append(obj)
 			end
 		end
@@ -584,7 +641,7 @@ Model = Object:extend {
 	--
 	numbers = function (self)
 		I_AM_CLASS(self)
-		return db:zcard(getIndexName(self))
+		return db:zcard(getIndexKey(self))
 	end;
 	
 	-- return the first instance found by query set
@@ -601,7 +658,7 @@ Model = Object:extend {
 
 			-- retrieve this instance by id
 			local obj = self:getById( id )
-			if isObjEmpty(obj) then return nil end
+			if not isValidInstance(obj) then return nil end
 			
 			local fields = obj.__fields
 			for k, v in pairs(query_args) do
@@ -629,7 +686,7 @@ Model = Object:extend {
 			for _, kk in ipairs(all_ids) do
 				-- get an object by key 'kk'
 				local obj = getById(self, kk)
-				assert(not isObjEmpty(obj), "[ERROR] object must not be empty.")
+				assert(isValidInstance(obj), "[Error] object must not be empty.")
 				local flag = true
 				local fields = obj.__fields
 				for k, v in pairs(query_args) do
@@ -654,11 +711,11 @@ Model = Object:extend {
 	--- fitler some instances belong to this model
 	-- @param query_args: query arguments in a table
 	-- @param is_rev: 'rev' or other value, means start to search from begining or from end
-	-- @param starti: specify which index to start search
+	-- @param starti: specify which index to start search, note: this is the position before filtering 
 	-- @param length: specify how many elements to find
 	-- @param dir: specify the direction of the search action, 1 means positive, -1 means negative
-	-- @return: an object list (query set)
-	--          the end position last search
+	-- @return: query_set, an object list (query set)
+	--          endpoint, the end position last search
 	-- @note: this function can be called by class object and query set
 	filter = function (self, query_args, is_rev, starti, length, dir)
 		I_AM_CLASS_OR_QUERY_SET(self)
@@ -672,13 +729,17 @@ Model = Object:extend {
 		
 		if query_args and query_args['id'] then
 			-- remove 'id' query argument
-			print("[WARNING] Filter doesn't support search by id.")
+			print("[Warning] Filter doesn't support search by id.")
 			query_args['id'] = nil 
 			
 		end
 		
-		-- if query table is empty, return all instances
-		if isFalse(query_args) then return self:all() end
+		-- if query table is empty, return slice instances
+		if isFalse(query_args) then 
+			local stop = starti + length - 1
+			local nums = self:numbers()
+			return self:slice(starti, stop, is_rev), (stop < nums) and stop or nums 
+		end
 
 		-- normalize the 'and' and 'or' logic
 		local logic = 'and'
@@ -690,10 +751,7 @@ Model = Object:extend {
 		end
 		
 		-- create a query set
-		local query_set = setProto(List(), Model)
-		-- add it to fit the check of isClass function
-		query_set.__spectype = 'QuerySet'
-		
+		local query_set = QuerySet()
 			
 		local all_ids
 		if is_query_set then
@@ -716,7 +774,7 @@ Model = Object:extend {
 			end
 		end
 		-- nothing in id list, return empty table
-		if #all_ids == 0 then return List() end
+		if #all_ids == 0 then return List(), 1 end
 		
 		-- 's': start
 		-- 'e': end
@@ -743,9 +801,9 @@ Model = Object:extend {
 				local kk = all_ids[i]
 				obj = getById (self, kk)
 			end
-			assert(not isObjEmpty(obj), "[ERROR] object must not be empty.")
+			assert(isValidInstance(obj), "[Error] object must not be empty.")
 			local fields = obj.__fields
-			assert(not isFalse(fields), "[ERROR] object's description table must not be blank.")
+			assert(not isFalse(fields), "[Error] object's description table must not be blank.")
 			
 			for k, v in pairs(query_args) do
 				-- to redundant query condition, once meet, jump immediately
@@ -802,6 +860,7 @@ Model = Object:extend {
 		
 	end;
     
+	-- CAREFUL! 
 	clearAll = function (self)
 		I_AM_CLASS(self)
 		local all_objs = self:all()
@@ -832,7 +891,7 @@ Model = Object:extend {
 	-------------------------------------------------------------------
 	
 	-- store customize key-value pair to db
-	-- now: it support string, and list
+	-- now: it support string, list and so on
 	setCustom = function (self, key, val, st)
 		I_AM_CLASS(self)
 		checkType(key, 'string')
@@ -840,18 +899,20 @@ Model = Object:extend {
 
 		if not st or st == 'string' then
 			assert( type(val) == 'string' or type(val) == 'number',
-					"[ERROR] In the string mode of setCustom, val should be string or number.")
+					"[Error] In the string mode of setCustom, val should be string or number.")
 			db:set(custom_key, val)
 		else
 			checkType(val, 'table')
 			if st == 'list' then
-				rdlist.save(val)
+				rdlist.save(custom_key, val)
 			elseif st == 'set' then
-				rdset.save(val)
+				rdset.save(custom_key, val)
 			elseif st == 'zset' then
-				rdzset.save(val)
+				rdzset.save(custom_key, val)
+			elseif st == 'hash' then
+				rdhash.save(custom_key, val)
 			else
-				error("[ERROR] st must be one of 'string', 'list', 'set' or 'zset'")
+				error("[Error] st must be one of 'string', 'list', 'set' or 'zset'")
 			end
 		end
 	end;
@@ -862,7 +923,7 @@ Model = Object:extend {
 		checkType(key, 'string')
 		local custom_key = getCustomKey(self, key)
 		if not db:exists(custom_key) then
-			print(("[WARNING] Key %s doesn't exist!"):format(custom_key))
+			print(("[Warning] Key %s doesn't exist!"):format(custom_key))
 			return nil
 		end
 
@@ -876,6 +937,8 @@ Model = Object:extend {
 			return rdset.retrieve(custom_key), store_type
 		elseif store_type == 'zset' then
 			return rdzset.retrieve(custom_key), store_type
+		elseif store_type == 'hash' then
+			return rdhash.retrieve(custom_key), store_type
 		end
 
 		return nil
@@ -905,6 +968,8 @@ Model = Object:extend {
 				rdset.update(custom_key, val)
 			elseif store_type == 'zset' then
 				rdzset.update(custom_key, val)
+			elseif store_type == 'hash' then
+				rdhash.update(custom_key, val)
 			end
 		end
 				 
@@ -919,11 +984,13 @@ Model = Object:extend {
 		if store_type == 'string' then
 			db:set(custom_key, '')
 		elseif store_type == 'list' then
-			rdlist.remove(key, val)
+			rdlist.remove(custom_key, val)
 		elseif store_type == 'set' then
-			rdset.remove(key, val)
+			rdset.remove(custom_key, val)
 		elseif store_type == 'zset' then
-			rdzset.remove(key, val)
+			rdzset.remove(custom_key, val)
+		elseif store_type == 'hash' then
+			rdhash.remove(custom_key, val)
 		end 
 		
 	end;
@@ -937,11 +1004,13 @@ Model = Object:extend {
 		if store_type == 'string' then
 			db:set(custom_key, val)
 		elseif store_type == 'list' then
-			rdlist.append(key, val)
+			rdlist.append(custom_key, val)
 		elseif store_type == 'set' then
-			rdset.add(key, val)
+			rdset.add(custom_key, val)
 		elseif store_type == 'zset' then
-			rdzset.add(key, val)
+			rdzset.add(custom_key, val)
+		elseif store_type == 'hash' then
+			rdhash.add(custom_key, val)
 		end
 		
 	end;
@@ -955,11 +1024,13 @@ Model = Object:extend {
 		if store_type == 'string' then
 			return 1
 		elseif store_type == 'list' then
-			return rdlist.len(key)
+			return rdlist.len(custom_key)
 		elseif store_type == 'set' then
-			return rdset.num(key)
+			return rdset.num(custom_key)
 		elseif store_type == 'zset' then
-			return rdzset.num(key)
+			return rdzset.num(custom_key)
+		elseif store_type == 'hash' then
+			return rdhash.num(custom_key)
 		end
 	end;
 	-----------------------------------------------------------------
@@ -1024,42 +1095,66 @@ Model = Object:extend {
 	-- Instance Functions
 	--------------------------------------------------------------------
     -- save instace's normal field
-    save = function (self)
+    save = function (self, params)
 		I_AM_INSTANCE(self)
-        assert(self.name, "[ERROR] The name field doesn't exist!")
+        assert(self.id, "[Error] The main key 'id' field doesn't exist!")
+        local indexfd = self.__indexfd
+        assert(type(indexfd) == 'string' or type(indexfd) == 'nil', "[Error] the __indexfd should be string.")
         local model_key = getNameIdPattern(self)
-		local isExisted = db:exists(model_key)
+		local is_existed = db:exists(model_key)
 
-		local index_key = getIndexName(self)
-		if not isExisted then
+		local index_key = getIndexKey(self)
+		if not is_existed then
 			-- increse counter 
-			db:incr(self.__name + ':__counter')
-			-- the model index
-			-- score is the instance's id, member is the instance's name 
-			db:zadd(index_key, self.id, self.name)
+			db:incr(getCounterName(self))
 		else
 			-- if exist, update the index cache
 			-- delete the old one
 			db:zremrangebyscore(index_key, self.id, self.id)
-			-- save the new id, name pair to index cache
-			db:zadd(index_key, self.id, self.name)
+		end
+		-- score is the instance's id, member is the instance's index value
+		if isFalse(indexfd) then
+			db:zadd(index_key, self.id, self.id)
+		elseif isFalse(self[indexfd]) then
+			print("[Warning] index field value must not be empty, will not save it, please check your model defination.")
+			return nil
+		else
+			local score = db:zscore(index_key, self[indexfd])
+			-- is exist, return directely, else redis will update the score of val
+			if score then 
+				print("[Warning] save duplicate to an unique limited field, aborted!")
+				return nil 
+			end
+			db:zadd(index_key, self.id, self[indexfd])				
 		end
 
-		-- 'id' and 'name' are essential in an object instance
+		
+		--- save an hash object
+		-- 'id' are essential in an object instance
 		db:hset(model_key, 'id', self.id)
-		db:hset(model_key, 'name', self.name)
+
+		-- if parameters exist, update it
+		if params and type(params) == 'table' then
+			for k, v in pairs(params) do
+				if k ~= 'id' and self[k] then
+					self[k] = v
+				end
+			end
+		end
 
 		for k, v in pairs(self) do
 			-- when save, need to check something
 			-- 1. only save fields defined in model defination
 			-- 2. don't save the functional member, and _parent
 			-- 3. don't save those fields not defined in model defination
-			-- 4. don't save those other than ONE foreign fields, which are defined in model defination
+			-- 4. don't save those except ONE foreign fields, which are defined in model defination
 			local field = self.__fields[k]
 			-- if v is nil, pairs will not iterate it
-			if (not k:startsWith('_')) and type(v) ~= 'function' and field and (not field['foreign']) then
-				-- 
-				db:hset(model_key, k, tostring(v))
+			if field then
+				if not field['foreign'] or ( field['foreign'] and field['st'] == 'ONE') then
+					-- save
+					db:hset(model_key, k, tostring(v))
+				end
 			end
 		end
 		
@@ -1072,10 +1167,11 @@ Model = Object:extend {
 		I_AM_INSTANCE(self)
 		checkType(field, new_value, 'string', 'string')
 		local fld = self.__fields[field]
-		assert(fld, ("[ERROR] Field %s doesn't be defined!"):format(field))
-		assert( not fld.foreign, ("[ERROR] %s is a foreign field, shouldn't use update function!"):format(field))
+		if not fld then print(("[Warning] Field %s doesn't be defined!"):format(field)); return nil end
+		assert( not fld.foreign, ("[Error] %s is a foreign field, shouldn't use update function!"):format(field))
 		local model_key = getNameIdPattern(self)
-		assert(db:exists(model_key), ("[ERROR] Key %s does't exist! Can't apply update."):format(model_key))
+		assert(db:exists(model_key), ("[Error] Key %s does't exist! Can't apply update."):format(model_key))
+		-- apply
 		db:hset(model_key, field, new_value)
 		
 		return self
@@ -1093,7 +1189,7 @@ Model = Object:extend {
     del = function (self)
 		I_AM_INSTANCE_OR_QUERY_SET(self)
 		-- if self is query set
-		if self.__spectype == 'QuerySet' then
+		if I_AM_QUERY_SET(self) then
 			for _, v in ipairs(self) do
 				delFromRedis(v)
 				v = nil
@@ -1105,20 +1201,27 @@ Model = Object:extend {
 		self = nil
     end;
 
+	-----------------------------------------------------------------------------------
+	-- Foreign API
+	-----------------------------------------------------------------------------------
 	---
 	-- add a foreign object's id to this foreign field
 	-- return self
 	addForeign = function (self, field, obj)
 		I_AM_INSTANCE(self)
 		checkType(field, 'string')
-		assert(type(obj) == 'table' or type(obj) == 'string', '[ERROR] "obj" should be table or string.')
+		assert(type(obj) == 'table' or type(obj) == 'string', '[Error] "obj" should be table or string.')
 		if type(obj) == 'table' then checkType(tonumber(obj.id), 'number') end
 		
 		local fld = self.__fields[field]
-		assert(fld, ("[ERROR] Field %s doesn't be defined!"):format(field))
-		assert( fld.foreign, ("[ERROR] This field %s is not a foreign field."):format(field))
-		assert( fld.foreign == 'ANYSTRING' or obj.id , "[ERROR] This object doesn't contain id, it's not a valid object!")
-		assert( fld.foreign == 'ANYSTRING' or fld.foreign == 'UNFIXED' or fld.foreign == getClassName(obj), ("[ERROR] This foreign field '%s' can't accept the instance of model '%s'."):format(field, getClassName(obj) or tostring(obj)))
+		assert(fld, ("[Error] Field %s doesn't be defined!"):format(field))
+		assert( fld.foreign, ("[Error] This field %s is not a foreign field."):format(field))
+		assert( fld.st, ("[Error] No store type setting for this foreign field %s."):format(field))
+		assert( fld.foreign == 'ANYSTRING' or obj.id, 
+			"[Error] This object doesn't contain id, it's not a valid object!")
+		assert( fld.foreign == 'ANYSTRING' or fld.foreign == 'UNFIXED' or fld.foreign == getClassName(obj), 
+			("[Error] This foreign field '%s' can't accept the instance of model '%s'."):format(
+			field, getClassName(obj) or tostring(obj)))
 		
 		local new_id
 		if fld.foreign == 'ANYSTRING' then
@@ -1131,7 +1234,7 @@ Model = Object:extend {
 		end
 		
 		
-		if (not fld.st) or fld.st == 'ONE' then
+		if fld.st == 'ONE' then
 			local model_key = getNameIdPattern(self)
 			-- record in db
 			db:hset(model_key, field, new_id)
@@ -1147,14 +1250,14 @@ Model = Object:extend {
 		elseif fld.st == 'FIFO' then
 			local length = fld.fifolen or 100
 			assert(length and type(length) == 'number' and length > 0 and length <= 10000, 
-				"[ERROR] In Fifo foreign, the 'fifolen' must be number greater than 0!")
+				"[Error] In Fifo foreign, the 'fifolen' must be number greater than 0!")
 			local key = getFieldPattern(self, field)
 			rdfifo.push(key, length, new_id)
 
 		elseif fld.st == 'ZFIFO' then
 			local length = fld.fifolen or 100
 			assert(length and type(length) == 'number' and length > 0 and length <= 10000, 
-				"[ERROR] In Zfifo foreign, the 'fifolen' must be number greater than 0!")
+				"[Error] In Zfifo foreign, the 'fifolen' must be number greater than 0!")
 			local key = getFieldPattern(self, field)
 			-- in zset, the newest member have the higher score
 			-- but use getForeign, we retrieve them from high to low, so newest is at left of result
@@ -1171,10 +1274,11 @@ Model = Object:extend {
 		I_AM_INSTANCE(self)
 		checkType(field, 'string')
 		local fld = self.__fields[field]
-		assert(fld, ("[ERROR] Field %s doesn't be defined!"):format(field))
-		assert(fld.foreign, ("[ERROR] This field %s is not a foreign field."):format(field))
-		
-		if (not fld.st) or fld.st == 'ONE' then
+		assert(fld, ("[Error] Field %s doesn't be defined!"):format(field))
+		assert(fld.foreign, ("[Error] This field %s is not a foreign field."):format(field))
+		assert( fld.st, ("[Error] No store type setting for this foreign field %s."):format(field))
+				
+		if fld.st == 'ONE' then
 			if isFalse(self[field]) then return nil end
 
 			local model_key = getNameIdPattern(self)
@@ -1186,10 +1290,11 @@ Model = Object:extend {
 				local link_model, linked_id = checkUnfixed(fld, self[field])
 
 				local obj = link_model:getById (linked_id)
-				if isObjEmpty(obj) then
+				if not isValidInstance(obj) then
 					-- if get not, remove the empty foreign key
-					db:hset(model_key, field, '')
-					self[field] = ''
+					-- db:hdel(model_key, field)
+					-- self[field] = nil
+					print('[Warning] invalid ONE foreign id or object.')
 					return nil
 				else
 					return obj
@@ -1207,17 +1312,18 @@ Model = Object:extend {
 			
 			if fld.foreign == 'ANYSTRING' then
 				-- return string list directly
-				return list
+				return QuerySet(list)
 			else
-				local obj_list = List()
+				local obj_list = QuerySet()
 				for _, v in ipairs(list) do
 					local link_model, linked_id = checkUnfixed(fld, v)
 
 					local obj = link_model:getById(linked_id)
 					
-					if isObjEmpty(obj) then
+					if not isValidInstance(obj) then
 						-- if find no, remove this empty foreign key, by member
-						rdzset.remove(key, v)
+						-- rdzset.remove(key, v)
+						print('[Warning] invalid MANY foreign id or object.')
 					else
 						obj_list:append(obj)
 					end
@@ -1237,17 +1343,18 @@ Model = Object:extend {
 	
 			if fld.foreign == 'ANYSTRING' then
 				-- 
-				return list
+				return QuerySet(list)
 			else
-				local obj_list = List()
+				local obj_list = QuerySet()
 				for _, v in ipairs(list) do
 					local link_model, linked_id = checkUnfixed(fld, v)
 
 					local obj = link_model:getById(linked_id)
 					-- 
-					if isObjEmpty(obj) then
+					if not isValidInstance(obj) then
 						-- if find no, remove this empty foreign
-						rdfifo.remove(key, v)
+						-- rdfifo.remove(key, v)
+					print('[Warning] invalid FIFO foreign id or object.')						
 					else
 						obj_list:append(obj)
 					end
@@ -1269,17 +1376,18 @@ Model = Object:extend {
 	
 			if fld.foreign == 'ANYSTRING' then
 				--
-				return list
+				return QuerySet(list)
 			else
-				local obj_list = List()
+				local obj_list = QuerySet()
 				
 				for _, v in ipairs(list) do
 					local link_model, linked_id = checkUnfixed(fld, v)
 
 					local obj = link_model:getById(linked_id)
 					-- 
-					if isObjEmpty(obj) then
-						rdzfifo.remove(key, v)
+					if not isValidInstance(obj) then
+						-- rdzfifo.remove(key, v)
+						print('[Warning] invalid ZFIFO foreign id or object.')
 					else
 						obj_list:append(obj)
 					end
@@ -1295,10 +1403,11 @@ Model = Object:extend {
 		I_AM_INSTANCE(self)
 		checkType(field, 'string')
 		local fld = self.__fields[field]
-		assert(fld, ("[ERROR] Field %s doesn't be defined!"):format(field))
-		assert( fld.foreign, ("[ERROR] This field %s is not a foreign field."):format(field))
-		assert( fld.foreign == 'ANYSTRING' or obj.id, "[ERROR] This object doesn't contain id, it's not a valid object!")
-		assert( fld.foreign == 'ANYSTRING' or fld.foreign == 'UNFIXED' or fld.foreign == getClassName(obj), ("[ERROR] This foreign field '%s' can't accept the instance of model '%s'."):format(field, getClassName(obj) or tostring(obj)))
+		assert(fld, ("[Error] Field %s doesn't be defined!"):format(field))
+		assert( fld.foreign, ("[Error] This field %s is not a foreign field."):format(field))
+		assert( fld.st, ("[Error] No store type setting for this foreign field %s."):format(field))
+		assert( fld.foreign == 'ANYSTRING' or obj.id, "[Error] This object doesn't contain id, it's not a valid object!")
+		assert( fld.foreign == 'ANYSTRING' or fld.foreign == 'UNFIXED' or fld.foreign == getClassName(obj), ("[Error] This foreign field '%s' can't accept the instance of model '%s'."):format(field, getClassName(obj) or tostring(obj)))
 
 		-- if self[field] is nil, it must be wrong somewhere
 		if isFalse(self[field]) then return nil end
@@ -1317,12 +1426,12 @@ Model = Object:extend {
 		end
 		
 		
-		if (not fld.st) or fld.st == 'ONE' then
+		if fld.st == 'ONE' then
 			-- we must check the equality of self[filed] and new_id before perform delete action
 			local key = getNameIdPattern(self)
 			if self[field] == new_id then
-				db:hset(key, field, '')
-				self[field] = ''
+				db:hdel(key, field)
+				self[field] = nil
 			end
 			
 		else
@@ -1349,11 +1458,12 @@ Model = Object:extend {
 		I_AM_INSTANCE(self)
 		checkType(field, 'string')
 		local fld = self.__fields[field]
-		assert(fld, ("[ERROR] Field %s doesn't be defined!"):format(field))
-		assert(fld.foreign, ("[ERROR] This field %s is not a foreign field."):format(field))
-		assert(fld.foreign == 'ANYSTRING' or obj.id, "[ERROR] This object doesn't contain id, it's not a valid object!")
+		assert(fld, ("[Error] Field %s doesn't be defined!"):format(field))
+		assert(fld.foreign, ("[Error] This field %s is not a foreign field."):format(field))
+		assert( fld.st, ("[Error] No store type setting for this foreign field %s."):format(field))
+		assert(fld.foreign == 'ANYSTRING' or obj.id, "[Error] This object doesn't contain id, it's not a valid object!")
 		assert(fld.foreign == 'ANYSTRING' or fld.foreign == 'UNFIXED' or fld.foreign == getClassName(obj),
-			   ("[ERROR] The foreign model (%s) of this field %s doesn't equal the object's model %s."):format(fld.foreign, field, link_model))
+			   ("[Error] The foreign model (%s) of this field %s doesn't equal the object's model %s."):format(fld.foreign, field, getClassName(obj) or ''))
 		if isFalse(self[field]) then return nil end
 
 		local new_id
@@ -1363,14 +1473,14 @@ Model = Object:extend {
 		else
 			checkType(obj, 'table')
 			if fld.foreign == 'UNFIXED' then
-				new_id = getClassIdPattern(self)
+				new_id = getNameIdPattern(self)
 			else
 				new_id = tostring(obj.id)
 			end
 		end
 
 		local model_key = getFieldPattern(self, field)
-		if (not fld.st) or fld.st == "ONE" then
+		if fld.st == "ONE" then
 			return self[field] == new_id
 		elseif fld.st == 'MANY' then
 			return rdzset.have(model_key, new_id)
@@ -1382,6 +1492,7 @@ Model = Object:extend {
 			return rdzfifo.have(model_key, new_id)
 		end 
 	
+		return false
 	end;
 
 	-- return the number of elements in the foreign list
@@ -1390,12 +1501,13 @@ Model = Object:extend {
 		I_AM_INSTANCE(self)
 		checkType(field, 'string')
 		local fld = self.__fields[field]
-		assert(fld, ("[ERROR] Field %s doesn't be defined!"):format(field))
-		assert( fld.foreign, ("[ERROR] This field %s is not a foreign field."):format(field))
+		assert(fld, ("[Error] Field %s doesn't be defined!"):format(field))
+		assert( fld.foreign, ("[Error] This field %s is not a foreign field."):format(field))
+		assert( fld.st, ("[Error] No store type setting for this foreign field %s."):format(field))
 		-- if foreign field link is now null
 		if isFalse(self[field]) then return 0 end
 		
-		if (not fld.st) or fld.st == 'ONE' then
+		if fld.st == 'ONE' then
 			-- the ONE foreign field has only 1 element
 			return 1
 		else

@@ -58,6 +58,12 @@ Change the value of them like following:
 		os.exit()
 	end
 
+	-- check whether have a global production setting
+	local production = loadfile('/etc/bamboo_production')
+	if production then
+		config.PRODUCTION = true
+	end
+
 end
 ------------------------------------------------------------------------------
 --
@@ -213,10 +219,10 @@ COMMANDS = {
 
     test = function(settings)
         local target = settings.from or "tests"
-        if not os.getenv('PROD') then
+        if not config.PRODUCTION then
             run_tests(target, settings.full ~= nil)
         else
-            print "Running in PROD mode, won't run tests."
+            print "[Warning] Running in PRODUCTION mode, won't run tests."
         end
     end,
 
@@ -243,7 +249,6 @@ COMMANDS = {
         local script_times = {}
 
         -- while true do
-		local prod_mode = os.getenv('PROD')
 
 		local function runit()
 		    local targets = assert(posix.glob(app))
@@ -267,7 +272,7 @@ COMMANDS = {
             script_times[script] = tick
         end
 		
-		if prod_mode then
+		if config.PRODUCTION then
 		    while true do runit() end
 		else
 		    runit()
@@ -287,7 +292,7 @@ COMMANDS = {
 			-- print(pid, cmd)
 			if cmd == "start" or cmd == 'handler' then
 				findit = true
-				local ret = os.execute(('kill -9 %s'):format(pid))
+				local ret = os.execute(('sudo kill -9 %s'):format(pid))
 				if ret ~= 0 and flag == true then 
 					flag = false
 				end
@@ -302,6 +307,25 @@ COMMANDS = {
 			end
 		else
 			print('OK. No running bamboo processes for this application.')
+		end
+
+		-- umount
+		readSettings()
+		local appname = config.project_name
+		local monserver_dir = config.monserver_dir
+       
+		local fd = io.popen('mount', 'r')
+		local content = fd:read('*a')
+		fd:close()
+
+		local matched = content:match(("media on %ssites/%s type none"):format(monserver_dir, appname))
+		if matched then
+			-- umount it
+			local cmdstr = ("sudo umount %ssites/%s"):format(monserver_dir, appname)
+			local ret = os.execute(cmdstr)
+			if ret ~= 0 then
+				os.execute(("sudo umount -l %ssites/%s"):format(monserver_dir, appname))
+			end
 		end
 
     end;
@@ -326,7 +350,7 @@ COMMANDS = {
         os.execute(('mkdir -p %s'):format(mediadir))
 
         -- do mount --bind
-        os.execute(('mount -B %s/media %s'):format(appname, mediadir))        
+        -- os.execute(('sudo mount -B %s/media %s'):format(appname, mediadir))        
 
         -- modify the md5 string in appname/app/settings.lua
         local fd = io.open(('%s/settings.lua'):format(appname), 'r')

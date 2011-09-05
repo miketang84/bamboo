@@ -41,23 +41,24 @@ local makeSessionId = function ()
     return ('%s%s'):format('APP-', RNG())
 end
 
+
 local makeExpires = function (seconds)
-    return os.date("%Y-%m-%d %H:%M:%S", os.time() + (seconds or SMALL_EXPIRE_TIME))
+    return os.date("%a, %d-%b-%Y %X GMT", os.time() + (seconds or SMALL_EXPIRE_TIME))
 end
 
 local makeBigExpires = function (seconds)
-    return os.date("%Y-%m-%d %H:%M:%S", os.time() + (seconds or BIG_EXPIRE_TIME))
+    return os.date("%a, %d-%b-%Y %X GMT", os.time() + (seconds or BIG_EXPIRE_TIME))
 end
 
 local makeSessionCookie = function (ident)
-    return ('session="%s"; version=1; path=/; expires=%s'):format(
+    return ('session=%s; version=1; path=/; expires=%s'):format(
         (ident or makeSessionId()), makeExpires())
 end
 
 local function parseSessionId (cookie)
     if not cookie then return nil end
 
-    return cookie:match('session="(APP-[a-z0-9\-]+)";?')
+    return cookie:match('session=(APP-[a-z0-9\-]+);?.*$')
 end
 
 

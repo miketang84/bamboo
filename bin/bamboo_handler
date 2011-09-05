@@ -7,9 +7,6 @@ require 'posix'
 require 'lglib'
 require 'bamboo'
 
-local errors = require 'bamboo.errors'
-local redis = require 'bamboo.redis'
-
 ------------------------------------------------------------------------
 --- Global variables delarations: in top project code, we can see these variables
 -- two important global variables
@@ -54,6 +51,13 @@ end
 local config = updateConfig({}, CONFIG_FILE)
 assert(config.monserver_dir, 'Mongrel2 directory "monserver_dir" must be specified.')
 
+local is_production = loadfile('/etc/bamboo_production')
+if is_production then
+	config.PRODUCTION = true
+end
+
+local redis = require 'bamboo.redis'
+
 local DB_HOST = config.DB_HOST or '127.0.0.1'
 local DB_PORT = config.DB_PORT or 6379
 local WHICH_DB = config.WHICH_DB or 0
@@ -63,7 +67,8 @@ local WHICH_DB = config.WHICH_DB or 0
 BAMBOO_DB = redis.connect {host=DB_HOST, port=DB_PORT, which = WHICH_DB}
 
 
-
+local errors = require 'bamboo.errors'
+local Model = require 'bamboo.model'
 local Web = require 'bamboo.web'
 local Session = require 'bamboo.session'
 
@@ -73,29 +78,26 @@ local childenv = {}
 -- load file handler_xxx.lua, make its environment as childenv, extract global variables in handler_xxx.lua to childenv
 setfenv(assert(loadfile(handler_file)), setmetatable(childenv, {__index=_G}))()
 
+-- get the router and simplify the entry file's URLS
+assert(not isFalse(childenv.URLS[1]), '[Error] URLS value is not right. URLS[1] must be string and NOT be blank.')
+local router = childenv.URLS[1]
+childenv.URLS[1] = nil
+
 table.update(bamboo.URLS, childenv.URLS)
+childenv.URLS = bamboo.URLS
+
+bamboo.registerModule(childenv)
 local URLS = bamboo.URLS
 
 
 ------------------------------------------------------------------------
 -- check the structure legality
 local function checkURLS(urls)
-	assert(not isFalse(urls[1]), '[ERROR] URLS value is not right. URLS[1] must be string and NOT be blank.')
-	local router = urls[1]
-	urls[1] = nil
-	
 	for k, v in pairs(urls) do
-		checkType(k, 'string')
-		if type(v) == 'table' then
-			checkType(v[1], v[2], 'function', 'boolean')
-		else
-			checkType(v, 'function')
-		end
+		checkType(k, v, 'string', 'function')
 	end
-
-	return router
 end
-local router = checkURLS(URLS)
+checkURLS(URLS)
 
 
 local function trailingPath(path)
@@ -144,10 +146,10 @@ local function getHandlerByPath(path)
 	local path = path:lower() 
 	local parse = function (v)
 		if type(v) == 'table' then
-			checkType(v[1], v[2], 'function', 'boolean')
-			return v[1], v[2]
+			checkType(v.handler, 'function')
+			return v.handler
 		elseif type(v) == 'function' then
-			return v, false
+			return v
 		end
 	end
 	
@@ -176,7 +178,7 @@ local function getHandlerByPath(path)
 	end
 	
 	-- if walks here, means no suited case matched
-	return nil, nil
+	return nil
 end
 
 
@@ -274,7 +276,12 @@ local function runStateless(conn, main, req, before, after)
     end)
 
     if not good and err then
-        errors.reportError(conn, req, err, state)
+		if config.PRODUCTION then
+			web.conn:reply_http(req, '<h2>Page error.</h2>', 500, 'Page error.', req.headers)
+			print('[Error] Page error.')
+		else
+			errors.reportError(conn, req, err, state)
+		end
     end
 end
 
@@ -303,7 +310,7 @@ local function run(conn, config)
         if req and not err then
 			-- if http directive is not in the range of bamboo specified 
             if not config.methods[req.headers.METHOD] then
-                basicError(conn, req, "Method Not Allowed",
+                errors.basicError(conn, req, "Method Not Allowed",
                     405, "Method Not Allowed", {Allow = config.allowed_methods_header})
             else
                 msg_type = req.data.type
@@ -329,31 +336,16 @@ local function run(conn, config)
 					-- record session
 					Session:set(req)
 					
-					--local prev_path = PREV_PATH[session_id]
-					--if prev_path and prev_path ~= req.path and STATE[prev_path] and STATE[prev_path][session_id] then
-					--	if not STATE[prev_path] then STATE[prev_path] = {} end
-					--	STATE[prev_path][session_id] = nil
-					--else
-					--	PREV_PATH[session_id] = req.path
-					--end
-					--ptable(BAMBOO_DB:hgetall('session:'+req.session_id))	-- for test
-
 					-------------------------------------------------
 					-- according coming path, find the corresponding handler function
-					local main, state_flag = getHandlerByPath(path)
+					local main = getHandlerByPath(path)
 					if not main then
 					   	-- return 404 page
-						print(('[WARNING] No handler to process this path: %s.'):format(path))
+						print(('[Warning] No handler to process this path: %s.'):format(path))
 						conn:reply_http(req, '<h2>Page Not Found.</h2>', 404, 'Not Found', req.headers)
 					else
-						
-						if state_flag then
-						   -- temporarily disable it
-						   --runCoro(conn, main, req, conn_id, path, before, after)
-						else
-							-- this is the default way
-							runStateless(conn, main, req, before, after)
-						end
+						-- this is the default way
+						runStateless(conn, main, req, before, after)
 					end
 
                 end

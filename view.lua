@@ -22,9 +22,8 @@ end
 
 local function removeSnippets(tmpl)
 	-- for html
-	return tmpl:gsub('%<%!%-%-.-%-%-%>', '')
-	-- :gsub("%<script *[%w=\'\"]*%>.-%</script%>", ''):gsub("%<style%>.-%</style%>", '')
-
+	-- remove all comments except something like <!--[if lg IE 6]> <![endif]-->
+	return tmpl:gsub('%<%!%-%-[^%[ ].-[^%]]?%-%-%>', '')
 end
 
 
@@ -135,12 +134,12 @@ local VIEW_ACTIONS = {
                 params[var] = val
             end
             
-            return ('_result[#_result+1] = [[%s]]'):format(PLUGIN_LIST[plugin_name](params))
+            return ('_result[#_result+1] = [==[%s]==]'):format(PLUGIN_LIST[plugin_name](params))
         else
             -- if divider_loc is nil, means this plugin has no arguents
             plugin_name = code
 
-            return ('_result[#_result+1] = [[%s]]'):format(PLUGIN_LIST[plugin_name]({}))
+            return ('_result[#_result+1] = [==[%s]==]'):format(PLUGIN_LIST[plugin_name]({}))
         end
     end,
     
@@ -250,12 +249,12 @@ local View = Object:extend {
 			local act = VIEW_ACTIONS[block:sub(1,2)]
 
 			if act then
-				code[#code+1] =  '_result[#_result+1] = [[' + text + ']]'
+				code[#code+1] =  '_result[#_result+1] = [==[' + text + ']==]'
 				code[#code+1] = act(block:sub(3,-3))
 			elseif #block > 2 then
-				code[#code+1] = '_result[#_result+1] = [[' + text + block + ']]'
+				code[#code+1] = '_result[#_result+1] = [==[' + text + block + ']==]'
 			else
-				code[#code+1] =  '_result[#_result+1] = [[' + text + ']]'
+				code[#code+1] =  '_result[#_result+1] = [==[' + text + ']==]'
 			end
 		end
 		
