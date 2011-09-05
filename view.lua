@@ -23,13 +23,28 @@ end
 local function removeSnippets(tmpl)
 	-- for html
 	-- remove all comments except something like <!--[if lg IE 6]> <![endif]-->
-	local function checkmatch(searching_str)
-		if searching_str:sub(1, 5) ~= '<!--[' then
-			tmpl = tmpl:gsub(searching_str, '', 1)
+	local frags = {}
+	
+	local ob = 1
+	local b, l = 1, 0
+	while b do
+		b, l = tmpl:find('%<%!%-%-.-%-%-%>', l+1)
+		if b then
+			if tmpl:sub(b, b+4) == '<!--[' then
+				-- do nothing now
+				frags[#frags + 1] = tmpl:sub(ob, l)
+			else
+				frags[#frags + 1] = tmpl:sub(ob, b - 1)
+			end
+			ob = l + 1
 		end
 	end
 	
-	return tmpl:gsub('%<%!%-%-.-%-%-%>', checkmatch)
+	if ob <= #tmpl then
+		frags[#frags + 1] = tmpl:sub(ob, #tmpl)	
+	end
+	
+	return table.concat(frags)
 end
 
 
