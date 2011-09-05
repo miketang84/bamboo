@@ -710,11 +710,11 @@ Model = Object:extend {
 	--- fitler some instances belong to this model
 	-- @param query_args: query arguments in a table
 	-- @param is_rev: 'rev' or other value, means start to search from begining or from end
-	-- @param starti: specify which index to start search
+	-- @param starti: specify which index to start search, note: this is the position before filtering 
 	-- @param length: specify how many elements to find
 	-- @param dir: specify the direction of the search action, 1 means positive, -1 means negative
-	-- @return: an object list (query set)
-	--          the end position last search
+	-- @return: query_set, an object list (query set)
+	--          endpoint, the end position last search
 	-- @note: this function can be called by class object and query set
 	filter = function (self, query_args, is_rev, starti, length, dir)
 		I_AM_CLASS_OR_QUERY_SET(self)
@@ -734,7 +734,7 @@ Model = Object:extend {
 		end
 		
 		-- if query table is empty, return all instances
-		if isFalse(query_args) then return self:all(is_rev) end
+		if isFalse(query_args) then return self:all(is_rev), 1 end
 
 		-- normalize the 'and' and 'or' logic
 		local logic = 'and'
@@ -769,7 +769,7 @@ Model = Object:extend {
 			end
 		end
 		-- nothing in id list, return empty table
-		if #all_ids == 0 then return List() end
+		if #all_ids == 0 then return List(), 1 end
 		
 		-- 's': start
 		-- 'e': end
@@ -1111,7 +1111,7 @@ Model = Object:extend {
 		if isFalse(indexfd) then
 			db:zadd(index_key, self.id, self.id)
 		elseif isFalse(self[indexfd]) then
-			print("[Warning] index field value must not be blank.")
+			print("[Warning] index field value must not be empty, will not save it, please check your model defination.")
 			return nil
 		else
 			local score = db:zscore(index_key, self[indexfd])
