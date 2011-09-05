@@ -67,26 +67,6 @@ local Web = Object:extend {
     end;
 
     json = function (self, data, ctype)
-		-- try:
-		-- temporary transform the empty table to empty array
-		-- 
-		if type(data) == 'table' then
-			for k, v in pairs(data) do
-				if type(v) == 'table' then
-					if table.isEmpty(v) then
-						--data[k] = json.util.InitArray(v)
-						json.util.InitArray(v)
-					else
-						for kk, vv in pairs(v) do
-							if type(vv) == 'table' and table.isEmpty(vv) then
-								json.util.InitArray(vv)
-							end
-						end
-					end
-				end
-			end
-		end
-		
         self:page(json.encode(data), 200, "OK", {['content-type'] = ctype or 'application/json'})
     end;
 
