@@ -3,8 +3,6 @@
 module(..., package.seeall)
 
 require 'posix'
-local util = require 'bamboo.util'
-
 local Model = require 'bamboo.model'
 local Form = require 'bamboo.form'
 
@@ -52,7 +50,7 @@ local function savefile(t)
 	if req.headers['x-requested-with'] then
 		-- when html5 upload, we think of the name of that file was stored in header x-file-name
 		-- if this info missing, we may consider the filename was put in the query string
-		filename = req.headers['x-file-name'] or util.parseQuery(req)['filename']
+		filename = req.headers['x-file-name'] or Form:parseQuery(req)['filename']
 		-- TODO:
 		-- req.body contains all file binary data
 		body = req.body

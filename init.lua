@@ -204,7 +204,7 @@ registerModule = function (mdl, extra_params)
 						
 						-- check post filters
 						local action_post_filters = action.post_filters
-						if action_post_filters and #action_post_filters > 0 then
+						if ret and action_post_filters and #action_post_filters > 0 then
 							checkType(action_post_filters, 'table')
 							
 							filter_flag = true
@@ -218,7 +218,6 @@ registerModule = function (mdl, extra_params)
 								local filter = getPostFilterByName(name_part)
 								-- if filter is invalid, ignore it
 								if filter then 
-									local ret
 									ret, propagated_params = filter(args_list, propagated_params)
 									if not ret then 
 										filter_flag = false 
