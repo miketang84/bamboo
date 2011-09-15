@@ -133,6 +133,7 @@ registerModule = function (mdl, extra_params)
 					return function (web, req, propagated_params)
 						local filter_flag, permission_flag = true, true
 						
+						-- check filters
 						if action.filters and #action.filters > 0 then
 							checkType(action.filters, 'table')
 							
@@ -160,7 +161,8 @@ registerModule = function (mdl, extra_params)
 							end
 							
 						end
-					
+						
+						-- check perms
 						if action.perms and #action.perms > 0 then
 							checkType(action.perms, 'table')
 							-- TODO
@@ -191,13 +193,47 @@ registerModule = function (mdl, extra_params)
 							end
 						end
 					
-						if filter_flag == true and permission_flag == true then
-							-- after execute filters and permissions check, pass here, then execute this handler
-							return fun(web, req, propagated_params)
-						else
+						if not filter_flag or not permission_flag then
 							print("[Prompt] user was denied to execute this handler.")
 							return false
 						end
+
+						-- execute handler
+						-- after execute filters and permissions check, pass here, then execute this handler
+						local ret, propagated_params = fun(web, req, propagated_params)
+						
+						-- check post filters
+						local action_post_filters = action.post_filters
+						if action_post_filters and #action_post_filters > 0 then
+							checkType(action_post_filters, 'table')
+							
+							filter_flag = true
+							-- execute all filters bound to this handler
+							for _, filter_name in ipairs(action_post_filters) do
+								local name_part, args_part = filter_name:trim():match("^([%w_]+):? *([%w_ /%-]*)")
+								local args_list = {}
+								if args_part then
+									args_list = args_part:trim():split(' +')
+								end
+								local filter = getPostFilterByName(name_part)
+								-- if filter is invalid, ignore it
+								if filter then 
+									local ret
+									ret, propagated_params = filter(args_list, propagated_params)
+									if not ret then 
+										filter_flag = false 
+										print(("[Warning] PostFilter chains was broken at %s."):format(filter_name))
+										break 
+									end
+								else
+									print(('[Warning] This post filter %s is not registered.'):format(name_part))
+								end
+							end
+							
+						end
+					
+						-- return from lua function
+						return ret
 					end
 				end
 			end
@@ -280,6 +316,62 @@ executeFilters = function ( filters )
 	end
 
 	return true
+end
+
+registerFilters = function (filter_table)
+	checkType(filter_table, 'table')
+	for _, filter_define in ipairs(filter_table) do
+		registerFilter(filter_define[1], filter_define[2])
+	end
+end
+
+
+------------------------------------------------------------------------
+POST_FILTER_LIST = {}
+
+registerPostFilter = function ( filter_name, filter_func)
+	checkType(filter_name, filter_func, 'string', 'function')
+	
+	POST_FILTER_LIST[filter_name] = filter_func
+end
+
+getPostFilterByName = function ( filter_name )
+	checkType(filter_name, 'string')
+	
+	local filter = POST_FILTER_LIST[filter_name]
+	if not filter then
+		print(("[Warning] This post filter %s is not registered!"):format(filter_name))
+	end
+	
+	return filter
+end
+
+
+--- used mainly in entry file and each module's initial function
+-- @filters   
+executePostFilters = function ( filters )
+	checkType(filters, 'table')
+	for _, filter_name in ipairs(filters) do
+		local filter = getPostFilterByName(filter_name)
+		if filter then
+			-- now filter has no extra parameters
+			local ret = filter()
+			if not ret then
+				print(("[Warning] PostFilter chains was broken at %s."):format(filter_name))				
+				return false
+			end
+		end
+	
+	end
+
+	return true
+end
+
+registerPostFilters = function (filter_table)
+	checkType(filter_table, 'table')
+	for _, filter_define in ipairs(filter_table) do
+		registerPostFilter(filter_define[1], filter_define[2])
+	end
 end
 
 ------------------------------------------------------------------------
