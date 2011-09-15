@@ -238,7 +238,7 @@ local View = Object:extend {
 		local script_array = {}
 		local script_snippet = ''
 		while true do
-			loc_b, loc_e, script_snippet  = tmpl:find("(%<script *[%w=\'\"]*%>.-%</script%>)", loc_e + 1)
+			loc_b, loc_e, script_snippet  = tmpl:find("(%<script *[%w=\'\"/]*%>.-%</script%>)", loc_e + 1)
 			if not loc_b then break end
 			
 			script_array[#script_array + 1] = script_snippet
