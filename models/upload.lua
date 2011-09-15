@@ -3,6 +3,8 @@
 module(..., package.seeall)
 
 require 'posix'
+local http = require 'lglib.http'
+
 local Model = require 'bamboo.model'
 local Form = require 'bamboo.form'
 
@@ -64,6 +66,9 @@ local function savefile(t)
 		body = file_obj.body
 	end
 	if isFalse(filename) or isFalse(body) then return nil, nil end
+	if not req.ajax then
+		filename = http.encodeURL(filename)
+	end
 	
 	if not posix.stat(dest_dir) then
 		-- why posix have no command like " mkdir -p "
