@@ -402,8 +402,8 @@ end
 registerPermissions = function (perm_t)
 	checkType(perm_t, 'table')
 	for _, perm_params in ipairs(perm_t) do
-		registerPermission(perm_params.name, perm_params.desc, 
-			perm_params.failure_func, perm_params.success_func)
+		registerPermission(perm_params[1], perm_params[2], 
+			perm_params[3], perm_params[4])
 	end
 
 end
