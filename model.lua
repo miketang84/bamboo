@@ -1541,6 +1541,30 @@ Model = Object:extend {
 		
 		return self.__fields[field]
 	end;
+
+	-- do sort on query set
+	dosort = function (self, field, sort_func, direction)
+		I_AM_QUERY_SET(self)
+		checkType(field, 'string')
+		
+		local direction = direction or 'asc'
+		
+		local sort_func = sort_func or function (a, b)
+			local af = a[field] 
+			local bf = b[field]
+			if af and bf then
+				if direction == 'asc' then
+					return af < bf
+				elseif direction == 'dsc' then
+					return af > bf
+				end
+			end
+		end
+		
+		table.sort(self, sort_func)
+		
+		return self		
+	end;
 	
 }
 
