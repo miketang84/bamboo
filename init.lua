@@ -41,8 +41,6 @@ registerModule = function (mdl, extra_params)
 		checkType(mdl.URLS, 'table')
 		
 		for url, action in pairs(mdl.URLS) do
-			local propagated_params = {}
-
 			local nurl = ''
 			if (url == '/' or not url:startsWith('/')) and mdl._NAME then
 				-- print(url)
@@ -130,7 +128,8 @@ registerModule = function (mdl, extra_params)
 					local fun = action.handler
 					checkType(fun, 'function')
 					
-					return function (web, req, propagated_params)
+					return function (web, req)
+						local propagated_params = {}
 						local filter_flag, permission_flag = true, true
 						
 						-- check filters
@@ -231,8 +230,6 @@ registerModule = function (mdl, extra_params)
 							
 						end
 						
-						-- clear the previous paramenters boat
-						propagated_params = {}
 						-- return from lua function
 						return ret
 					end
@@ -243,14 +240,14 @@ registerModule = function (mdl, extra_params)
 				nfun = function (web, req)
 					local ret = mdl.init(extra_params)
 					if ret then
-						return actionTransform(web, req)(web, req, propagated_params)
+						return actionTransform(web, req)(web, req)
 					end
 					
 					-- make no sense
 					return false
 				end
 			else
-				nfun = actionTransform(web, req, propagated_params)
+				nfun = actionTransform(web, req)
 			end
 
 			URLS[nurl] = nfun
