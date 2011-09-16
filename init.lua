@@ -128,8 +128,8 @@ registerModule = function (mdl, extra_params)
 					local fun = action.handler
 					checkType(fun, 'function')
 					
-					return function (web, req)
-						local propagated_params = {}
+					return function (web, req, inited_params)
+						local propagated_params = inited_params or {}
 						local filter_flag, permission_flag = true, true
 						
 						-- check filters
@@ -238,9 +238,9 @@ registerModule = function (mdl, extra_params)
 			
 			if mdl.init and type(mdl.init) == 'function' and not exclude_flag then
 				nfun = function (web, req)
-					local ret = mdl.init(extra_params)
+					local ret, inited_params = mdl.init(extra_params)
 					if ret then
-						return actionTransform(web, req)(web, req)
+						return actionTransform(web, req)(web, req, inited_params)
 					end
 					
 					-- make no sense
