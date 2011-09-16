@@ -230,7 +230,9 @@ registerModule = function (mdl, extra_params)
 							end
 							
 						end
-					
+						
+						-- clear the previous paramenters boat
+						propagated_params = {}
 						-- return from lua function
 						return ret
 					end
