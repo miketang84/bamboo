@@ -169,7 +169,7 @@ local Session = Object:extend {
     del = function (self, session_key)
         checkType(session_key, 'string')
         local session_key = PREFIX+session_key
-        req.session = nil
+        -- req.session = nil
 
         return db:del(session_key)
     end;

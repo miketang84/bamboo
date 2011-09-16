@@ -17,7 +17,7 @@ Node = Model:extend {
 		['status'] 	= 	{  newfield=true},
 
 		['is_category'] = {  newfield=true},
-		['parent'] 		= { st='ONE', foreign='Node', newfield=true},
+		['parent'] 		= { st='ONE', foreign='Node', newfield=true, order=1.1},
 		['children'] 	= { st='MANY', foreign='Node', newfield=true},
 		['groups'] 		= { st='MANY', foreign='Node', newfield=true},
 

@@ -142,7 +142,7 @@ registerModule = function (mdl, extra_params)
 							for _, filter_name in ipairs(action.filters) do
 								local name_part, args_part = filter_name:trim():match("^([%w_]+):? *([%w_ /%-]*)")
 								local args_list = {}
-								if args_part then
+								if args_part and args_part ~= '' then
 									args_list = args_part:trim():split(' +')
 								end
 								local filter = getFilterByName(name_part)
@@ -212,7 +212,7 @@ registerModule = function (mdl, extra_params)
 							for _, filter_name in ipairs(action_post_filters) do
 								local name_part, args_part = filter_name:trim():match("^([%w_]+):? *([%w_ /%-]*)")
 								local args_list = {}
-								if args_part then
+								if args_part and args_part ~= '' then
 									args_list = args_part:trim():split(' +')
 								end
 								local filter = getPostFilterByName(name_part)
