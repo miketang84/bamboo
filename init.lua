@@ -32,6 +32,19 @@ registerPlugin = function (name, mdl)
 end
 ------------------------------------------------------------------------
 
+local function parseFilterName( filter_name )
+	local name_part, args_part = filter_name:trim():match("^([%w_]+):? *([%w_ /%-]*)")
+	local args_list = {}
+	if args_part and args_part ~= '' then
+		args_list = args_part:trim():split(' +')
+	end
+	
+	filter = getFilterByName(name_part)
+	return filter, args_list
+end
+
+
+
 MODULE_LIST = {}
 -- 
 registerModule = function (mdl, extra_params)
@@ -133,18 +146,14 @@ registerModule = function (mdl, extra_params)
 						local filter_flag, permission_flag = true, true
 						
 						-- check filters
-						if action.filters and #action.filters > 0 then
-							checkType(action.filters, 'table')
+						local action_filters = action.filters
+						if action_filters and #action_filters > 0 then
+							checkType(action_filters, 'table')
 							
 							filter_flag = true
 							-- execute all filters bound to this handler
-							for _, filter_name in ipairs(action.filters) do
-								local name_part, args_part = filter_name:trim():match("^([%w_]+):? *([%w_ /%-]*)")
-								local args_list = {}
-								if args_part and args_part ~= '' then
-									args_list = args_part:trim():split(' +')
-								end
-								local filter = getFilterByName(name_part)
+							for _, filter_name in ipairs(action_filters) do
+								local filter, args_list = parseFilterName(filter_name)
 								-- if filter is invalid, ignore it
 								if filter then 
 									local ret
@@ -155,7 +164,7 @@ registerModule = function (mdl, extra_params)
 										break 
 									end
 								else
-									print(('[Warning] This filter %s is not registered.'):format(name_part))
+									print(('[Warning] This filter %s is not registered.'):format(filter_name))
 								end
 							end
 							
@@ -209,12 +218,7 @@ registerModule = function (mdl, extra_params)
 							filter_flag = true
 							-- execute all filters bound to this handler
 							for _, filter_name in ipairs(action_post_filters) do
-								local name_part, args_part = filter_name:trim():match("^([%w_]+):? *([%w_ /%-]*)")
-								local args_list = {}
-								if args_part and args_part ~= '' then
-									args_list = args_part:trim():split(' +')
-								end
-								local filter = getPostFilterByName(name_part)
+								local filter, args_list = parseFilterName(filter_name)
 								-- if filter is invalid, ignore it
 								if filter then 
 									ret, propagated_params = filter(args_list, propagated_params)
@@ -224,14 +228,14 @@ registerModule = function (mdl, extra_params)
 										break 
 									end
 								else
-									print(('[Warning] This post filter %s is not registered.'):format(name_part))
+									print(('[Warning] This post filter %s is not registered.'):format(filter_name))
 								end
 							end
 							
 						end
 						
 						-- return from lua function
-						return ret
+						return ret, propagated_params
 					end
 				end
 			end
@@ -239,12 +243,30 @@ registerModule = function (mdl, extra_params)
 			if mdl.init and type(mdl.init) == 'function' and not exclude_flag then
 				nfun = function (web, req)
 					local ret, inited_params = mdl.init(extra_params)
+					local finished_params
+					local last_params
 					if ret then
-						return actionTransform(web, req)(web, req, inited_params)
+						ret, finished_params = actionTransform(web, req)(web, req, inited_params)
+					end
+					
+					if ret and mdl.finish and type(mdl.finish) == 'function' then
+						ret, last_params = mdl.finish(finished_params)
 					end
 					
 					-- make no sense
-					return false
+					return ret, last_params or finished_params or inited_params
+				end
+			elseif mdl.finish and type(mdl.finish) == 'function' and not exclude_flag then
+				nfun = function (web, req)
+					local ret, finished_params = actionTransform(web, req)(web, req)
+
+					local last_params
+					if ret then
+						ret, last_params = mdl.finish(finished_params)
+					end
+					
+					-- make no sense
+					return ret, last_params or finished_params
 				end
 			else
 				nfun = actionTransform(web, req)
@@ -281,6 +303,8 @@ FILTER_LIST = {}
 registerFilter = function ( filter_name, filter_func)
 	checkType(filter_name, filter_func, 'string', 'function')
 	
+	assert(not FILTER_LIST[filter_name], "[Error] This filter name has been registerd.")
+	
 	FILTER_LIST[filter_name] = filter_func
 end
 
@@ -298,77 +322,28 @@ end
 
 --- used mainly in entry file and each module's initial function
 -- @filters   
-executeFilters = function ( filters )
+executeFilters = function ( filters, params )
 	checkType(filters, 'table')
 	for _, filter_name in ipairs(filters) do
-		local filter = getFilterByName(filter_name)
+		local filter, args_list = parseFilterName(filter_name)
 		if filter then
 			-- now filter has no extra parameters
-			local ret = filter()
+			local ret, params = filter(args_list, params)
 			if not ret then
 				print(("[Warning] Filter chains was broken at %s."):format(filter_name))				
 				return false
 			end
 		end
-	
 	end
 
-	return true
+	return true, params
 end
 
 registerFilters = function (filter_table)
 	checkType(filter_table, 'table')
 	for _, filter_define in ipairs(filter_table) do
+		-- 1. name, 2. func
 		registerFilter(filter_define[1], filter_define[2])
-	end
-end
-
-
-------------------------------------------------------------------------
-POST_FILTER_LIST = {}
-
-registerPostFilter = function ( filter_name, filter_func)
-	checkType(filter_name, filter_func, 'string', 'function')
-	
-	POST_FILTER_LIST[filter_name] = filter_func
-end
-
-getPostFilterByName = function ( filter_name )
-	checkType(filter_name, 'string')
-	
-	local filter = POST_FILTER_LIST[filter_name]
-	if not filter then
-		print(("[Warning] This post filter %s is not registered!"):format(filter_name))
-	end
-	
-	return filter
-end
-
-
---- used mainly in entry file and each module's initial function
--- @filters   
-executePostFilters = function ( filters )
-	checkType(filters, 'table')
-	for _, filter_name in ipairs(filters) do
-		local filter = getPostFilterByName(filter_name)
-		if filter then
-			-- now filter has no extra parameters
-			local ret = filter()
-			if not ret then
-				print(("[Warning] PostFilter chains was broken at %s."):format(filter_name))				
-				return false
-			end
-		end
-	
-	end
-
-	return true
-end
-
-registerPostFilters = function (filter_table)
-	checkType(filter_table, 'table')
-	for _, filter_define in ipairs(filter_table) do
-		registerPostFilter(filter_define[1], filter_define[2])
 	end
 end
 
