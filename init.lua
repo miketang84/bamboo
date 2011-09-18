@@ -242,7 +242,7 @@ registerModule = function (mdl, extra_params)
 			
 			if mdl.init and type(mdl.init) == 'function' and not exclude_flag then
 				nfun = function (web, req)
-					local ret, inited_params = mdl.init(extra_params)
+					local ret, inited_params = mdl.init(extra_params or {})
 					local finished_params
 					local last_params
 					if ret then
