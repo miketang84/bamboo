@@ -1542,8 +1542,8 @@ Model = Object:extend {
 		return self.__fields[field]
 	end;
 
-	-- do sort on query set
-	dosort = function (self, field, sort_func, direction)
+	-- do sort on query set by some field
+	sortby = function (self, field, sort_func, direction)
 		I_AM_QUERY_SET(self)
 		checkType(field, 'string')
 		
