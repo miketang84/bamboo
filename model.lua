@@ -275,7 +275,7 @@ end
 _G['lt'] = function (limitation)
 	return function (v)
 		local nv = tonumber(v)
-		if nv and nv < limitation then
+		if nv and nv < tonumber(limitation) then
 			return true
 		else
 			return false
@@ -286,7 +286,7 @@ end
 _G['gt'] = function (limitation)
 	return function (v)
 		local nv = tonumber(v)
-		if nv and nv > limitation then
+		if nv and nv > tonumber(limitation) then
 			return true
 		else
 			return false
@@ -298,7 +298,7 @@ end
 _G['le'] = function (limitation)
 	return function (v)
 		local nv = tonumber(v)	
-		if nv and nv <= limitation then
+		if nv and nv <= tonumber(limitation) then
 			return true
 		else
 			return false
@@ -309,7 +309,7 @@ end
 _G['ge'] = function (limitation)
 	return function (v)
 		local nv = tonumber(v)	
-		if nv and nv >= limitation then
+		if nv and nv >= tonumber(limitation) then
 			return true
 		else
 			return false
