@@ -168,10 +168,11 @@ local VIEW_ACTIONS = {
 		local code = code:trim()
 		assert( code ~= '', 'Instance name must not be blank.')
 		local instance_lexical, restcode = code:match('^([%w_%.]+),?%s*(.*)$')
-		print(instance_lexical, restcode)
+		-- print(instance_lexical, restcode)
+		restcode = restcode:gsub('\n', ' ')
 		return ([[
             local mvm = require 'bamboo.mvm'
-            local fragment = mvm.process(%s, '%s')
+						local fragment = mvm.process(%s, [==[%s]==])
             _result[#_result+1] = fragment
         ]]):format(instance_lexical, restcode)
 
@@ -359,7 +360,7 @@ local View = Object:extend {
 
         code[#code+1] = 'return table.concat(_result)'
         code = table.concat(code, '\n')
-        print(code)
+        -- print(code)
 
         -- restore scripts and csses
 		code = restoreScriptsAndCsses(code, has_script, script_array, has_css, css_array)

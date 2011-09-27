@@ -6,12 +6,13 @@ local Image = Upload:extend {
 	__tag = 'Bamboo.Model.Upload.Image';
 	__name = 'Image';
 	__desc = 'Generitic Image definition';
+	__keyfd = 'path';
 	__fields = {
 		['width'] = {},
 		['height'] = {},
 		
 		['name'] = {},
-		['path'] = {},
+		['path'] = {widget_type="image"},
 		['size'] = {},
 		['timestamp'] = {},
 		['desc'] = {},
