@@ -47,39 +47,8 @@ end
 
 MODULE_LIST = {}
 -- 
-registerModule = function (mdl, extra_params)
-	checkType(mdl, 'table')
-	
-	if mdl.URLS then
-		checkType(mdl.URLS, 'table')
-		
-		for url, action in pairs(mdl.URLS) do
-			local nurl = ''
-			if (url == '/' or not url:startsWith('/')) and mdl._NAME then
-				-- print(url)
-				-- make the relative url pattern to absolute url pattern
-				local module_name = mdl._NAME:match('%.([%w_]+)$')
-				nurl = ('/%s/%s'):format(module_name, url)
-				-- print(nurl)
-			else
-				nurl = url
-			end
-			
-			local nfun
-			local exclude_flag = false
-			if extra_params then
-				checkType(extra_params, 'table')
-				if extra_params['excludes'] then
-				-- add exceptions to module's init function
-					for _, exclude in ipairs(extra_params['excludes']) do
-						if exclude == url then
-							exclude_flag = true
-						end
-					end
-				end
-			end
-			
-			local function permissionCheck(action_perms, perms)
+
+local function permissionCheck(action_perms, perms)
 				if #perms > 0 then
 					local perm_list = {}
 					for _, perm in ipairs(perms) do
@@ -132,7 +101,41 @@ registerModule = function (mdl, extra_params)
 					return false				
 				end
 			end
+
+
+registerModule = function (mdl, extra_params)
+	checkType(mdl, 'table')
+	
+	if mdl.URLS then
+		checkType(mdl.URLS, 'table')
+		
+		for url, action in pairs(mdl.URLS) do
+			local nurl = ''
+			if (url == '/' or not url:startsWith('/')) and mdl._NAME then
+				-- print(url)
+				-- make the relative url pattern to absolute url pattern
+				local module_name = mdl._NAME:match('%.([%w_]+)$')
+				nurl = ('/%s/%s'):format(module_name, url)
+				-- print(nurl)
+			else
+				nurl = url
+			end
 			
+			local nfun
+			local exclude_flag = false
+			if extra_params then
+				checkType(extra_params, 'table')
+				if extra_params['excludes'] then
+				-- add exceptions to module's init function
+					for _, exclude in ipairs(extra_params['excludes']) do
+						if exclude == url then
+							exclude_flag = true
+						end
+					end
+				end
+			end
+			
+						
 			
 			local function actionTransform(web, req)
 				if type(action) == 'function' then
@@ -297,6 +300,12 @@ getModelByName = function (name)
 	return MODEL_LIST[name]
 end
 
+_G['MAIN_USER'] = nil
+registerMainUser = function (mdl, extra_params)
+					   registerModel (mdl, extra_params)
+					   _G['MAIN_USER'] = mdl
+				   end;
+
 ------------------------------------------------------------------------
 FILTER_LIST = {}
 
@@ -335,7 +344,6 @@ executeFilters = function ( filters, params )
 			end
 		end
 	end
-
 	return true, params
 end
 
@@ -349,6 +357,37 @@ end
 
 ------------------------------------------------------------------------
 PERMISSION_LIST = {}
+
+function executePermissionsCheck(perms)
+	local permission_flag = true
+	local user = req.user
+	if user then
+		-- check the user's permissions
+		if user.perms then
+			local user_perms = user:getForeign('perms')
+			permission_flag = permissionCheck(perms, user_perms)	
+			
+		end
+		
+		-- check groups' permissions
+		if user.groups then
+			local groups = user:getForeign('groups')
+			for _, group in ipairs(groups) do
+				if group then
+					if group.perms then
+						local group_perms = group:getForeign('perms')
+						local ret = permissionCheck(perms, group_perms)
+						-- once a group's permissions fit action_perms, return true
+						if ret then permission_flag = true; break end
+					end
+				end
+			end
+		end
+		
+		return permission_flag
+	end
+end
+
 
 registerPermission = function (name, desc, failure_func, success_func)
 	local Permission = require 'bamboo.models.permission'

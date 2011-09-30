@@ -63,7 +63,7 @@ module(..., package.seeall)
 
 local function constructHtmlTable(instance, field, value, fdt)
 	local h = {
-		template =[[<label>$desc:</label><input type="text" class="$class" name="$field" $attr value="$value" >]],
+		template =[[<label>$caption:</label><input type="text" class="$class" name="$field" $attr value="$value" >]],
 		class={},
 	}
 
@@ -75,9 +75,9 @@ local function constructHtmlTable(instance, field, value, fdt)
 		-- 		-- h.template = [[<label>$field:</label><input type="text" class="$class" $attr value="$value" >]]
 		-- 		table.insert(h.class, 'textInput')
 		-- 	elseif val == 'textarea' then
-		-- 		h.template = [[<lable>$desc:</label><textarea class="$class" $attr>$value</textarea>]]
+		-- 		h.template = [[<lable>$caption:</label><textarea class="$class" $attr>$value</textarea>]]
 		-- 	elseif val == 'enum' then
-		-- 		h.template = [[<label>$desc:</label><select>$enum</select>]]
+		-- 		h.template = [[<label>$caption:</label><select>$enum</select>]]
 		-- 		local str_enum = ''
 		-- 		for _, v in ipairs(fdt.enum) do
 		-- 			if v == value then
@@ -92,7 +92,7 @@ local function constructHtmlTable(instance, field, value, fdt)
 		-- 	elseif val == 'email' then
 		-- 		table.insert(h.class, 'email')
 		-- 	elseif val == 'image' then
-		-- 		h.template = [[<label>$desc:</label><img src="/$value" /><input type="text" value="$value />"]]
+		-- 		h.template = [[<label>$caption:</label><img src="/$value" /><input type="text" value="$value />"]]
 		-- 	end
 		if desc == 'required' then
 			if val == true then
@@ -102,9 +102,9 @@ local function constructHtmlTable(instance, field, value, fdt)
 			if val == false then
 				local wtype = fdt.widget_type
 				if wtype == 'url' then
-					h.template = [[<label>$desc:</label><a href="http://$value" target='blank'>$value</a>]]
+					h.template = [[<label>$caption:</label><a href="http://$value" target='blank'>$value</a>]]
 				else
-					h.template = [[<label>$desc:</label><span>$value</span>]]
+					h.template = [[<label>$caption:</label><span>$value</span>]]
 				end
 			else
 				local wtype = fdt.widget_type
@@ -112,9 +112,9 @@ local function constructHtmlTable(instance, field, value, fdt)
 					-- h.template = [[<label>$field:</label><input type="text" class="$class" $attr value="$value" >]]
 					table.insert(h.class, 'textInput')
 				elseif wtype == 'textarea' then
-					h.template = [[<lable>$desc:</label><textarea class="$class" name="$field" $attr>$value</textarea>]]
+					h.template = [[<label>$caption:</label><textarea class="$class" name="$field" $attr>$value</textarea>]]
 				elseif wtype == 'enum' then
-					h.template = [[<label>$desc:</label><select name="$field" class="$class">$enum</select>]]
+					h.template = [[<label>$caption:</label><select name="$field" class="$class">$enum</select>]]
 					local str_enum = ''
 					for _, v in ipairs(fdt.enum) do
 						if v == value then
@@ -135,9 +135,49 @@ local function constructHtmlTable(instance, field, value, fdt)
 					h.minlength = 11
 					h.maxlength = 11
 				elseif wtype == 'image' then
-					h.template = [[<label>$desc:</label><img src="/$value" /><input type="text" value="$value" name="$field"/>]]
+					h.template = [==[
+							<label>$caption:</label>
+								<img src="/$value" /><br/><label></label>
+								<input type="text" value="$value" name="$field" />
+								<div id="__upload"></div>
+
+								<script type="text/javascript" src="/media/js/fileuploader.js"></script>
+								<script type="text/javascript">
+								$(function(){
+										  var uploader = new qq.FileUploader({
+																				 element: $('#__upload')[0],
+																				 action: '/admin/upload',
+																				 debug: false,
+																				 sizeLimit: 500000,
+																				 maxConnections: 1,
+																				 //listElement: page_upload_list_table[0],
+																				 fileTemplate: '<div class="qq-uploading hide">' +
+																					 '<span class="qq-upload-file"></span>' +
+																					 '<span class="qq-upload-spinner"></span>' +
+																					 '<span class="qq-upload-size"></span>' +
+																					 '<a class="qq-upload-cancel" href="#">Cancel</a>' +
+																					 '<span class="qq-upload-failed-text">Failed</span>' +
+																					 '</div>',
+																				 template: '<div class="qq-uploader">' +
+																					 '<div class="qq-upload-drop-area"><span>Drop files here to upload</span></div>' +
+																					 '<div class="qq-upload-button"><a>上传</a></div>' +
+																					 '<ul class="qq-upload-list"></ul>' +
+																					 '</div>',
+																				 messages: {
+																					 typeError: "{file} 扩展名不合要求。只有扩展名为 {extensions} 的文件被允许上传。",
+																					 sizeError: "{file} 文件太大，最大限制为 {sizeLimit}。",
+																					 minSizeError: "{file} 文件太小，最小限制为 {minSizeLimit}。",
+																					 emptyError: "{file} 文件是空的，请重新选择文件。",
+																					 onLeave: "文件正在上传，如果此时离开，将会停止上传。"            
+																				 },
+																				 onComplete: function(){navTab.reload('')}		
+																							 });
+																			 });        
+																				 </script>
+
+						]==]
 				else
-					h.template =[[<label>$desc:</label><input type="text" class="$class" $attr value="$value" name="$field"/>]]
+					h.template =[[<label>$caption:</label><input type="text" class="$class" $attr value="$value" name="$field"/>]]
 				end
 			end
 		elseif desc == 'foreign' then
@@ -147,7 +187,6 @@ local function constructHtmlTable(instance, field, value, fdt)
 				-- if model.__keyfd then 
 			end
 		elseif desc == 'st' then
-			--[[
 			if val == 'ONE' then
 				local foreign_instance = instance:getForeign(field)
 				-- h.template = [==[<label>$field:</label><select>$option</select>]==]
@@ -159,16 +198,16 @@ local function constructHtmlTable(instance, field, value, fdt)
 				if model.__indexfd and model.__indexfd ~= '' then indexfd = model.__indexfd end
 				-- print( indexfd)
 				for _, v in ipairs(instances) do
-					if foreign_instance.id == v.id then
+					if foreign_instance and foreign_instance.id == v.id then
 						str_opt = str_opt .. '<option selected value="' .. v.id .. '">' .. tostring(v[indexfd]) .. '</option>'
 					else
-						str_opt = str_opt .. '<option value=' .. v.id .. '>' .. tostring(v[indexfd]) .. '</option>'
+						str_opt = str_opt .. '<option value="' .. v.id .. '">' .. tostring(v[indexfd]) .. '</option>'
 					end
 				end
 				-- str_opt = http.encodeURL(str_opt)
 				-- print('>>>>>>>>>>>>>>', str_opt)
 				-- h.template = h.template:gsub('$option', str_opt)
-				h.template = '<label>$desc:</label><select style="width:200px">' .. str_opt .. '</select>'
+				h.template = '<label>$caption:</label><select name="$field"><option value="0"></option>' .. str_opt .. '</select>'
 			elseif val == 'MANY' then
 				local foreign_instances = instance:getForeign(field)
 
@@ -180,6 +219,7 @@ local function constructHtmlTable(instance, field, value, fdt)
 				if model.__indexfd and model.__indexfd ~= '' then indexfd = model.__indexfd end
 				
 				print(indexfd)
+				-- local i = 0
 				for _, v in ipairs(instances) do
 					local eq = false
 					for _, foreign_instance in ipairs(foreign_instances) do
@@ -188,18 +228,21 @@ local function constructHtmlTable(instance, field, value, fdt)
 						end
 					end
 					if eq then 
-						str_opt = str_opt .. '<label><input type="checkbox" checked value="'.. v.id ..'"/>' ..tostring(v[indexfd]) .. '</label>'
+						str_opt = str_opt .. '<label><input type="checkbox" checked name="' .. field .. '[]" value="'.. v.id .. '"/>' ..tostring(v[indexfd]) .. '</label>'
+						-- str_opt = str_opt .. '<option selected value="' .. v.id .. '">' .. tostring(v[indexfd]) .. '</option>'
 					else
-						str_opt = str_opt .. '<label><input type="checkbox" value="'.. v.id ..'"/>' .. tostring(v[indexfd]) .. '</label>'
+						-- str_opt = str_opt .. '<option value="' .. v.id .. '">' .. tostring(v[indexfd]) .. '</option>'
+						-- str_opt = str_opt .. '<label><input type="checkbox" value="'.. v.id ..'"/>' .. tostring(v[indexfd]) .. '</label>'
+						str_opt = str_opt .. '<label><input type="checkbox" name="' .. field  .. '[]" value="'.. v.id .. '"/>' ..tostring(v[indexfd]) .. '</label>'
 					end
 				end
-				print('>>>>>>>>>>>>>>', str_opt)
-				h.template = '<label>$field:</label><div style="overflow:auto; width:200px; height:200px">' .. str_opt .. '</div>'
+				-- print('>>>>>>>>>>>>>>', str_opt)
+				-- h.template = '<label>$caption:</label><select name="$field" size="6" multiple="multiple"><option></option>' .. str_opt .. '</select>'
+				h.template = '<label>$field:</label><div style="overflow:auto; width:200px; max-height:200px; border:1px solid black"><input type="hidden" name="' .. field ..'[]" value="0" />' .. str_opt .. '</div>'
 			end
-			--]]
 		elseif desc == 'wrap' then
 		elseif desc == 'enum' then
-		elseif desc == 'desc' then
+		elseif desc == 'caption' then
 		elseif desc == 'widget_type' then
 		elseif desc == 'vl' then
 		elseif desc == 'class' then
@@ -270,7 +313,7 @@ function fieldToViewMapping(instance, field, value, fdt, filters, attached)
 
 		local html_table = constructHtmlTable(instance, field, value, f)
 
-		fptable(html_table)
+		-- fptable(html_table)
 
 		local str_class, str_attr = f.class or '', ''
 		for k, v in pairs(html_table) do
@@ -285,13 +328,13 @@ function fieldToViewMapping(instance, field, value, fdt, filters, attached)
 			end
 		end
 		
-		local desc = f.desc
+		local caption = f.caption
 		
 		output = html_table.template:gsub('$class', str_class)
 		:gsub('$attr', str_attr)
 		:gsub('$value', value or '')
 		:gsub('$field', field)
-		:gsub('$desc', desc or field)
+		:gsub('$caption', caption or field)
 
 	else
 		-- output = ([[<label>id:</label><span name="id">$id</span>]]):gusb('$id', instance.id)
@@ -340,7 +383,7 @@ function modelToViewMapping(instance, filters, attached)
 		output = output + ''
 	end
 
-	print(output)
+	-- print(output)
 	return output
 end
 
