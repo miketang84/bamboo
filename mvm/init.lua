@@ -335,7 +335,6 @@ function fieldToViewMapping(instance, field, value, fdt, filters, attached)
 		:gsub('$value', value or '')
 		:gsub('$field', field)
 		:gsub('$caption', caption or field)
-
 	else
 		-- output = ([[<label>id:</label><span name="id">$id</span>]]):gusb('$id', instance.id)
 	end

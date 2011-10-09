@@ -1,0 +1,30 @@
+require 'lglib'
+
+['from']={
+	widget = 'email',
+	max_length = 6,
+}
+
+local Text = Object:extend {
+	validate = function(self, val) print(self.max_length, 'validate') end,
+	toHtml = function(self) print() end,
+}
+
+local Email = Text:extend {
+	validate = function(self, val)  
+				   self._parent.validate(self)
+				   print('email')
+			   end,
+}
+
+mt = {
+	['text'] = Text,
+	['email'] = Email,
+}
+
+setmetatable(field, {__index = mt[field.widget or 'text']})
+
+-- fptable(getmetatable(field))
+instance.__fields['from']:validate(instance['from'])
+
+fptable(field)

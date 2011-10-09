@@ -11,6 +11,7 @@ module('bamboo', package.seeall)
 
 local Set = require 'lglib.set'
 
+local FieldType = require 'bamboo.mvm.prototype'
 
 URLS = {}
 
@@ -292,6 +293,10 @@ registerModel = function (model)
 	assert( model.__tag, 'Registered model __tag must not be missing.' )
 	
 	MODEL_LIST[getClassName(model)] = model
+	
+	for field, fdt in pairs(model.__fields) do
+		setmetatable(fdt, {__index = FieldType[fdt.widget_type or 'text']})
+	end
 end
 
 getModelByName = function (name)
