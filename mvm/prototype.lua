@@ -9,8 +9,8 @@ Prototype = Object:extend {
 		help = [[<span class="help-inline">$help</span>]],
 	},	
 	template_uneditable = {
-		label = [[<label>$caption</label>]],
-		widget = [[<span>$value</span>]],
+		label = [[<label>$caption:</label>]],
+		widget = [[<span class="$class" $attr>$value</span>]],
 		help = [[<span class="help-inline">$help</span>]],
 	},
 	init = function(self, t)
@@ -24,8 +24,8 @@ Prototype = Object:extend {
 				 -- if self.editable == false then
 				 -- 	 return ((self.template_uneditable.label or '') .. (self.template_uneditable.widget or '') .. (self.template_uneditable.help or ''))
 				 -- else
-				 print(field)
-				 fptable(self)
+				 -- print(field)
+				 -- fptable(self)
 				 -- print(self:toWidget(inst, field))
 				 return (format or "$label$widget$help")
 				 :gsub('$widget', self:toWidget(inst, field))
@@ -171,7 +171,7 @@ Foreign = Prototype:extend {
 				   if self.st == 'ONE' then
 					   local foreign_inst = inst:getForeign(field)
 					   local model = bamboo.getModelByName(self.foreign)
-					   local insts = model:all()
+					   local insts = model:all() or {}
 
 					   local str_opt = ''
 					   local indexfd = 'id'
@@ -190,9 +190,9 @@ Foreign = Prototype:extend {
 					   
 					   return self._parent.toWidget(self, inst, field)
 				   elseif self.st == 'MANY' then
-					   local foreign_insts = inst:getForeign(field)
+					   local foreign_insts = inst:getForeign(field) or {}
 					   local model = bamboo.getModelByName(self.foreign)
-					   local insts = model:all()
+					   local insts = model:all() or {}
 					   local str_opt = ''
 					   local indexfd = 'id'
 					   if model.__indexfd and model.__indexfd ~= '' then indexfd = model.__indexfd end
@@ -232,6 +232,24 @@ ForeignImage = Prototype:extend {
 			   end,
 }
 
+ForeignText = Prototype:extend {
+	init = function(self) 
+			   self.template = table.copy(self.template)
+			   self.template_uneditable = table.copy(self.template_uneditable)
+			   self.template.widget = [[<input type="text" id="id_$field" class="$class" name="$field" $attr value="$text"]]
+			   self.template_uneditable.widget = [[<span class="$class" $attr>$text</span>]]
+			   return self
+		   end,
+	toWidget = function(self, inst, field)
+				   local foreign_inst = inst:getForeign(field)
+				   local model = bamboo.getModelByName(self.foreign)
+				   print(foreign_inst[model.__indexfd])
+				   self.template.widget = self.template.widget:gsub('$text', foreign_inst[model.__indexfd])
+				   self.template_uneditable.widget = self.template_uneditable.widget:gsub('$text', foreign_inst[model.__indexfd])
+				   return self._parent.toWidget(self, inst, field)
+			   end,
+}
+
 fieldType = {
 	['text'] = Text,
 	['email'] = Email,
@@ -242,6 +260,7 @@ fieldType = {
 	['image'] = Text,
 	['foreign'] = Foreign,
 	['foreign_img'] = ForeignImage,
+	['foreign_text'] = ForeignText,
 	-- ['foreign_one'] = ForeignOne,
 }
 

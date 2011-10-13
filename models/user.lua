@@ -40,9 +40,9 @@ local User = Model:extend {
 		self.created_date = os.time()
 
 		if t.encrypt and type(t.encrypt) == 'function' then
-			self.password = t.encrypt(t.password)
+			self.password = t.encrypt(t.password or '')
 		else
-			self.password = md5.sumhexa(t.password)
+			self.password = md5.sumhexa(t.password or '')
 		end
 		
 		return self
@@ -54,7 +54,8 @@ local User = Model:extend {
 
 		local user = self:getByIndex(params.username)
 		if not user then return false end
-		if md5.sumhexa(params.password) ~= user.password then
+		-- if md5.sumhexa(params.password):lower() ~= user.password then
+		if params.password:lower() ~= user.password then
 			return false
 		end
 		return true, user

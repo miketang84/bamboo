@@ -506,7 +506,7 @@ Model = Object:extend {
 							 self.__fields[params.field][k] = v
 						 end
 					 end
-
+					 -- ptable(self.__fields[params.field])
 					 return (self.__fields[params.field]):toHtml(self, params.field, params.format)
 				 end
 				 

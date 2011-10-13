@@ -247,6 +247,7 @@ local function constructHtmlTable(instance, field, value, fdt)
 		elseif desc == 'vl' then
 		elseif desc == 'class' then
 		elseif desc == 'new_field' then
+		elseif desc == 'template' then
 		elseif desc == 'max_length' then
 			h['maxlength'] = val
 		elseif desc == 'min_length' then
@@ -330,6 +331,7 @@ function fieldToViewMapping(instance, field, value, fdt, filters, attached)
 		
 		local caption = f.caption
 		
+		fptable(html_table)
 		output = html_table.template:gsub('$class', str_class)
 		:gsub('$attr', str_attr)
 		:gsub('$value', value or '')
@@ -358,7 +360,7 @@ function modelToViewMapping(instance, filters, attached)
 		for field, fdt in pairs(fields) do
 
 			local flag = true
-			for k, v in pairs(filters) do
+			for k, v in pairs(filters or {}) do
 				-- to redundant query condition, once meet, jump immediately
 				if not fdt[k] then 
 					-- flag=false;
