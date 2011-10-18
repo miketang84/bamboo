@@ -164,19 +164,19 @@ local VIEW_ACTIONS = {
         end
     end,
 
-    ['{*'] = function (code)
-		local code = code:trim()
-		assert( code ~= '', 'Instance name must not be blank.')
-		local instance_lexical, restcode = code:match('^([%w_%.]+),?%s*(.*)$')
-		-- print(instance_lexical, restcode)
-		restcode = restcode:gsub('\n', ' ')
-		return ([[
-            local mvm = require 'bamboo.mvm'
-						local fragment = mvm.process(%s, [==[%s]==])
-            _result[#_result+1] = fragment
-        ]]):format(instance_lexical, restcode)
-
-    end,
+--    ['{*'] = function (code)
+--		local code = code:trim()
+--		assert( code ~= '', 'Instance name must not be blank.')
+--		local instance_lexical, restcode = code:match('^([%w_%.]+),?%s*(.*)$')
+--		-- print(instance_lexical, restcode)
+--		restcode = restcode:gsub('\n', ' ')
+--		return ([[
+--            local mvm = require 'bamboo.mvm'
+--						local fragment = mvm.process(%s, [==[%s]==])
+--            _result[#_result+1] = fragment
+--        ]]):format(instance_lexical, restcode)
+--
+--    end,
 
 
 }
