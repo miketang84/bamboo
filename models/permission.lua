@@ -9,8 +9,8 @@ Permission = Model:extend {
 	__desc = 'Permission is the basic tree like model';
 	__indexfd = 'name';
 	__fields = {
-		['name'] 	= 	{  newfield=true},
-		['desc'] 	= 	{  newfield=true},
+		['name'] 	= 	{newfield=true},
+		['desc'] 	= 	{newfield=true},
 	};
 	
 	init = function (self, t)

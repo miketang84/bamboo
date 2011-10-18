@@ -113,7 +113,7 @@ local Upload = Model:extend {
 		if not t then return self end
 		
 		self.name = t.name
-		self.path = t.path
+		self.path = t.path or 'media/uploads/default'
 		self.size = posix.stat(self.path).size
 		self.timestamp = os.time()
 		-- according the current design, desc field is nil
