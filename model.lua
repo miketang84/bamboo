@@ -1533,15 +1533,6 @@ Model = Object:extend {
 		return getClassName(self)
 	end;
 
-	--- return the field description table
-	-- if have, return table
-	-- if no, return nil
-	fieldInfo = function (self, field)
-		checkType(field, 'string')
-		
-		return self.__fields[field]
-	end;
-
 	-- do sort on query set by some field
 	sortby = function (self, field, sort_func, direction)
 		I_AM_QUERY_SET(self)
