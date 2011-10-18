@@ -1,6 +1,5 @@
 #!/usr/bin/lua
 require 'bamboo'
-require 'lglib'
 
 local redis = require 'bamboo.redis'
 
@@ -25,6 +24,5 @@ function all(model_name)
 	end
 end
 
-ptable(bamboo.MODEL_LIST)
 print('Entering bamboo shell.... OK')
 return true
