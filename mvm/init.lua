@@ -1,65 +1,6 @@
 module(..., package.seeall)
 
---local http = require 'lglib.http'
 
--- fdt2ht = {
--- 	['widget_type'] = {
--- 		['text'] = function(h, k, v, f) h.template = [[<label>$field:</label><input type="text" class="$class" $attr value="$value" >]], table.insert(h.class, 'textInput') end,
--- 		['textarea'] = function(h) h.template = [[<lable>$field:</label><textarea class="$class" $attr>$value</textarea>]] end,
--- 		['enum'] = function(h, k, val, f, value)
--- 					   h.template = [[<label>$field:</label><select>$enum</select>]]
--- 					   local str_enum = ''
--- 					   for _, v in ipairs(f.enum) do
--- 						   if v == value then
--- 							   str_enum = str_enum .. '<option selected>' .. v .. '</option>'
--- 						   else
--- 							   str_enum = str_enum .. '<option>' .. v .. '</option>'
--- 						   end
--- 					   end
--- 					   h.template = h.template:gsub('$enum', str_enum)
--- 				   end,
--- 		['date'] = function(h, k, v, f)
--- 					   table.insert(h.class, 'date')
--- 				   end,
--- 		['email'] = function(h, k, v, f)
--- 						table.insert(h.class, 'email')
--- 					end,
--- 		['image'] = function(h)
--- 						h.template = [[<label>$field:</label><img src="/$value" />]]
--- 					end,
--- 	},
--- 	['required'] = {
--- 		['true'] = function(h) table.insert(h.class, 'required') end
--- 	},
--- 	['max_length'] = {
--- 		default = function(h, k, v) h['maxlength'] = v end
--- 	},
--- 	['min_length'] = {
--- 		default = function(h, k, v) h['minlength'] = v end
--- 	},
--- 	['wrap'] = {
--- 		default = function() end,
--- 	},
--- 	['enum'] = {
--- 		default = function(h, k, v) 
-					  
--- 				  end,
--- 	},
--- 	['editable'] = {
--- 		default = function() end
--- 	},
--- 	-- ['st'] = {},
--- 	['foreign'] = {
--- 		default = function(h, k, v)  end,
--- 	},
--- 	['st'] = {
--- 		default = function(h, k, v) end,
--- 	},
--- 	-- ['attr'] = function(h, k, v, f)
--- 	-- 			   h[k] = v
--- 	-- 		   end,
--- 	['default'] = function(h, k, v) h[k] = v end,
--- }
 
 local function constructHtmlTable(instance, field, value, fdt)
 	local h = {
@@ -68,32 +9,7 @@ local function constructHtmlTable(instance, field, value, fdt)
 	}
 
 	for desc, val in pairs(fdt) do
-		print(desc, val)
 
-		-- if desc == 'widget_type' then
-		-- 	if val == 'text' then
-		-- 		-- h.template = [[<label>$field:</label><input type="text" class="$class" $attr value="$value" >]]
-		-- 		table.insert(h.class, 'textInput')
-		-- 	elseif val == 'textarea' then
-		-- 		h.template = [[<lable>$caption:</label><textarea class="$class" $attr>$value</textarea>]]
-		-- 	elseif val == 'enum' then
-		-- 		h.template = [[<label>$caption:</label><select>$enum</select>]]
-		-- 		local str_enum = ''
-		-- 		for _, v in ipairs(fdt.enum) do
-		-- 			if v == value then
-		-- 				str_enum = str_enum .. '<option selected>' .. v .. '</option>'
-		-- 			else
-		-- 				str_enum = str_enum .. '<option>' .. v .. '</option>'
-		-- 			end
-		-- 		end
-		-- 		h.template = h.template:gsub('$enum', str_enum)
-		-- 	elseif val == 'date' then
-		-- 		table.insert(h.class, 'date')
-		-- 	elseif val == 'email' then
-		-- 		table.insert(h.class, 'email')
-		-- 	elseif val == 'image' then
-		-- 		h.template = [[<label>$caption:</label><img src="/$value" /><input type="text" value="$value />"]]
-		-- 	end
 		if desc == 'required' then
 			if val == true then
 				table.insert(h.class, 'required')
@@ -182,21 +98,19 @@ local function constructHtmlTable(instance, field, value, fdt)
 			end
 		elseif desc == 'foreign' then
 			if fdt.st == 'ONE' then
-				-- local foreign_instance = instance:getForeign(field)
-				-- local model = bamboo.getModelByName(fdt.foreign)
-				-- if model.__keyfd then 
+
 			end
 		elseif desc == 'st' then
 			if val == 'ONE' then
 				local foreign_instance = instance:getForeign(field)
-				-- h.template = [==[<label>$field:</label><select>$option</select>]==]
+
 				local model = bamboo.getModelByName(fdt.foreign)
 				local instances = model:all()
 
 				local str_opt = ''
 				local indexfd = 'id'
 				if model.__indexfd and model.__indexfd ~= '' then indexfd = model.__indexfd end
-				-- print( indexfd)
+
 				for _, v in ipairs(instances) do
 					if foreign_instance and foreign_instance.id == v.id then
 						str_opt = str_opt .. '<option selected value="' .. v.id .. '">' .. tostring(v[indexfd]) .. '</option>'
@@ -204,9 +118,7 @@ local function constructHtmlTable(instance, field, value, fdt)
 						str_opt = str_opt .. '<option value="' .. v.id .. '">' .. tostring(v[indexfd]) .. '</option>'
 					end
 				end
-				-- str_opt = http.encodeURL(str_opt)
-				-- print('>>>>>>>>>>>>>>', str_opt)
-				-- h.template = h.template:gsub('$option', str_opt)
+				
 				h.template = '<label>$caption:</label><select name="$field"><option value="0"></option>' .. str_opt .. '</select>'
 			elseif val == 'MANY' then
 				local foreign_instances = instance:getForeign(field)
@@ -218,8 +130,6 @@ local function constructHtmlTable(instance, field, value, fdt)
 				local indexfd = 'id'
 				if model.__indexfd and model.__indexfd ~= '' then indexfd = model.__indexfd end
 				
-				print(indexfd)
-				-- local i = 0
 				for _, v in ipairs(instances) do
 					local eq = false
 					for _, foreign_instance in ipairs(foreign_instances) do
@@ -229,15 +139,11 @@ local function constructHtmlTable(instance, field, value, fdt)
 					end
 					if eq then 
 						str_opt = str_opt .. '<label><input type="checkbox" checked name="' .. field .. '[]" value="'.. v.id .. '"/>' ..tostring(v[indexfd]) .. '</label>'
-						-- str_opt = str_opt .. '<option selected value="' .. v.id .. '">' .. tostring(v[indexfd]) .. '</option>'
 					else
-						-- str_opt = str_opt .. '<option value="' .. v.id .. '">' .. tostring(v[indexfd]) .. '</option>'
-						-- str_opt = str_opt .. '<label><input type="checkbox" value="'.. v.id ..'"/>' .. tostring(v[indexfd]) .. '</label>'
 						str_opt = str_opt .. '<label><input type="checkbox" name="' .. field  .. '[]" value="'.. v.id .. '"/>' ..tostring(v[indexfd]) .. '</label>'
 					end
 				end
-				-- print('>>>>>>>>>>>>>>', str_opt)
-				-- h.template = '<label>$caption:</label><select name="$field" size="6" multiple="multiple"><option></option>' .. str_opt .. '</select>'
+
 				h.template = '<label>$field:</label><div style="overflow:auto; width:200px; max-height:200px; border:1px solid black"><input type="hidden" name="' .. field ..'[]" value="0" />' .. str_opt .. '</div>'
 			end
 		elseif desc == 'wrap' then
@@ -305,12 +211,6 @@ function fieldToViewMapping(instance, field, value, fdt, filters, attached)
 				f[k] = v
 			end
 		end
-
-		-- for describer, val in pairs(f) do
-		-- 	-- print(describer, val)
-		-- 	-- switch(describer, tostring(val))(fdt2ht)(html_table, describer, val, fdt, value)
-			
-		-- end
 
 		local html_table = constructHtmlTable(instance, field, value, f)
 
@@ -384,13 +284,11 @@ function modelToViewMapping(instance, filters, attached)
 		output = output + ''
 	end
 
-	-- print(output)
 	return output
 end
 
 function process( instance, restcode )
-	-- print(instance, restcode)
-	-- restcode = restcode:gsub('[\n\r]+', ' ')
+
     assert(loadstring('_t = {' + restcode + ' }'), '[Error] wrong syntax in view tag {**}.')()
 	assert(type(_t) == 'table')
 
@@ -399,8 +297,6 @@ function process( instance, restcode )
 	local attached = _t.attached
 	assert(type(attached) == 'nil' or type(attached) == 'table')
 	attached = attached or {}
-
-    -- print(instance, restcode)
 
     return modelToViewMapping(instance, filters, attached)
 

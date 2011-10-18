@@ -498,7 +498,6 @@ Model = Object:extend {
 				 params = params or {}
 				 
 				 if params.field and type(params.field) == 'string' then
-					 ptable(self.__fields[params.field])
 					 for k, v in pairs(params.attached) do
 						 if v == 'html_class' then
 							 self.__fields[params.field][k] = self.__fields[params.field][k] .. ' ' .. v
@@ -506,32 +505,23 @@ Model = Object:extend {
 							 self.__fields[params.field][k] = v
 						 end
 					 end
-					 -- ptable(self.__fields[params.field])
+					 
 					 return (self.__fields[params.field]):toHtml(self, params.field, params.format)
 				 end
 				 
 				 params.attached = params.attached or {}
-				 print('__________________________________________')
-				 -- ptable(params.attached)
 				 
 				 local output = ''
 				 for field, fdt_old in pairs(self.__fields) do
 					 local fdt = table.copy(fdt_old)
 					 setmetatable(fdt, getmetatable(fdt_old))
 					 for k, v in pairs(params.attached) do
-						 -- if k == 'html_class' then
-						 -- 	 self.__fields[field][k] = fdt[k] .. ' ' .. v
 						 if type(v) == 'table' then
-							 -- print('~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~')
-							 -- ptable(v)
 							 for key, val in pairs(v) do
-								 -- self.__fields[field][k] = self.__fields[field][k] or {}
-								 -- self.__fields[field][k][key] = val
 								 fdt[k] = fdt[k] or {}
 								 fdt[k][key] = val
 							 end
 						 else
-							 -- self.__fields[field][k] = v
 							 fdt[k] = v
 						 end
 					 end
@@ -554,8 +544,6 @@ Model = Object:extend {
 					 end
 
 					 if flag then
-						 -- output = output .. self.__fields[field]:toHtml(self, field, params.format or nil)
-						 ptable(fdt)
 						 output = output .. fdt:toHtml(self, field, params.format or nil)
 					 end
 

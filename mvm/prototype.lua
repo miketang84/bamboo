@@ -14,24 +14,13 @@ Prototype = Object:extend {
 		help = [[<span class="help-inline">$help</span>]],
 	},
 	init = function(self, t)
-			   print('Prototype init')
-			   -- for k, v in pairs(t) do
-			   -- 	   self[k] = v
-			   -- end
 			   return self
 		   end,
 	toHtml = function(self, inst, field, format)
-				 -- if self.editable == false then
-				 -- 	 return ((self.template_uneditable.label or '') .. (self.template_uneditable.widget or '') .. (self.template_uneditable.help or ''))
-				 -- else
-				 -- print(field)
-				 -- fptable(self)
-				 -- print(self:toWidget(inst, field))
 				 return (format or "$label$widget$help")
 				 :gsub('$widget', self:toWidget(inst, field))
 				 :gsub('$label', self:toLabel(inst, field))
 				 :gsub('$help', self:toHelp(inst, field))
-				 -- end
 			 end,
 	toLabel = function(self, inst, field)
 				  if self.editable == false then
@@ -71,7 +60,6 @@ Prototype = Object:extend {
 				 end
 			  end,
 	strGSub = function(self, string, inst, field)
-				  -- print(field)
 				  local ret = string
 				  :gsub('$value', inst[field] or '')
 				  :gsub('$caption', self.caption or field)
@@ -86,23 +74,15 @@ Text = Prototype:extend {
 	init = function(self)
 			   self.template = table.copy(self.template)
 			   self.template.widget = [[<input type="text" id="id_$field" class="$class" name="$field" $attr value="$value"/>]]
-			   -- self.template = [[<input type="text" id="id_$field" class="$class" name="$field" $attr value="$value"/>]]
-			   
-			   -- print('____text init')
-			   -- ptable(self)
-			   -- print(self.template)
-			   -- ptable(getmetatable(self))
 			   return self
 		   end,
 	validate = function(self, inst) 
-				   print('text validate')
 			   end,
 }
 
 Email = Text:extend {
 	validate = function(self, inst)  
 				   self._parent.validate(self)
-				   print('email')
 			   end,
 }
 
@@ -114,7 +94,6 @@ Textarea = Text:extend {
 	init = function(self)
 			   self.template = table.copy(self.template)
 			   self.template.widget = [[<textarea id="id_$field" class="$class" name="$field" $attr>$value</textarea>]]
-			   print('~~~textarea init')
 		   end,
 }
 
@@ -137,7 +116,6 @@ Enum = Prototype:extend {
 				   return false
 			   end,
 	toWidget = function(self, inst, field)
-				   print('<<<<<<<<<<<<<<')
 				   local str_enum = ''
 				   for _, v in ipairs(self.enum) do
 				   	   if v == inst[field] then
@@ -183,9 +161,6 @@ Foreign = Prototype:extend {
 							   str_opt = str_opt .. '<option value="' .. v.id .. '">' .. tostring(v[indexfd]) .. '</option>'
 						   end
 					   end
-					   print(self.template.widget)
-					   print(str_opt)
-					   -- self.template.widget = self.template.widget:gsub('$option', str_opt)
 					   self.template.widget = self.template.widget:gsub('$option', str_opt)
 					   
 					   return self._parent.toWidget(self, inst, field)
@@ -196,7 +171,6 @@ Foreign = Prototype:extend {
 					   local str_opt = ''
 					   local indexfd = 'id'
 					   if model.__indexfd and model.__indexfd ~= '' then indexfd = model.__indexfd end
-					   print(indexfd)
 					   for _, v in ipairs(insts) do
 						   local eq = false
 						   for _, foreign_inst in ipairs(foreign_insts) do
@@ -243,7 +217,6 @@ ForeignText = Prototype:extend {
 	toWidget = function(self, inst, field)
 				   local foreign_inst = inst:getForeign(field)
 				   local model = bamboo.getModelByName(self.foreign)
-				   print(foreign_inst[model.__indexfd])
 				   self.template.widget = self.template.widget:gsub('$text', foreign_inst[model.__indexfd])
 				   self.template_uneditable.widget = self.template_uneditable.widget:gsub('$text', foreign_inst[model.__indexfd])
 				   return self._parent.toWidget(self, inst, field)

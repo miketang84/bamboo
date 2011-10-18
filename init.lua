@@ -296,11 +296,7 @@ registerModel = function (model)
 	
 	for field, fdt in pairs(model.__fields) do
 		setmetatable(fdt, {__index = FieldType[fdt.widget_type or 'text']})
-		-- model.__fields[field] = FieldType[fdt.widget_type or 'text'](fdt)
-		-- if fdt.init then
-		print(field)
 		fdt:init()
-		-- end
 	end
 end
 
@@ -312,9 +308,9 @@ end
 
 _G['MAIN_USER'] = nil
 registerMainUser = function (mdl, extra_params)
-					   registerModel (mdl, extra_params)
-					   _G['MAIN_USER'] = mdl
-				   end;
+	registerModel (mdl, extra_params)
+	_G['MAIN_USER'] = mdl
+end;
 
 ------------------------------------------------------------------------
 FILTER_LIST = {}
