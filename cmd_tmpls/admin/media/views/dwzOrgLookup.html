@@ -1,0 +1,85 @@
+
+<form id="pagerForm" action="dwzOrgLookup.html">
+	<input name="pageInfo.currentPage" value="1" type="hidden">
+	<input name="pageInfo.sorterName" value="" type="hidden">
+	<input name="pageInfo.sorterDirection" value="" type="hidden">
+<input name="pageInfo.f_orgName" value="" type="hidden"><input name="pageInfo.f_orgNum" value="" type="hidden"><input name="pageInfo.manager.f_fullName" value="" type="hidden"><input name="pageInfo.parentOrg.f_orgName" value="" type="hidden"></form>
+
+<div class="pageHeader">
+	<form rel="pagerForm" method="post" action="dwzOrgLookup.html" onsubmit="return dwzSearch(this, 'dialog');">
+	<div class="searchBar">
+		<ul class="searchContent">
+			<li>
+				<label>部门名称:</label>
+				<input class="textInput" name="orgName" value="" type="text">
+			</li>	  
+			<li>
+				<label>部门编号:</label>
+				<input class="textInput" name="orgNum" value="" type="text">
+			</li>
+			<li>
+				<label>部门经理:</label>
+				<input class="textInput" name="fullName" value="" type="text">
+			</li>
+				<li>
+				<label>上级部门:</label>
+				<input class="textInput" name="parentOrg.orgName" value="" type="text">
+			</li> 
+		</ul>
+		<div class="subBar">
+			<ul>
+				<li><div class="buttonActive"><div class="buttonContent"><button type="submit">查询</button></div></div></li>
+			</ul>
+		</div>
+	</div>
+	</form>
+</div>
+<div class="pageContent">
+
+	<table class="table" layoutH="118" targettype="dialog" width="100%">
+		<thead>
+			<tr>
+				<th orderfield="orgName">部门名称</th>
+				<th orderfield="orgNum">部门编号</th>
+				<th orderfield="fullName">部门经理</th>
+				<th orderfield="creator.fullName">创建人</th>
+				<th width="80">查找带回</th>
+			</tr>
+		</thead>				
+		<tbody>
+			<tr>
+				<td>技术部</td>
+				<td>1001</td>
+				<td>administrator</td>
+				<td>administrator</td>
+				<td>
+					<a class="btnSelect" href="javascript:$.bringBack({id:'1', orgName:'技术部', orgNum:'1001'})" title="查找带回">选择</a>
+				</td>
+			</tr>
+			<tr>
+				<td>人事部</td>
+				<td>1002</td>
+				<td>test</td>
+				<td>administrator</td>
+				<td>
+					<a class="btnSelect" href="javascript:$.bringBack({id:'2', orgName:'人事部', orgNum:'1002'})" title="查找带回">选择</a>
+				</td>
+			</tr>
+		</tbody>
+	</table>
+
+	<div class="panelBar">
+		<div class="pages">
+			<span>每页</span>
+
+			<select name="numPerPage" onchange="dwzPageBreak({targetType:dialog, numPerPage:'10'})">
+				<option value="10" selected="selected">10</option>
+				<option value="20">20</option>
+				<option value="50">50</option>
+				<option value="100">100</option>
+			</select>
+			<span>条，共2条</span>
+		</div>
+		<div class="pagination" targettype="dialog" totalcount="2" numperpage="10" pagenumshown="1" currentpage="1"></div>
+	</div>
+</div>

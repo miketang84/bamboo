@@ -345,6 +345,13 @@ COMMANDS = {
         local cmdstr = ('cp -rf %s/cmd_tmpls/createapp/* ./%s/'):format(bamboo_dir, appname)
         os.execute(cmdstr)
 
+		-- copy admin files to app
+		local cmdstr = ('cp -rf %s/cmd_tmpls/admin/ ./%s/'):format(bamboo_dir, appname)
+        os.execute(cmdstr)
+		-- move the admin static files to media
+		local cmdstr = ('mv ./%s/admin/media ./%s/media/admin'):format(appname, appname)
+        os.execute(cmdstr)
+		
 		-- create media directory and copy files to it
         local mediadir = ('%s/sites/%s'):format(monserver_dir, appname)
         os.execute(('mkdir -p %s'):format(mediadir))

@@ -1,0 +1,92 @@
+<style>
+  hide{
+  display: none;
+  }
+</style>
+<script type="text/javascript" src="/media/js/fileuploader.js"></script>
+<script type="text/javascript">
+	$(function(){
+		// $('div.page #__upload').each(function(){
+		// 	console.log(this);
+		// });
+		var uploader = new qq.FileUploader({
+			element: $('#__upload')[0],
+			action: '/admin/upload',
+			debug: false,
+			sizeLimit: 500000,
+			maxConnections: 1,
+			//listElement: page_upload_list_table[0],
+			fileTemplate: '<div class="qq-uploading hide">' +
+				'<span class="qq-upload-file"></span>' +
+				'<span class="qq-upload-spinner"></span>' +
+				'<span class="qq-upload-size"></span>' +
+				'<a class="qq-upload-cancel" href="#">Cancel</a>' +
+				'<span class="qq-upload-failed-text">Failed</span>' +
+				'</div>',
+			template: '<div class="qq-uploader">' +
+				'<div class="qq-upload-drop-area"><span>Drop files here to upload</span></div>' +
+				'<div class="qq-upload-button button"><div class="buttonContent">' +
+				'<button type="button">Upload</button></div></div>' +
+				'<ul class="qq-upload-list"></ul>' +
+				'</div>',
+			messages: {
+				typeError: "{file} 扩展名不合要求。只有扩展名为 {extensions} 的文件被允许上传。",
+				sizeError: "{file} 文件太大，最大限制为 {sizeLimit}。",
+				minSizeError: "{file} 文件太小，最小限制为 {minSizeLimit}。",
+				emptyError: "{file} 文件是空的，请重新选择文件。",
+				onLeave: "文件正在上传，如果此时离开，将会停止上传。"            
+			},
+			onComplete: function(){navTab.reload('')}		
+		});
+	});        
+</script>
+<form action="/admin/create" class="required-validate pageForm" onsubmit="return validateCallback(this, navTabAjaxDone)">
+  <div class="pageFormContent nowrap" style="overflow:auto" layouth="56">
+	<!-- {* instance, -->
+	<!-- filters={st=eq('')}, -->
+	<!-- attached={wrap='<dl><dd>%s</dd></dl><div class="divider"></div>', editable=true}, -->
+	<!-- *} -->
+	{% if instance.__tag:startsWith('Bamboo.Model.Upload') then %}
+	<div id="__upload">
+	</div>
+<!--	<div class="button">
+	  <div class="buttonContent">
+		<button type="button" id="__upload">Upload</button>
+	  </div>
+	</div> -->
+	{% end %}
+
+	{{instance:toHtml{
+	format=[[<dl><dd>$label$widget$help</dd></dl><div class="divider"></div>]], 
+	<!-- attached={editable=true},  -->
+	<!-- filters={vl=ge(0), st=uneq("MANY")} -->
+	}}}
+	<input type="hidden" name="__tag" value="{{__tag}}" />
+	<input type="hidden" name="id" value="{{id}}" />
+  </div>
+  <div class="formBar">
+	<ul>
+	  <li>
+		<div class="buttonActive">
+		  <div class="buttonContent">
+			<button type="submit">Submit</button>
+		  </div>
+		</div>
+	  </li>
+	  <li>
+		<div class="button">
+		  <div class="buttonContent">
+			<button type="button" class="close">Cancel</button>
+		  </div>
+		</div>
+	  </li>
+	  <li>
+		<div class="button">
+		  <div class="buttonContent">
+			<button type="reset">Reset</button>
+		  </div>
+		</div>
+	  </li>
+	</ul>
+  </div>
+</form>

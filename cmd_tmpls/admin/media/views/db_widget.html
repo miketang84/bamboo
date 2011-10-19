@@ -1,0 +1,85 @@
+<h2 class="contentTitle">dwz.database.js</h2>
+<form action="demo/common/ajaxDone.html?navTabId=masterList&callbackType=closeCurrent" method="post" class="pageForm required-validate" onsubmit="return validateCallback(this, navTabAjaxDone)">
+<div class="pageContent">
+	<div class="pageFormContent" layoutH="97">
+		
+		<dl class="nowrap">
+			<dt>部门名称A：</dt>
+			<dd>
+				<input name="master.devLookup.id" value="1" type="hidden"/>
+				<input class="required" name="master.dwz_devLookup.orgName" value="技术部" type="text" suggestFields="orgNum,orgName" suggestUrl="db_lookupSuggest.html" lookupGroup="master" lookupName="devLookup"/>
+				<a class="btnLook" href="dwzOrgLookup.html" lookupGroup="master" lookupName="devLookup">查找带回</a>		
+				<span class="info">(suggest+lookup)</span>
+			</dd>
+		</dl>
+		<dl class="nowrap">
+			<dt>部门编号A：</dt>
+			<dd>
+				<input class="readonly" name="master.dwz_devLookup.orgNum" value="1001" readonly="readonly" type="text"/>
+			</dd>
+		</dl>
+		
+		<div class="divider"></div>
+		
+		<dl class="nowrap">
+			<dt>部门名称B：</dt>
+			<dd>
+				<input name="master.devLooup2.id" value="" type="hidden">
+				<input class="required" name="master.dwz_devLookup2.orgName" type="text" suggestFields="orgName" suggestUrl="db_lookupSuggest.html" lookupGroup="master" lookupName="devLookup2"/>
+				<span class="info">(suggest)</span>
+			</dd>
+		</dl>
+		
+		<div class="divider"></div>
+		
+		<dl class="nowrap">
+			<dt>部门名称C：</dt>
+			<dd>
+				<input name="master.devLooup3.id" value="" type="hidden">
+				<input name="master.dwz_devLooup3.orgName" type="text"/>
+				<a class="btnLook" href="dwzOrgLookup.html" lookupGroup="master" lookupName="devLooup3">查找带回</a>
+				<span class="info">(lookup)</span>
+			</dd>
+		</dl>
+
+		<div class="divider"></div>
+		
+		<dl class="nowrap">
+			<dt>附件：</dt>
+			<dd>
+				<input name="master.devAtt_attachment.id" value="" type="hidden">
+				<input class="readonly" name="master.dwz_devAtt_attachment.fileName" value="" readonly="readonly" type="text"/>
+				<a class="btnAttach" href="db_attachmentLookup.html" lookupGroup="master" lookupName="devAtt_attachment" width="560" height="300" title="附件">附件</a>
+				<span class="info">(lookup附件)</span>
+			</dd>
+		</dl>
+		
+		<div class="divider"></div>
+		<h3 class="contentTitle">主从结构</h3>
+		<table class="list nowrap" itemDetail="master.items" addButton="新建" width="100%">
+			<thead>
+				<tr>
+					<th type="text" name="itemString" size="12" fieldClass="required">从字符串</th>
+					<th type="text" name="itemInt" size="12" fieldClass="digits">从整数</th>
+					<th type="text" name="itemFloat" size="12" fieldClass="number">从浮点</th>
+					<th type="date" name="itemDate" size="12">从日期</th>
+					<th type="date" format="yyyy-MM-dd HH:mm:ss" name="itemDataTime" size="16">从日期时间</th>
+					<th type="lookup" name="orgName" fieldClass="required" lookupName="itemLookup" lookupUrl="dwzOrgLookup.html" suggestUrl="db_lookupSuggest.html" suggestFields="orgName,orgNum" size="12">部门名称</th>
+					<th type="lookupField" name="orgNum" lookupName="itemLookup" size="12">部门编号</th>
+					<th type="enum" name="itemEnum" enumName="yesNo" enumUrl="db_select.html" size="12">从枚举</th>
+					<th type="attach" name="fileName" lookupName="itemAtt_attachment" url="db_attachmentLookup.html" size="12">从附件</th>
+					<th type="del" width="60">操作</th>
+				</tr>
+			</thead>
+			<tbody></tbody>
+		</table>
+		
+	</div>
+	<div class="formBar">
+		<ul>
+			<li><div class="buttonActive"><div class="buttonContent"><button type="submit">保存</button></div></div></li>
+			<li><div class="button"><div class="buttonContent"><button class="close" type="button">关闭</button></div></div></li>
+		</ul>
+	</div>
+</div>
+</form>
