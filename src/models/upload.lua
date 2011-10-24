@@ -187,7 +187,7 @@ local Upload = Model:extend {
 
 	-- this function, encorage override by child model, to execute their own delete action
 	specDelete = function (self)
-		I_AM_INSTANCE()
+		I_AM_INSTANCE(self)
 		-- remove file from disk
 		os.execute('rm ' + self.path)
 		return self

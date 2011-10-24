@@ -1,17 +1,19 @@
 module(..., package.seeall)
 
+local Validators = require 'bamboo.mvm.validate'
+
 Prototype = Object:extend {
 	-- widget_class = {},
 	-- widget_attr = {},
 	template = {
 		label = [[<label for="$id">$caption</label>]],
 		widget = '',
-		help = [[<span class="help-inline">$help</span>]],
+		help = [[<span class="$class">$help</span>]],
 	},	
 	template_uneditable = {
 		label = [[<label>$caption:</label>]],
 		widget = [[<span class="$class" $attr>$value</span>]],
-		help = [[<span class="help-inline">$help</span>]],
+		help = [[<span class="$class">$help</span>]],
 	},
 	init = function(self, t)
 			   return self
@@ -32,6 +34,7 @@ Prototype = Object:extend {
 	toWidget = function(self, inst, field)
 				   self.widget_class = self.widget_class or {}
 				   self.widget_attr = self.widget_attr or {}
+				   if self.rules then self.widget_attr.validate = json.encode(self.rules):gsub('"', "'") end
 				   local str_class = ''
 				   for _, c in ipairs(self.widget_class) do
 					   str_class = str_class .. ' ' .. c
@@ -53,10 +56,26 @@ Prototype = Object:extend {
 				   end
 			   end,
 	toHelp = function(self, inst, field)
+				 self.help_class = self.help_class or {}
+				 self.help_attr = self.help_attr or {}
+				 local str_class = ''
+				 for _, c in ipairs(self.help_class) do
+					 str_class = str_class .. ' ' .. c
+				 end
+				 local str_attr = ''
+				 for k, v in pairs(self.help_attr) do
+					 str_attr = str_attr .. ' ' .. k .. '="' .. tostring(v) ..'"'
+				 end
 				 if self.editable == false then
-					 return self:strGSub((self.template_uneditable.help or ''), inst, field)
+					 return self:strGSub((self.template_uneditable.help or '')
+										 :gsub('$class', str_class)
+										 :gsub('$attr', str_attr)
+										 , inst, field)
 				 else
-					 return self:strGSub((self.template.help or ''), inst, field)
+					 return self:strGSub((self.template.help or '')
+										 :gsub('$class', str_class)
+										 :gsub('$attr', str_attr)
+										 , inst, field)
 				 end
 			  end,
 	strGSub = function(self, string, inst, field)
@@ -68,22 +87,35 @@ Prototype = Object:extend {
 				  :gsub('$id', self.id or 'id_' .. field)
 				  return ret
 			  end,
+	validate = function(self, val, field)
+				   local is_valid = true
+				   local err_msg = {}
+				   for k, v in pairs(self.rules or {}) do
+					   print(k, val, field, v)
+					   local ret, msg = Validators[k](val, field, v)
+					   if not ret then
+						   table.insert(err_msg, msg)
+						   is_valid = false
+					   end
+				   end
+				   return is_valid, err_msg
+			   end,
 }
 
 Text = Prototype:extend {
 	init = function(self)
 			   self.template = table.copy(self.template)
-			   self.template.widget = [[<input type="text" id="id_$field" class="$class" name="$field" $attr value="$value"/>]]
+			   self.template.widget = [[<input type="text" id="$id" class="$class" name="$field" $attr value="$value"/>]]
 			   return self
 		   end,
-	validate = function(self, inst) 
-			   end,
 }
 
 Email = Text:extend {
-	validate = function(self, inst)  
-				   self._parent.validate(self)
-			   end,
+	init = function(self)
+			   self.rules = self.rules or {}
+			   self.rules.email = true
+			   return self._parent.init(self)
+		   end,
 }
 
 Url = Text:extend {
@@ -93,35 +125,32 @@ Url = Text:extend {
 Textarea = Text:extend {
 	init = function(self)
 			   self.template = table.copy(self.template)
-			   self.template.widget = [[<textarea id="id_$field" class="$class" name="$field" $attr>$value</textarea>]]
+			   self.template.widget = [[<textarea id="$id" class="$class" name="$field" $attr>$value</textarea>]]
+			   return self
 		   end,
 }
 
 Date = Text:extend {
-
+	init = function(self)
+			   self.rules = self.rules or {}
+			   self.rules.dateISO = true
+			   return self._parent.init(self)
+		   end,
 }
 
 Enum = Prototype:extend {
 	init = function(self) 
 			   self.template = table.copy(self.template)
-			   self.template.widget = [[<select id="id_$field" name="$field" class="$class" $attr>$enum</select>]]
+			   self.template.widget = [[<select id="$id" name="$field" class="$class" $attr>$enum</select>]]
 			   return self
 		   end,
-	validate = function(self, inst, field)
-				   for _, v in ipairs(self.enum) do
-					   if v == inst[field] then
-						   return true
-					   end
-				   end
-				   return false
-			   end,
 	toWidget = function(self, inst, field)
 				   local str_enum = ''
 				   for _, v in ipairs(self.enum) do
 				   	   if v == inst[field] then
-				   		   str_enum = str_enum .. '<option selected>' .. v .. '</option>'
+				   		   str_enum = str_enum .. ('<option selected value="%s">%s</option>'):format(v[1], v[2])
 				   	   else
-				   		   str_enum = str_enum .. '<option>' .. v .. '</option>'
+				   		   str_enum = str_enum .. ('<option value="%s">%s</option>'):format(v[1], v[2])
 				   	   end
 				   end
 				   self.template.widget = self.template.widget:gsub('$enum', str_enum)
@@ -135,12 +164,13 @@ Foreign = Prototype:extend {
 			   if self.st == 'ONE' then
 				   self.template.widget = [[<select name="$field" class="$class" $attr><option value="0"></option>$option</select>]]
 			   elseif self.st == 'MANY' then
-				   self.template.widget = [[
-						   <div style="overflow:auto; width:200px; max-height:200px; border:1px solid black">
-							   <input type="hidden" name="$field[]" value="0" />$option
-						   </div>
-					   ]]
-				   
+			   	   -- self.template.widget = [[
+			   	   -- 		   <div style="overflow:auto; width:200px; max-height:200px; border:1px solid black">]]
+			   	   self.template.widget = [[
+			   			   <div class="$class">
+			   				   <input type="hidden" name="$field[]" value="0" />$option
+			   			   </div>
+			   		   ]]
 			   end
 			   return self
 		   end,
@@ -161,7 +191,7 @@ Foreign = Prototype:extend {
 							   str_opt = str_opt .. '<option value="' .. v.id .. '">' .. tostring(v[indexfd]) .. '</option>'
 						   end
 					   end
-					   self.template.widget = self.template.widget:gsub('$option', str_opt)
+					   self.template.widget = [[<select name="$field" class="$class" $attr><option value="0"></option>]] .. str_opt .. [[</select>]]
 					   
 					   return self._parent.toWidget(self, inst, field)
 				   elseif self.st == 'MANY' then
@@ -184,7 +214,7 @@ Foreign = Prototype:extend {
 							   str_opt = str_opt .. '<label><input type="checkbox" name="' .. field  .. '[]" value="'.. v.id .. '"/>' ..tostring(v[indexfd]) .. '</label>'
 						   end
 					   end
-					   self.template.widget = self.template.widget:gsub('$option', str_opt)
+					   self.template.widget = [[<div class="$class"><input type="hidden" name="$field[]" value="0" />]] .. str_opt .. [[</div>]]
 					   return self._parent.toWidget(self, inst, field)
 				   end
 			   end,
@@ -194,8 +224,8 @@ ForeignImage = Prototype:extend {
 	init = function(self) 
 			   self.template = table.copy(self.template)
 			   self.template_uneditable = table.copy(self.template_uneditable)
-			   self.template.widget = [[<img id="id_$field" name="$field" class="$class" src="$src"/>]]
-			   self.template_uneditable.widget = [[<img id="id_$field" name="$field" class="$class" src="/$src"/>]]
+			   self.template.widget = [[<img id="$id" name="$field" class="$class" src="/$src"/>]]
+			   self.template_uneditable.widget = [[<img id="$id" name="$field" class="$class" src="/$src"/>]]
 			   return self
 		   end,
 	toWidget = function(self, inst, field)
@@ -210,7 +240,7 @@ ForeignText = Prototype:extend {
 	init = function(self) 
 			   self.template = table.copy(self.template)
 			   self.template_uneditable = table.copy(self.template_uneditable)
-			   self.template.widget = [[<input type="text" id="id_$field" class="$class" name="$field" $attr value="$text"]]
+			   self.template.widget = [[<input type="text" id="$id" class="$class" name="$field" $attr value="$text"]]
 			   self.template_uneditable.widget = [[<span class="$class" $attr>$text</span>]]
 			   return self
 		   end,
