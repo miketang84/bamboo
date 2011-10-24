@@ -1103,50 +1103,18 @@ Model = Object:extend {
 		I_AM_CLASS(self)
 		checkType(params, 'table')
 		local fields = self.__fields
+		local err_msgs = {}
+		local is_valid = true
 		for k, v in pairs(fields) do
-			local t = params[k]
-			-- rule 1: if this field have attribute required=true
-			if v.required then
-				-- when be required, if miss, or blank 
-				if not t or #t == 0 then return false, ('Required parameter "%s" is missing.'):format(k) end
-			end
-			-- if exists in params
-			if t and t ~= '' then
-				-- rule 2: if this field has min, max attributes, means type is limited number
-				if v.min then
-					local num = tonumber(t)
-					if not num or num < tonumber(v.min) then
-						return false, ('Parameter "%s" should be equal or larger than %s.'):format(k, v.min) 
-					end
-				end
-				if v.max then
-					local num = tonumber(t)
-					if not num or num > tonumber(v.max) then
-						return false, ('Parameter "%s" should be equal or smaller than %s.'):format(k, v.max) 
-					end
-				end
-				-- rule 3: if this field has min_length, max_length，means type is limited string
-				if v.min_length then
-					if #t < v.min_length then
-						return false, ('Parameter "%s" should be equal or larger than %s.'):format(k, v.min_length) 
-					end
-				end
-				if v.max_length then
-					if #t > v.max_length then
-						return false, ('Parameter "%s" should be equal or smaller than %s.'):format(k, v.max_length) 
-					end
-				end
-				-- rule 4: if this field has pattern，means type is a set of string, fit your regular expression
-				if v.pattern then
-					local ret = t:match(v.pattern)
-					if not ret or #t ~= #ret then
-						return false, ('Parameter "%s" should be suited to the internal pattern.'):format(k) 
-					end
+			local ret, err_msg = v:validate(params[k], k)
+			if not ret then 
+				is_valid = false
+				for _, msg in ipairs(err_msg) do
+					table.insert(err_msgs, msg)
 				end
 			end
 		end
-		
-		return true
+		return is_valid, err_msgs
 	end;
 	
 	
@@ -1591,6 +1559,15 @@ Model = Object:extend {
 		-- I_AM_INSTANCE(self)
 		
 		return getClassName(self)
+	end;
+
+	--- return the field description table
+	-- if have, return table
+	-- if no, return nil
+	fieldInfo = function (self, field)
+		checkType(field, 'string')
+		
+		return self.__fields[field]
 	end;
 
 	-- do sort on query set by some field
