@@ -91,7 +91,7 @@ Prototype = Object:extend {
 				   local is_valid = true
 				   local err_msg = {}
 				   for k, v in pairs(self.rules or {}) do
-					   print(k, val, field, v)
+					   -- print(k, val, field, v)
 					   local ret, msg = Validators[k](val, field, v)
 					   if not ret then
 						   table.insert(err_msg, msg)

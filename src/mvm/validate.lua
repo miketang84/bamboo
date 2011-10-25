@@ -58,7 +58,7 @@ function validateRequired(value, field, limit_value)
 end
 
 function validateEmail(value, field, limit_value)
-	if limit_value == true and value ~= '' then
+	if limit_value == true and value and value ~= '' then
 		local regxp = '[%w_%.]+@%w+%.%w+'
 		if not value:find(regxp) then
 			return false, ('Please input an Email address to $field'):gsub('$field', field)
@@ -68,10 +68,10 @@ function validateEmail(value, field, limit_value)
 end
 
 function validateDateISO(value, field, limit_value)
-	if limit_value == true and value ~= '' then
+	if limit_value == true and value and value ~= '' then
 		local regxp1 = '%d%d%d%d/%d%d/%d%d'
 		local regxp2 = '%d%d%d%d%-%d%d%-%d%d'
-		print(value)
+		-- print(value)
 		if not value:find(regxp1) and not value:find(regxp2) then
 			return false, ('Please input a date to $field, the format is yyyy/mm/dd or yyyy-mm-dd'):gsub('$field', field) 
 		end
