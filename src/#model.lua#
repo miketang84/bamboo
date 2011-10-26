@@ -1315,7 +1315,6 @@ Model = Object:extend {
 				-- the true foreign case
 				local link_model, linked_id = checkUnfixed(fld, self[field])
 
-				local obj = link_model:getById (linked_id)
 				if not isValidInstance(obj) then
 					-- if get not, remove the empty foreign key
 					-- db:hdel(model_key, field)
