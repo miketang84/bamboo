@@ -66,7 +66,7 @@ local WHICH_DB = config.WHICH_DB or 0
 -- we will create one redis connection for every process
 BAMBOO_DB = redis.connect {host=DB_HOST, port=DB_PORT, which = WHICH_DB}
 
-
+require 'bamboo.util'
 local errors = require 'bamboo.errors'
 local Model = require 'bamboo.model'
 local Web = require 'bamboo.web'
