@@ -4,7 +4,6 @@ require 'md5'
 require 'posix'
 
 local UUID_TYPE = 'random'
-local BIG_EXPIRE_TIME = 3600*24*14			-- years
 local SMALL_EXPIRE_TIME = 3600*24		    -- one day
 local PID = tonumber(posix.getpid().pid)
 local HOSTID = posix.hostid()
@@ -46,13 +45,10 @@ local makeExpires = function (seconds)
     return os.date("%a, %d-%b-%Y %X GMT", os.time() + (seconds or SMALL_EXPIRE_TIME))
 end
 
-local makeBigExpires = function (seconds)
-    return os.date("%a, %d-%b-%Y %X GMT", os.time() + (seconds or BIG_EXPIRE_TIME))
-end
 
-local makeSessionCookie = function (ident)
+local makeSessionCookie = function (ident, seconds)
     return ('session=%s; version=1; path=/; expires=%s'):format(
-        (ident or makeSessionId()), makeExpires())
+        (ident or makeSessionId()), makeExpires(seconds))
 end
 
 local function parseSessionId (cookie)
@@ -86,7 +82,7 @@ local manuSessionIdHttp = function (req)
 
     if not ident then
         ident = makeSessionId()
-        local cookie = makeSessionCookie(ident)
+        local cookie = makeSessionCookie(ident, bamboo.config.expiration)
 
         req.headers['set-cookie'] = cookie
         req.headers['cookie'] = cookie
@@ -123,7 +119,7 @@ local Session = Object:extend {
             req['user'] = model:getById(id)
         end
 
-        db:expire(session_key, SMALL_EXPIRE_TIME)
+        db:expire(session_key, bamboo.config.expiration or SMALL_EXPIRE_TIME)
         req['session'] = session
         
         return true
@@ -131,7 +127,7 @@ local Session = Object:extend {
 
     get = function (self)
         local session_key = PREFIX+req.session_id
-        db:expire(session_key, SMALL_EXPIRE_TIME)
+        db:expire(session_key, bamboo.config.expiration or SMALL_EXPIRE_TIME)
         return db:hgetall(session_key)
     end;
 
@@ -146,14 +142,14 @@ local Session = Object:extend {
         end
         
         req.session = session_t
-        db:expire(session_key, SMALL_EXPIRE_TIME)
+        db:expire(session_key, bamboo.config.expiration or SMALL_EXPIRE_TIME)
         return true
     end;
 
     getKey = function (self, key)
         checkType(key, 'string')
         local session_key = PREFIX+req.session_id
-        db:expire(session_key, SMALL_EXPIRE_TIME)
+        db:expire(session_key, bamboo.config.expiration or SMALL_EXPIRE_TIME)
         
         return db:hget(session_key, key)
     end;
@@ -185,6 +181,11 @@ local Session = Object:extend {
     end;
 
 	parseSessionId = parseSessionId;
+	
+	setExpiration = function (seconds)
+		checkType(seconds, 'number')
+		bamboo.config.expiration = seconds
+	end;
 }
 
 

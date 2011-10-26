@@ -31,6 +31,39 @@ Node = Model:extend {
 		['lastmodifier'] 	= { st='ONE', foreign='User', newfield=true},
 	
 	};
+	__callbacks = {
+		
+		onUpdate = function (args)
+				
+		end,
+		
+		onDelete = function (args)
+				
+		end,
+		
+		onGet = function (args)
+			
+		end,
+		
+		onAddForeign = 	function (args)
+			
+		end,
+		onAddedAsForeign = function (args)
+			
+		end,
+		
+		onDeleteForeign = function (args)
+			
+		end,
+		onDeletedAsForeign = function (args)
+			
+		end,
+		
+		onSave = function (args)
+			
+		end,
+	
+	};
 	
 	init = function (self, t)
 		if not t then return self end
