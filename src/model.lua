@@ -920,17 +920,6 @@ Model = Object:extend {
 		
 	end;
     
-	-- CAREFUL! 
-	clearAll = function (self)
-		I_AM_CLASS(self)
-		local all_objs = self:all()
-		for i, v in ipairs(all_objs) do
-			v:del()
-		end
-		db:set(getCounterName(self), 0)
-		
-		return self
-	end;
 	
 	-------------------------------------------------------------------
 	-- CUSTOM API
