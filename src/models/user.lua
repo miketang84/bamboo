@@ -39,15 +39,20 @@ local User = Model:extend {
 		self.is_active = t.is_active
 		self.created_date = os.time()
 
-		if t.encrypt and type(t.encrypt) == 'function' then
-			self.password = t.encrypt(t.password or '')
-		else
-			self.password = md5.sumhexa(t.password or '')
-		end
+		-- if t.encrypt and type(t.encrypt) == 'function' then
+		-- 	self.password = t.encrypt(t.password or '')
+		-- else
+		-- 	self.password = md5.sumhexa(t.password or '')
+		-- end
 		
+		if self.encrypt and type(self.encrypt) == 'function' then
+			self.password = self.encrypt(t.password or '')
+		end
+
 		return self
 	end;
 	
+	encrypt = md5.sumhexa; 
 	
 	authenticate = function (self, params)
 		I_AM_CLASS(self)
@@ -55,8 +60,16 @@ local User = Model:extend {
 		local user = self:getByIndex(params.username)
 		if not user then return false end
 		-- if md5.sumhexa(params.password):lower() ~= user.password then
-		if params.password:lower() ~= user.password then
-			return false
+		-- if params.password:lower() ~= user.password then
+		if self.encrypt and type(self.encrypt) == 'function' then
+			if self.encrypt(params.password):lower() ~= user.password then
+				return false
+			end
+		else
+			print(params.password, user.password)
+			if (params.password):lower() ~= user.password then
+				return false
+			end
 		end
 		return true, user
 	end;
