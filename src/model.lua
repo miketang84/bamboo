@@ -918,17 +918,6 @@ Model = Object:extend {
 		
 	end;
     
-	-- CAREFUL! 
-	clearAll = function (self)
-		I_AM_CLASS(self)
-		local all_objs = self:all()
-		for i, v in ipairs(all_objs) do
-			v:del()
-		end
-		db:set(getCounterName(self), 0)
-		
-		return self
-	end;
 	
 	-------------------------------------------------------------------
 	-- CUSTOM API
@@ -1557,15 +1546,6 @@ Model = Object:extend {
 		-- I_AM_INSTANCE(self)
 		
 		return getClassName(self)
-	end;
-
-	--- return the field description table
-	-- if have, return table
-	-- if no, return nil
-	fieldInfo = function (self, field)
-		checkType(field, 'string')
-		
-		return self.__fields[field]
 	end;
 
 	-- do sort on query set by some field
