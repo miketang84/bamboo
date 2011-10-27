@@ -66,7 +66,6 @@ local User = Model:extend {
 				return false
 			end
 		else
-			print(params.password, user.password)
 			if (params.password):lower() ~= user.password then
 				return false
 			end
