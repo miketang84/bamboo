@@ -10,6 +10,7 @@ require 'lglib'
 module('bamboo', package.seeall)
 
 local Set = require 'lglib.set'
+local List = require 'lglib.list'
 
 local FieldType = require 'bamboo.mvm.prototype'
 
@@ -291,12 +292,53 @@ end
 registerModel = function (model)
 	checkType(model, 'table')
 	assert( model.__tag, 'Registered model __tag must not be missing.' )
-	
-	MODEL_LIST[getClassName(model)] = model
-	
-	for field, fdt in pairs(model.__fields) do
-		setmetatable(fdt, {__index = FieldType[fdt.widget_type or 'text']})
-		fdt:init()
+	local model_name = getClassName(model)
+
+	if not MODEL_LIST[model_name] then
+		MODEL_LIST[model_name] = model
+		for field, fdt in pairs(model.__fields) do
+			setmetatable(fdt, {__index = FieldType[fdt.widget_type or 'text']})
+			fdt:init()
+		end
+		
+		-- decorators
+		if not isFalse(model.__decorators) then
+			if not rawget(model, '__decorators') then
+				model.__decorators={}
+			end
+			model.__decorators.__foontprint={}
+			-- Counter to avoid endless recursion
+			local function footprintfunc(func, k)
+				return
+				function(self, ...)
+					local fp = model.__decorators.__foontprint
+					local key = tostring(self.id or select(1, ...)) .. tostring(k) --tostring(func)
+					local ret
+					if not fp[key] then
+						fp[key] = true
+						ret = func(self, ...)
+					end
+					fp[key] = nil
+					return ret
+				end
+			end
+			
+			local decoratorSet = Set{'update', 'save', 'del', 'addForeign', 'delForeign', 'getById'}
+			
+			local p = model
+			repeat
+				p = p._parent
+				if p.__name ~= 'Model' then
+					registerModel(p)
+				end
+			until p.__name == 'Model' or not p
+
+			for k, v in pairs(rawget(model, '__decorators') or {}) do
+				if decoratorSet:has(k) then
+					model[k] = footprintfunc(v(model[k]), k)
+				end
+			end
+		end
 	end
 end
 
