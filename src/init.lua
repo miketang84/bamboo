@@ -303,26 +303,17 @@ registerModel = function (model)
 		
 		-- decorators
 		if not isFalse(model.__decorators) then
-			-- rawset(model, '__decorators', rawget(model, '__decorators') or {})
-			-- setmetatable(rawget(model, '__decorators') or {}, {footprint={}})--, __index=model._parent.__decorators or {}})
 			if not rawget(model, '__decorators') then
 				model.__decorators={}
 			end
 			model.__decorators.__foontprint={}
 			-- Counter to avoid endless recursion
-			-- print(model.__name)
-			-- ptable(model.__decorators)
-			-- print(model.__decorators.update)
-
 			local function footprintfunc(func, k)
 				return
 				function(self, ...)
-					-- local fp = getmetatable(self.__decorators).footprint
 					local fp = model.__decorators.__foontprint
 					local key = tostring(self.id or select(1, ...)) .. tostring(k) --tostring(func)
 					local ret
-					-- ptable(self)
-					print( key, fp[key])
 					if not fp[key] then
 						fp[key] = true
 						ret = func(self, ...)
@@ -334,55 +325,19 @@ registerModel = function (model)
 			
 			local decoratorSet = Set{'update', 'save', 'del', 'addForeign', 'delForeign', 'getById'}
 			
-			-- local proto_chain = List()
 			local p = model
-			-- print('-', p.__name)
 			repeat
-				-- proto_chain:append(p)
-				-- 往上回溯，找到所有类的继承链
 				p = p._parent
 				if p.__name ~= 'Model' then
 					registerModel(p)
-					-- print('+', p.__name)
 				end
-				-- 当回溯到Model这个原始原型的时候，就停止
 			until p.__name == 'Model' or not p
 
-			-- for _, v in ipairs(proto_chain) do
-			-- 	print('----', v.__name)
-			-- end
-
-			-- for i = #proto_chain, 1, -1 do
-			-- 	for k, v in pairs(rawget(proto_chain[i], '__decorators') or {}) do
-			-- 		print(proto_chain[i].__name, k)
-			-- 		if decoratorSet:has(k) then
-						-- -- Add decorators and footprint counter
-						-- -- 错误在此： proto_chain[i][k]应该是对自己赋值？
-						-- rawset(proto_chain[i], k, footprintfunc(v(proto_chain[i][k]), k, i))
-						-- if proto_chain[i+1] then
-						-- 	if not rawget(proto_chain[i+1], k) then
-						-- proto_chain[i][k] = footprintfunc(v(proto_chain[i][k]), k, i)
-						-- 	end
-						-- end
-			-- 		end
-			-- 	end
-			-- end
-			print(model_name)
-			
 			for k, v in pairs(rawget(model, '__decorators') or {}) do
 				if decoratorSet:has(k) then
-					-- Add decorators and footprint counter
-					-- 错误在此： proto_chain[i][k]应该是对自己赋值？
-					-- rawset(model, k, footprintfunc(v(proto_chain[i][k]), k, i))
-					-- if proto_chain[i+1] then
-					-- 	if not rawget(proto_chain[i+1], k) then
-							model[k] = footprintfunc(v(model[k]), k)
-					-- 	end
-					-- end
+					model[k] = footprintfunc(v(model[k]), k)
 				end
 			end
-
-			-- print(#proto_chain)
 		end
 	end
 end
