@@ -20,4 +20,41 @@ Bamboo is a powerful web framework, written in lua. It is designed to be the mos
 - decorators on database related actions, to reduce manual code;
 - builtin User, Group and Permission models and a set of permission checking procedure;
 - builtin test framework (based on telescope);
-- 
+
+## What does it look like?
+### Project Directory Structure
+	.
+	├── app
+	│   └── handler_entry.lua
+	├── initial
+	├── media
+	│   ├── css
+	│   ├── images
+	│   ├── js
+	│   ├── plugins
+	│   └── uploads
+	├── models
+	├── plugins
+	├── settings.lua
+	└── views
+
+
+### Entry file
+
+### How to start it
+- Start mongrel2;
+- Start redis server;
+- Start bamboo project;
+
+
+	
+	
+
+## Installation
+link to another installation document.
+
+## Some Websites Using Bamboo
+
+## Mailing List
+
+bamboo@librest.com
