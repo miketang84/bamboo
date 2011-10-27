@@ -18,171 +18,95 @@ Instance methods can be used by classes inheriting from Model and instances of t
 <h2>Class methods</h2>
 
 <p><code>model_obj:getIdByIndex (index)</code> <br />
-Return the <em>id</em> of instance whose index field equals <em>index</em>. <br />
-Index field is declared by <em>model.__indexfd</em>. If undeclared, it is the <em>id</em> field.  </p>
+Return the id of instance whose index field equals <em>index</em>. <br />
+Index field is declared by model.__indexfd. If undeclared, it is the id field.  </p>
 
 <p><code>model_obj:getIndexById (id)</code> <br />
-Return the <em>index</em> of instance whose id equals <em>id</em>.
-通过id获取对应实例的name，返回name字符串  </p>
+Return the <em>index</em> of instance whose id equals <em>id</em>. <br />
+Index field is declared by model.__indexfd. If undeclared, it is the id field.  </p>
 
-<p>id:     实例的id  </p>
+<p><code>model_obj:getById (id)</code> <br />
+Return the instance whose id equals <em>id</em>.</p>
 
-<p>通过id获取实例对象 
-Lua代码 <br />
-model_obj:getById (id)          通过id获取实例对象，并返回此对象  </p>
+<p><code>model_obj:getByIndex (index)</code> <br />
+Return the instance whose index field equals <em>index</em>.</p>
 
-<p>id:     实例的id  </p>
+<p><code>model_obj:allIds (is_rev)</code> <br />
+Return all instance ids. Reversed when <em>is_rev</em> equals 'rev'.  </p>
 
-<p>通过name获取实例对象 
-Lua代码 <br />
-model_obj:getByName (name)      通过name获取实例对象，并返回此对象  </p>
+<p><code>model_obj:sliceIds (start, stop, is_rev)</code> <br />
+Return a slice of instance ids from <em>start</em> to <em>stop</em>. Reversed when <em>is_rev</em> equals 'rev'. <br />
+<em>start</em> is optional, can be positive bigger than 0 or negetive. <br />
+<em>stop</em> is optional, can be positive bigger than <em>start</em> or negetive.</p>
 
-<p>name:   实例的name  </p>
+<p><code>model_obj:all (is_rev)</code> <br />
+Return all instances. Reversed when <em>is_rev</em> equals 'rev'.</p>
 
-<p>获取所有id 
-Lua代码 <br />
-model<em>obj:allIds (is</em>rev)       获取此model旗下的所有id，并返回此id列表  </p>
+<p><code>model_obj:slice (start, stop, is_rev)</code> <br />
+Return a slice of instances from <em>start</em> to <em>stop</em>. Reversed when <em>is_rev</em> equals 'rev'. <br />
+<em>start</em> is optional, can be positive bigger than 0 or negetive. <br />
+<em>stop</em> is optional, can be positive bigger than <em>start</em> or negetive.</p>
 
-<p>is_rev: 是否反向标志。此值只有当为字符串'rev'时，表示反向生成结果列表；反之省略此参数或者取其它任何值都表示正向生成结果列表  </p>
+<p><code>model_obj:numbers ()</code> <br />
+Return the number of all instances of model_obj.</p>
 
-<p>返回此模型的所有实例id组成的一个列表的一个切片 
-Lua代码 <br />
-model<em>obj:sliceIds (start, stop, is</em>rev)        获取此model旗下的所有id的一个切片，并返回此id列表  </p>
+<p><code>model_obj:get (query, is_rev)</code> <br />
+Return the first(last when <em>is_rev</em> equals 'rev') instance which matches the condition <em>query</em>. </p>
 
-<p>start:  可选，正数的话从1开始，可以为负的索引 <br />
-stop:   可选，不能小于start，可以为负的索引，最后一个为-1 <br />
-is_rev: 是否反向标志。此值只有当为字符串'rev'时，表示反向生成结果列表；反之省略此参数或者取其它任何值都表示正向生成结果列表  </p>
+<p><code>model_obj:filter (query, is_rev, starti, length, dir)</code> <br />
+Return instances which matches the condition <em>query</em>. Reversed when <em>is_rev</em> equals 'rev'. <br />
+<em>starti</em> is optional, means the beginning of query range. <br />
+<em>length</em> is optional, means the range length of query range. <br />
+<em>dir</em> is optional, 1 means query from <em>starti</em> to <em>starti</em>+<em>length</em>, -1 means query from <em>starti</em> to <em>starti</em>-<em>length</em>.</p>
 
-<p>取出此模型的所有实例对象 
-Lua代码 <br />
-model<em>obj:all (is</em>rev)      获取此model旗下的所有实例对象，并返回此对象列表  </p>
+<p><code>model_obj:setCustom (key, val, st)</code> <br />
+Store a key-value pair to redis. <br />
+<em>key</em>, <em>val</em> mean the key and value of the pair.
+<em>st</em> means the storage type of value. If <em>st</em> equals 'LIST', <em>val</em> should be a LIST, else, <em>val</em> should be a string.</p>
 
-<p>is_rev: 是否反向标志。此值只有当为字符串'rev'时，表示反向生成结果列表；反之，省略此参数或者取其它任何值都表示正向生成结果列表  </p>
+<p><code>model_obj:getCustom (key, st)</code> <br />
+Return the value of <em>key</em> set by <code>model_obj:setCustom (key, val, st)</code>. <br />
+<em>st</em> means the storage type of value. If value is a LIST, <em>st</em> should equal 'LIST'.</p>
 
-<p>取出此模型的所有实例对象的一个切片 
-Lua代码 <br />
-model<em>obj:slice (start, stop, is</em>rev)   获取此model旗下的所有实例对象的一个切片，并返回此对象列表  </p>
+<p><code>model_obj:delCustom (key)</code> <br />
+Delete the key-value pair set by <code>model_obj:setCustom (key, val, st)</code>.  </p>
 
-<p>start:  可选，正数的话从1开始，可以为负的索引 <br />
-stop:   可选，不能小于start，可以为负的索引，最后一个为-1 <br />
-is_rev: 是否反向标志。此值只有当为字符串'rev'时，表示反向生成结果列表；反之，省略此参数或者取其它任何值都表示正向生成结果列表  </p>
+<p><code>model_obj:updateCustom (key, val)</code>
+Update the value of <em>key</em> to <em>val</em> set by <code>model_obj:setCustom (key, val, st)</code>.   </p>
 
-<p>取出此模型的所有有效keys 
-Lua代码 <br />
-model_obj:allKeys ()        获取此model旗下的所有keys，并返回此key列表  </p>
-
-<p>测量当前数据库中此类的真实实例个数 
-Lua代码 <br />
-model_obj:numbers ()        获取此model旗下的实例的总数目，并返回此整数  </p>
-
-<p>根据query参数取出此模型的一个实例。query的讲解参见专门的章节。 
-Lua代码 <br />
-model<em>obj:get (query, is</em>rev)       返回此对象实例  </p>
-
-<p>query:  query参数表 <br />
-is_rev: 是否反向查找  </p>
-
-<p>根据query参数取出此模型的一批实例。query的讲解参见专门的章节。 
-Lua代码 <br />
-model<em>obj:filter (query, is</em>rev, starti, length, dir)   并返回此对象实例  </p>
-
-<p>query:  query参数表 <br />
-is<em>rev: 可选。是否反向生成中间id列表，会影响过滤结果方向 <br />
-starti: 可选。查找的范围中开始时的list索引 <br />
-length: 可选。需要查找的长度 <br />
-dir:    可选。取值为1（正向）或-1（反向）。在is</em>rev的基础上，指定基于开始点朝前或朝后一段距离的方向  </p>
-
-<p>清除此模型的所有实例对象 
-Lua代码 <br />
-model_obj:clearAll ()   无返回参数  </p>
-
-<p>注意：此操作非常危险，除非你确实知道自己在干什么，否则请不要使用。  </p>
-
-<p>向数据库中存入一些自定义的键值对 
-Lua代码 <br />
-model_obj:setCustom (key, val, st)  向数据库中存入自定义键值对，目前已经支持字符串和list的存入。  </p>
-
-<p>key:    自定义键 <br />
-val:    自定义值 <br />
-st:     存储形式。如果没有st或st不为 “LIST”，就表明存储string，（这时val必须为string）； <br />
-        如果st为“LIST”，就表明存储list，这时，val必须为list。  </p>
-
-<p>取出数据库中的自定义键值对 
-Lua代码 <br />
-model_obj:getCustom (key, st)   目前来讲，返回的是字符串或list  </p>
-
-<p>key:    自定义键 <br />
-st:     存储形式。st一般可以不写，只不过当存储的是一个list时，不写st会产生一个警告，不会报错。  </p>
-
-<p>删除数据库中的自定义键值对 
-Lua代码 <br />
-model_obj:delCustom (key)   删除成功，返回true；反之，返回false  </p>
-
-<p>key:    自定义键  </p>
-
-<p>基于数据库的定义对提交的数据进行验证 
-Lua代码 <br />
-model_obj:validate (params) 传进来的参数一条一条验证后，完全符合要求的，返回true；只要有一条验证不满足，就返回false，以及一条错误信息  </p>
-
-<p>params: 一个key-value的table，一般为从客户端传上来的参数解析（用Form:parse()等）后的结果；  </p>
+<p><code>model_obj:validate (params)</code> <br />
+Return true when <em>params</em> is valid, else, return false, err_msg. <br />
+<em>params</em> is a key-value table, usually generated by <code>Form:parse(req)</code>. <br />
+<em>err_msg</em> is a table contains the error messages.</p>
 
 <p>====================================================================== </p>
 
-<p>实例方法 </p>
+<h2>Instance methods</h2>
 
-<p>保存本实例对象（的非外键部分）到数据库 
-Lua代码 <br />
-instance_obj:save ()    无返回值  </p>
+<p><code>instance_obj:save ()</code> <br />
+Save <em>instance_obj</em> to database. <br />
+Return <em>instance_obj</em>.</p>
 
-<p>提示：这是将数据存入数据库中的最常用的方法  </p>
+<p><code>instance_obj:update (field, new_value)</code> <br />
+Update <em>field</em> of <em>instance_obj</em> to new_value. <br />
+Return <em>instance_obj</em>. <br />
+Note： This function cannot be used to foreign fields.</p>
 
-<p>更新本实例对象的某一个字段（非外键）到数据库（避免全部保存拖低效率） 
-Lua代码 <br />
-instance<em>obj:update (field, new</em>value)  无返回值  </p>
+<p><code>instance_obj:del ()</code> <br />
+Delete <em>instance_obj</em> from database. <br />
+Note: To delete a instance from database, you should firstly get the instance from database.</p>
 
-<p>field:  要更新的域 <br />
-new_value:  此域的新值  </p>
+<p><code>instance_obj:addForeign(field, new_obj)</code> <br />
+Add foreign instance <em>new_obj</em> to <em>field</em>. <em>instance_obj</em>.__fields.<em>field</em> must contains foreign attrs. <br />
+Return <em>instance_obj</em>. <br />
+Note: Foreign field only save the id of foreign instance, to input the instance increase the reliability.</p>
 
-<p>注意：此接口无法对外键域进行操作  </p>
+<p><code>instance_obj:getForeign (field, start, stop, is_rev)</code> <br />
+Return instances in <em>field</em> of instance_obj from <em>start</em> to <em>stop</em>. Reversed when <em>is_rev</em> equals 'rev'.</p>
 
-<p>获取模型计数器的值 
-Lua代码 <br />
-instance_obj:getCounter ()  返回当前模型计数器的值，整数  </p>
-
-<p>注：此函数除了实例可以调用外，类对象也可以调用  </p>
-
-<p>删除本实例对象或本实例对象列表 
-Lua代码 <br />
-instance_obj:del ()     删除此对象  </p>
-
-<p>提示： <br />
-可以看到，我们要删除一个实例对象，必须先取出它来，再执行删除。这样设计的目的是更加保证安全性、有效性  </p>
-
-<p>添加一个外链模型的实例new<em>obj的id到本对象的域field中来 
-Lua代码 <br />
-instance</em>obj:addForeign(field, new_obj)     返回self  </p>
-
-<p>field:  记录外键的域。要求此实例的此域必须要有外键属性（定时模型时必须指定） <br />
-new_obj:    待添加的对象  </p>
-
-<p>提示： <br />
-在外键域中记录的是外键对象的id，但要求传入数据为一个对象，主要也是为了使操作更加安全。  </p>
-
-<p>获取本对象的外键域的外键实例 
-Lua代码 <br />
-instance<em>obj:getForeign (field, start, stop, is</em>rev)        返回外键对象或外键对象列表，没有就返回nil  </p>
-
-<p>field:  外键域。要求，此域在定义的时候必须声明外键属性 <br />
-start:  可选。起始位置。用于限制返回结果的切片 <br />
-stop:   可选。结束位置。用于限制返回结果的切片 <br />
-is_rev: 可选。如果有的话，如果等于”rev”，就反向生成结果list；否则，正向生成  </p>
-
-<p>释放本对象的一个域中所存储的外链模型的实例列表的一个片断 
-Lua代码 <br />
-instance<em>obj:delForeign (field, fr</em>obj)     返回self  </p>
-
-<p>field:  外键域 <br />
-fr_obj: 要被删除的外键对象  </p>
+<p><code>instance_obj:delForeign (field, fr_obj)</code> <br />
+Delete <code>fr_obj</code> from <code>field</code> of <code>instance_obj</code>.
+Return <code>instance_obj</code></p>
 
 <p>得到本对象外键域当前外键的数目 
 Lua代码 <br />
