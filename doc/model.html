@@ -34,22 +34,83 @@ __name = 'Mymodel';
 __desc = 'Generitic Mymodel definition';
 __indexfd = 'name',
 __fields = { 
-['name'] = {},  
+    ['name'] = {},  
 
 };  
 
 init = function (self, t)
-if not t then return self end 
+    if not t then return self end 
 
-self.name = t.name
+    self.name = t.name
 
-return self
+    return self
 end;
 
 }
 
 return Mymodel
 </code></pre>
+
+<p><code>local Mymodel = Model:extend{...}</code> means Mymodel inherit from Model, the details of this oop feature is shown in Appendix A. <code>__tag</code> shows the inheriting order of Mymodel, <code>__name</code>, <code>__desc</code> shows the name and some description. <code>__indexfd</code> indicates the index field used by <code>getIdByIndex</code> and <code>getByIndex</code>(Pay attention, a field is set to <code>__indexfd</code> means the value of this field must be unique). <code>__fields</code> is a table cantains the field information of this model, <code>['name'] = {}</code> means field's name is 'name', <code>{}</code> is a table containing information about field <code>name</code> called FDT short for Field Describe Table. <code>init</code> function is like the a constructor. <br />
+We want to add some fields, so we edit <code>__fields</code> like this:</p>
+
+<pre><code>__fields = { 
+    ['name'] = {},  
+    ['age'] = {},
+    ['gender'] = {},
+};
+</code></pre>
+
+<p>Note: Each model has a primary key <code>id</code> auto-incremented.</p>
+
+<h1>Use the model</h1>
+
+<p>To use this model, open <code>app/handler_entry.lua</code>, and add following sentences.  </p>
+
+<pre><code>Mymodel = require 'models.mymodel'
+registerModel(Mymodel)
+</code></pre>
+
+<p>Note: In each module using Mymodel, <code>Mymodel = require 'models.mymodel'</code> is required. <br />
+To use Mymodel to create an instance is like this: <code>inst = Mymodel{name='Young'}</code>. Then we can save it to the database by <code>inst:save()</code>, update it by <code>inst:update('gender', 'male')</code>. To delete the instance from database, use <code>inst:del()</code>.
+To get this instance from database, just use <code>inst_got = Mymodel:getByIndex('Young')</code>, then we get this instance. 
+More model and instance methods are shown at the end of this file.  </p>
+
+<h1>Foreign field</h1>
+
+<p>In many cases, a model has a field linking to another instance. For example, a student model has a field <code>school</code> linking to a school model, on the other hand, the school model has a field <code>students</code> linking to the student model, they should be written in bamboo like this:  </p>
+
+<pre><code>Student = Model:extend {
+    ...
+    __fields = {
+        ...
+        ['school'] = {foreign='School', st='ONE'},
+        ...
+    },
+    ...
+}
+
+School = Model:extend {
+    ...
+    __fields = {
+        ...
+        ['students'] = {foreign='Student', st='MANY'},
+        ...
+    },
+    ...
+}
+</code></pre>
+
+<p>As we see, the FDT of <code>Student</code>'s field <code>school</code> tells bamboo that this field is a foreign field linking to the <code>School</code> model, <code>st='ONE'</code> means a school instance is linked to a student instance. <code>st='MANY'</code> in the FDT of <code>School</code>'s field <code>students</code> means many student instances are linked to a school instance. <br />
+Suppose that <code>stu_inst</code> is an instance of <code>Student</code>, <code>sch_inst</code> is an instance of <code>School</code>, you can add instance to a foreign field by <code>stu_inst:addForeign('school', sch_inst)</code> and <code>sch_inst:addForeign('students', stu_inst)</code>, delete by <code>stu_inst:delForeign('school', sch_inst)</code> and <code>sch_inst:delForeign('students', stu_inst)</code>. <br />
+To get foreign instances, use <code>sch_inst_got = stu_inst:getForeign('school')</code>. Note that for <code>st='MANY'</code> condition, <code>sch_inst:getForeign('students')</code> returns a QuerySet(more information in Appendix A) of instances.</p>
+
+<h1>Query</h1>
+
+<p>To get instances from database, you can use <code>model:getById(id)</code>, which is the basic function. Also, you can use <code>model:getByIndex(index)</code>, <code>model:all(is_rev)</code>, <code>model:filter(query, is_rev, starti, length, dir)</code>, those functions all call <code>model:getById(id)</code>. <br />
+To query from database, you can use <code>model:get(query, is_rev, starti, length, dir)</code> or <code>model:filter(query, is_rev, starti, length, dir)</code>, where <code>query</code> is a table contains the query parameters. For example, to get the instances of <code>Mymodel</code> whose <code>gender</code> equals <code>male</code> and <code>age</code> is greater than 20, you can use <code>insts = Mymodel:filter({gender='male', age=gt(20)})</code>, <code>insts</code> is what you want. <br />
+<code>gt(x)</code> stands for 'greater than x', like this, wo also offer <code>lt(x)</code> for 'less than x', <code>ge(x)</code> for 'greater than or equal to x', <code>le(x)</code> for 'less than or equal to x', <code>contains(x)</code> for 'contains substring x', <code>startsWith(x)</code> for 'startsWith substring x', <code>endsWith(x)</code> for 'endsWith substring x'. <br />
+Note: <code>query</code> is not available for field <code>id</code>.</p>
 
 <h1>API</h1>
 
