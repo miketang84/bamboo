@@ -69,7 +69,7 @@ Menu = Node:extend {
 		local menuobjs = {}
 		for i, v in ipairs(gmenus) do
 			local objitem = self(v)
-			if not isEmpty(objitem) then
+			if not isFalse(objitem) then
 				table.insert(menuobjs, objitem)
 			end
 			objitem:save()

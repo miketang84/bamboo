@@ -508,8 +508,7 @@ monserver_dir = "%s"
 				local model = bamboo.getModelByName(k)
 				for i, item in ipairs(v) do
 					local ori_obj = model:getByName(item.name)
-					-- here using isEmpty is enough
-					assert(isEmpty(ori_obj), ("[ERROR] The same name object %s exists."):format(item.name))
+					assert(isFalse(ori_obj), ("[ERROR] The same name object %s exists."):format(item.name))
 				end
 			end
 		end

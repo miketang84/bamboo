@@ -170,7 +170,7 @@ local Upload = Model:extend {
 		-- for uploading in html4 way
 			local params = Form:parse(req)
 			local files = self:batch ( req, params, dest_dir, prefix, postfix, rename_func )
-			if isEmpty(files) then return nil, '[Error] empty file.' end
+			if files:isEmpty() then return nil, '[Error] empty file.' end
 			
 			if #files == 1 then
 				-- even only one file upload, batch function will return a list

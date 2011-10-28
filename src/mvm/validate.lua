@@ -50,7 +50,7 @@ end
 
 function validateRequired(value, field, limit_value)
 	if limit_value then
-		if isEmpty(value) or value == '' then
+		if isFalse(value) then
 			return false, ('Field $field is required'):gsub('$field', field)
 		end
 	end

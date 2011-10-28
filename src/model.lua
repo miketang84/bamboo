@@ -1322,10 +1322,10 @@ Model = Object:extend {
 			
 			local key = getFieldPattern(self, field)
 			local list = rdzset.retrieve(key)
-			if isEmpty(list) then return List() end
+			if list:isEmpty() then return List() end
 			
 			list = list:slice(start, stop, is_rev)
-			if isEmpty(list) then return List() end
+			if list:isEmpty() then return List() end
 			
 			if fld.foreign == 'ANYSTRING' then
 				-- return string list directly
