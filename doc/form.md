@@ -25,3 +25,15 @@ Bamboo has a cool feature to quickly generate html element for field called MVM 
         <input type="submit" value="Update">
 	</form>
 	
+To enjoy the convenience of MVM, some information is recommended in FDT, for example:
+	
+	Student = Model:extend {
+		...
+		__field = {
+			...
+			gender = {enum={{'m', 'Male'}, {'f', 'Female'}}, widget_type='enum'},
+			desc = {widget_type='textarea'},
+			...
+		},
+		...
+	}
