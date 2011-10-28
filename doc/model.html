@@ -5,15 +5,56 @@
 <html xmlns="http://www.w3.org/1999/xhtml">
 
 <head>
-<title>API.md</title>
+<title>model.md</title>
 
 </head>
 
 <body>
 
-<p>本文档中的所有类方法都可以供所有继承自Model的类使用，所有实例方法可供所有这些类以及类的实例使用。 
-Class methods can be used by classes inheriting from Model.
-Instance methods can be used by classes inheriting from Model and instances of those classes.</p>
+<h1> </h1>
+
+<p>In many cases, web applications need to interact with databases, traditionally, we use SQL sentences. But in bamboo, we use model to do the interaction, which increases the robustness.  </p>
+
+<h1>Configuring the database</h1>
+
+<p>In settings.lua, WHICH_DB tells bamboo which database of redis you want to use. Defaultly, it is 0. <br />
+If you want to use datebase 10, just write <code>WHICH_DB = 10</code>.  </p>
+
+<h1>Your first model</h1>
+
+<p>Go to your project direction, then <code>cd models</code>, run <code>bamboo createmodel Mymodel</code>, you will find a file nemed <code>mymodel.lua</code> is generated like below.  </p>
+
+<pre><code>module(..., package.seeall)
+
+local Model = require 'bamboo.model'
+
+local Mymodel = Model:extend {
+__tag = 'Bamboo.Model.Mymodel';
+__name = 'Mymodel';
+__desc = 'Generitic Mymodel definition';
+__indexfd = 'name',
+__fields = { 
+['name'] = {},  
+
+};  
+
+init = function (self, t)
+if not t then return self end 
+
+self.name = t.name
+
+return self
+end;
+
+}
+
+return Mymodel
+</code></pre>
+
+<h1>API</h1>
+
+<p>Class methods can be used by classes inheriting from Model.
+Instance methods can be used by the instances of classes inheriting from Model.</p>
 
 <h2>Class methods</h2>
 
@@ -113,7 +154,7 @@ Note： This function cannot be used to foreign fields.</p>
 <h3><code>instance_obj:del ()</code></h3>
 
 <p>Delete <code>instance_obj</code> from database. <br />
-Note: To delete a instance from database, you should firstly get the instance from database.</p>
+Note: To delete an instance from database, you should firstly get the instance from database.</p>
 
 <h3><code>instance_obj:addForeign(field, new_obj)</code></h3>
 
@@ -132,9 +173,16 @@ Return <code>instance_obj</code>.</p>
 
 <h3><code>instance_obj:numForeign (field)</code></h3>
 
-<p>Return the number of foreign instances in <code>field</code> of <code>instance_obj</code></p>
+<p>Return the number of foreign instances in <code>field</code> of <code>instance_obj</code>.</p>
 
-<h3><code>instance_obj:toHtml()</code></h3>
+<h3><code>instance_obj:toHtml(params)</code></h3>
+
+<p>Return the html output of <code>instance_obj</code>. <br />
+<code>params</code> is a parameter table, available keys contain <code>field</code>, <code>filters</code>, <code>attached</code>, <code>format</code>. <br />
+<code>field</code> means which field you want to generate html element, all fields when <code>nil</code>. <br />
+<code>filters</code> means which fields you want to generate html elements, all fields when <code>nil</code>. <br />
+<code>attached</code> means extra information adding to field describe table. <br />
+<code>format</code> means how the html elements will be generated, such as <code>'$label: $widget$help'</code></p>
 
 </body>
 </html>

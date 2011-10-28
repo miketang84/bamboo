@@ -1,4 +1,37 @@
 # 
+In many cases, web applications need to interact with databases, traditionally, we use SQL sentences. But in bamboo, we use model to do the interaction, which increases the robustness.  
+# Configuring the database
+In settings.lua, WHICH_DB tells bamboo which database of redis you want to use. Defaultly, it is 0.  
+If you want to use datebase 10, just write `WHICH_DB = 10`.  
+# Your first model
+Go to your project direction, then `cd models`, run `bamboo createmodel Mymodel`, you will find a file nemed `mymodel.lua` is generated like below.  
+	
+	module(..., package.seeall)
+
+	local Model = require 'bamboo.model'
+
+	local Mymodel = Model:extend {
+    __tag = 'Bamboo.Model.Mymodel';
+    __name = 'Mymodel';
+    __desc = 'Generitic Mymodel definition';
+    __indexfd = 'name',
+    __fields = { 
+		['name'] = {},  
+    
+    };  
+    
+    init = function (self, t)
+		if not t then return self end 
+    
+		self.name = t.name
+    
+		return self
+    end;
+
+	}
+
+	return Mymodel
+
 # API
 Class methods can be used by classes inheriting from Model.
 Instance methods can be used by the instances of classes inheriting from Model.
