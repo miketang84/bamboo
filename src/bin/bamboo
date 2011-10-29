@@ -342,11 +342,11 @@ COMMANDS = {
         posix.mkdir(appname)
 
 		-- copy files
-        local cmdstr = ('cp -rf %s/cmd_tmpls/createapp/* ./%s/'):format(bamboo_dir, appname)
+        local cmdstr = ('cp -rf %s/src/cmd_tmpls/createapp/* ./%s/'):format(bamboo_dir, appname)
         os.execute(cmdstr)
 
 		-- copy admin files to app
-		local cmdstr = ('cp -rf %s/cmd_tmpls/admin/ ./%s/'):format(bamboo_dir, appname)
+		local cmdstr = ('cp -rf %s/src/cmd_tmpls/admin/ ./%s/'):format(bamboo_dir, appname)
         os.execute(cmdstr)
 		-- move the admin static files to media
 		local cmdstr = ('mv ./%s/admin/media ./%s/media/admin'):format(appname, appname)
@@ -392,13 +392,13 @@ host = "%s"
         assert(posix.stat(plugin_name) == nil, '[Error] Some file or directory has this name already！')
         posix.mkdir(plugin_name)
 
-        local cmdstr = ('cp -rf %s/cmd_tmpls/createplugin/* ./%s/'):format(bamboo_dir, plugin_name)
+        local cmdstr = ('cp -rf %s/src/cmd_tmpls/createplugin/* ./%s/'):format(bamboo_dir, plugin_name)
         os.execute(cmdstr)
 
         local mediadir = ('%s/sites/%s/plugins/%s/'):format(monserver_dir, appname, plugin_name)
         os.execute(('mkdir -p %s'):format(mediadir))
         
-        local cmdstr = ('cp -rf %s/cmd_tmpls/pluginmedia/*  %s'):format(bamboo_dir, mediadir)
+        local cmdstr = ('cp -rf %s/src/cmd_tmpls/pluginmedia/*  %s'):format(bamboo_dir, mediadir)
         os.execute(cmdstr)
 
         os.execute(('ln -sdf %s %s/media'):format(mediadir, plugin_name)) 
@@ -412,7 +412,7 @@ host = "%s"
 		local bamboo_dir = config.bamboo_dir
         
         local newfile = ('./%s.lua'):format(model_name:lower())
-        local cmdstr = ('cp -rf %s/cmd_tmpls/createmodel/newmodel.lua %s'):format(bamboo_dir, newfile)
+        local cmdstr = ('cp -rf %s/src/cmd_tmpls/createmodel/newmodel.lua %s'):format(bamboo_dir, newfile)
         os.execute(cmdstr)
 
         local fd = io.open(newfile, 'r')
