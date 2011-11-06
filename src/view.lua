@@ -107,7 +107,7 @@ local VIEW_ACTIONS = {
 	-- @param code: the base file's name
 	-- @param this_page: the master file rendered
     ['{:'] = function(code, this_page)
-        local name = unseri(code)
+        local name = deserialize(code)
         local tmpl_dir = findTemplDir(name)
         local base_page = io.loadFile(tmpl_dir, name)
         local new_page = removeSnippets(base_page)
