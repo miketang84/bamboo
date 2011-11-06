@@ -23,7 +23,9 @@ Bamboo Installation
 - Start redis server, it will run as a deamon;
 	cd ~
 	redis-server /etc/redis.conf
-- Start bamboo apptest project;
+- Create apptest project and start it;
+	cd ~/workspace
+	bamboo createapp apptest
 	cd ~/workspace/apptest
 	bamboo start
   If this step goes smoothly, you will see what like follows:
