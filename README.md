@@ -114,10 +114,10 @@ This file looks usually like follows:
 ### How to start it
 - Start mongrel2;
 
-	cd ~/workspace/monserver  
+	`cd ~/workspace/monserver ` 
 	bamboo loadconfig  
 	bamboo startserver main  
-  If mongrel2 server occupy this terminal, open a new terminal before next step;  
+If mongrel2 server occupy this terminal, open a new terminal before next step;  
 
 - Start redis server;
 
@@ -128,8 +128,8 @@ This file looks usually like follows:
 
 	cd ~/workspace/your_project  
 	bamboo start  
-  If this step goes smoothly, you will see what like follows:  
-  CONNECTING / 45564ef2-ca84-a0b5-9a60-0592c290ebd0 tcp://127.0.0.1:9999 tcp://127.0.0.1:9998  
+If this step goes smoothly, you will see what like follows:  
+CONNECTING / 45564ef2-ca84-a0b5-9a60-0592c290ebd0 tcp://127.0.0.1:9999 tcp://127.0.0.1:9998  
 
 - Open the web browser and input `http://localhost:6767` and enter, you will see your project page, if everything is OK;
 - END.
