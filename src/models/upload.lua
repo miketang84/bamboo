@@ -135,7 +135,7 @@ local Upload = Model:extend {
 			local file_instance = self { name = name, path = path }
 			if file_instance then
 				-- store to db
-				file_instance:save()
+				-- file_instance:save()
 				file_objs:append(file_instance)
 			end
 		end
@@ -163,7 +163,7 @@ local Upload = Model:extend {
 			
 			local file_instance = self { name = name, path = path }
 			if file_instance then
-				file_instance:save()
+				-- file_instance:save()
 				return file_instance, 'single'
 			end
 		else
