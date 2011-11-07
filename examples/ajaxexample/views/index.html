@@ -1,0 +1,51 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.1 //EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1.1.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+    <meta name="keywords" content=" "/>
+    <meta name="description" content=" "/>
+    <meta http-equiv="Content-Language" content="utf-8" />
+	
+	<script type="text/javascript" src="/media/js/jquery-1.5.min.js"></script>
+ 
+    <script>
+		$(document).ready(function () {
+			
+			$('form').submit(function () {
+				var query = $(this).serialize();
+				var url = $(this).attr('action');
+				$.post(url, query, function (data) {
+					if (data.success) {
+						
+						$('#results').html(data.htmls);
+						$('#results').append('<span> Now is: ' + data.now + '</span>');
+					}
+				
+				}, 'json');
+				
+				return false;
+			});
+			
+		
+		});
+    </script>
+    
+    <title> Ajax Submit </title>
+</head>
+
+<body>
+
+<div class="container">
+	{[ 'page' ]}
+
+	<div id="results">
+	
+	</div>
+	
+</div>
+    
+
+
+</body>
+</html>
