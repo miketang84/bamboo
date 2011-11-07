@@ -3,7 +3,7 @@ Bamboo Installation
 
 ## Prerequisites
 
-- lua5.1
+- lua5.1 (if have no it, use `apt-get install lua5.1` to install it in Ubuntu/Debian.)
 
 ## Use Installation Tool
 

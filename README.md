@@ -42,6 +42,74 @@ Bamboo is a powerful web framework, written in lua. It is designed to be the mos
 
 
 ### Entry file 
+In Bamboo's project, file `app/handler_entry.lua` is the entry of this project. This file can contain the following parts:
+
+1. require 'bamboo' (MUST)
+2. require other classes and modules (MUST)
+3. register permissions (Optional)
+4. register filters (Optional)
+5. register models used by this project (Optional)
+6. register modules related by this project (Optional)
+7. handlers of this project (Optional)
+8. main URL router (MUST)
+
+This file looks usually like follows:
+
+	------------------------------------------------------------------------
+	-- bamboo import
+	require 'bamboo'
+	
+	-- Other Class and module required
+	local Form = require 'bamboo.form'
+	local View = require 'bamboo.view'
+	local Session = require 'bamboo.session'
+	local registerModel = bamboo.registerModel
+	local registerModule = bamboo.registerModule
+
+	------------------------------------------------------------------------
+	-- Model Registrations
+	local User = require 'bamboo.models.user'
+	registerModel(User)
+	local IPUser = require 'models.ipuser'
+	registerModel(IPUser)
+	local Upload = require 'bamboo.models.upload'
+	registerModel(Upload)
+	local Image = require 'bamboo.models.image'
+	registerModel(Image)
+	local Permission = require 'bamboo.models.permission'
+	registerModel(Permission)
+	
+	------------------------------------------------------------------------
+	-- Module Registrations
+	local module1 = require 'app.module1'
+	registerModule(module1)
+	local module2 = require 'app.module2'
+	registerModule(module2)
+	local upload = require 'app.upload'
+	registerModule(upload)
+	
+	------------------------------------------------------------------------
+	-- Some handlers
+	local function index(web, req)
+	   web:page(View("index.html"){})
+	end
+	
+	local function get(web, req)
+	   ...
+	end
+	
+	local function put(web, req)
+	   ...
+	end
+	
+	------------------------------------------------------------------------
+	-- URL router
+	URLS = { '/',
+		['/'] = index,
+		['/index/'] = index,
+		['/get/'] = get,
+		['/put/'] = put,
+	}
 
 ### How to start it
 - Start mongrel2;
