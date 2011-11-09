@@ -27,32 +27,33 @@ In any case, Bamboo will create a folder in your working directory called blog. 
 	│   ├── js
 	│   ├── plugins
 	│   └── uploads
-	├── models										# place where put model defined files
+	├── models										# place where puting source code files of model definitions
 	├── plugins										# plugins directory
 	├── settings.lua								# project setting file
-	└── views										# place where put views (html) files
+	└── views										# place where puting views/template (html) files
 		└── index.html
 		
 		
 ###Configuration per Project
-Each project or application has a configuration file settings.lua. Now Bamboo web framework builds on the top of Mongrel2 and Redis, so the database to use should be specified in a configuration file. Also, Mongrel2-related and Bamboo itself should be expressed clearly. The typical example follows as:
+Each project or application has a configuration file *settings.lua*. Now Bamboo web framework builds on the top of Mongrel2 and Redis, so the database to use should be specified in a configuration file. Also, Mongrel2-related and Bamboo itself should be expressed clearly. The typical example follows as:
 	
 	project_name = "blog"	
 	-- Mongrel2 info 
-	monserver_dir = "/home/fisk/workspace/monserver/"			-- location of Mongrel2 web server
-	sender_id = 'f322e744-c075-4f54-a561-a6367dde466c'			-- unique id of Mongrel2 server
-	config_db = 'conf/config.sqlite'							-- data source of Mongrel2 web server, after loading mongrel2.conf into server
+	monserver_dir = "/home/fisk/workspace/monserver/"		-- location of Mongrel2 web server
+	sender_id = 'f322e744-c075-4f54-a561-a6367dde466c'		-- unique id of Mongrel2 server
+	config_db = 'conf/config.sqlite'			 -- data source of Mongrel2 web server, after loading mongrel2.conf into server
 	
 	-- Bamboo info
-	bamboo_dir = "/usr/local/share/lua/5.1/bamboo/"			-- location of Bamboo web framework
-	io_threads = 1											-- single thread
-	views = "views/"										-- the location of templates that Bamboo searching for when 
+		bamboo_dir = "/usr/local/share/lua/5.1/bamboo/"		-- location of Bamboo web framework
+		io_threads = 1										-- single thread
+		views = "views/"									-- the location of templates that Bamboo searching for when rendering
 	
 	-- Redis info 
-	WHICH_DB = 15											-- which database the project use, Bind_IP and port should be added later
+	WHICH_DB = 15	     						-- which database the project use, Bind_IP and port should be added here later
 	
+
 ###Configuring Mongrel2 Web Server
-Rake is a general-purpose command-runner that Rails uses for many things. You can see the list of available rake commands in your application by running rake -T.
+To have Mongrel2-related sqlite database file, we still need a configuration of Mongrel2 web servers. Each sqlite database can contain several servers and each server has many hosts. Each server could be treated as independent process. For detail, you can refer to [Mongrel manual](http://mongrel2.org/static/mongrel2-manual.html). Here one typical example is showed in the following:
 
 	static_apptest = Dir( base='sites/apptest/', index_file='index.html', default_ctype='text/plain')
 
@@ -87,3 +88,5 @@ Rake is a general-purpose command-runner that Rails uses for many things. You ca
 	}
 
 	servers = [main]
+	
+Rake is a general-purpose command-runner that Rails uses for many things. You can see the list of available rake commands in your application by running rake -T
