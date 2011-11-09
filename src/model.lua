@@ -1570,7 +1570,7 @@ Model = Object:extend {
 	end;
 
 	-- do sort on query set by some field
-	sortby = function (self, field, sort_func, direction)
+	sortBy = function (self, field, direction, sort_func)
 		I_AM_QUERY_SET(self)
 		checkType(field, 'string')
 		
@@ -1584,6 +1584,8 @@ Model = Object:extend {
 					return af < bf
 				elseif direction == 'dsc' then
 					return af > bf
+				else
+					return nil
 				end
 			end
 		end
