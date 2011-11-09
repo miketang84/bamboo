@@ -34,13 +34,56 @@ In any case, Bamboo will create a folder in your working directory called blog. 
 		└── index.html
 		
 		
-###Configuring a Database 
-Just about every Bamboo application will interact with a database. The database to use is specified in a configuration file, config/database.yml. If you open this file in a new Rails application, you’ll see a default database configuration using SQLite3. The file contains sections for three different environments in which Rails can run by default:
-
-    The development environment is used on your development computer as you interact manually with the application.
-    The test environment is used to run automated tests.
-    The production environment is used when you deploy your application for the world to use.
-
-###Creating the Database
+###Configuration per Project
+Each project or application has a configuration file settings.lua. Now Bamboo web framework builds on the top of Mongrel2 and Redis, so the database to use should be specified in a configuration file. Also, Mongrel2-related and Bamboo itself should be expressed clearly. The typical example follows as:
+	
+	project_name = "blog"	
+	-- Mongrel2 info 
+	monserver_dir = "/home/fisk/workspace/monserver/"			-- location of Mongrel2 web server
+	sender_id = 'f322e744-c075-4f54-a561-a6367dde466c'			-- unique id of Mongrel2 server
+	config_db = 'conf/config.sqlite'							-- data source of Mongrel2 web server, after loading mongrel2.conf into server
+	
+	-- Bamboo info
+	bamboo_dir = "/usr/local/share/lua/5.1/bamboo/"			-- location of Bamboo web framework
+	io_threads = 1											-- single thread
+	views = "views/"										-- the location of templates that Bamboo searching for when 
+	
+	-- Redis info 
+	WHICH_DB = 15											-- which database the project use, Bind_IP and port should be added later
+	
+###Configuring Mongrel2 Web Server
 Rake is a general-purpose command-runner that Rails uses for many things. You can see the list of available rake commands in your application by running rake -T.
 
+	static_apptest = Dir( base='sites/apptest/', index_file='index.html', default_ctype='text/plain')
+
+	handler_apptest = Handler(send_spec='tcp://127.0.0.1:10001',
+		            send_ident='ba06f707-8647-46b9-b7f7-e641d6419909',
+		            recv_spec='tcp://127.0.0.1:10002', recv_ident='')
+
+	main = Server(
+		uuid="505417b8-1de4-454f-98b6-07eb9225cca1"
+		access_log="/logs/access.log"
+		error_log="/logs/error.log"
+		chroot="./"
+		pid_file="/run/mongrel2.pid"
+		default_host="apptest"
+		name="main"
+		port=6767
+		hosts=[ 
+			Host(   name="apptest", 
+		            routes={ 
+						'/': handler_apptest,
+		                '/favicon.ico': static_apptest,
+		                '/media/': static_apptest
+		            } 
+		    )
+		]
+	)
+
+
+	settings = {	"zeromq.threads": 1, 
+			'limits.content_length': 20971520, 
+			'upload.temp_store': '/tmp/mongrel2.upload.XXXXXX' 
+	}
+
+	servers = [main]
