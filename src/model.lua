@@ -851,9 +851,11 @@ Model = Object:extend {
 			e = 1
 			dir = -1
 		end
-			
+		
+		local logic_choice = (logic == 'and')
 		for i = s, e, dir do
-			local flag = true	
+			local flag = logic_choice
+			
 			local obj
 			if is_query_set then
 				obj = all_ids[i]
@@ -871,20 +873,37 @@ Model = Object:extend {
 
 				if type(v) == 'function' then
 					flag = v(obj[k])
-					if logic == 'and' then
-						if not flag then break end
-					else
-						if flag then break end
-					end
+					
+--					if logic_choice ~= flag then break end
+--					if logic_choice and not flag then break end
+--					if not logic_choice and flag then break end
+					
+--					if logic == 'and' then
+--						if not flag then break end
+--					else
+--						if flag then break end
+--					end
 	
 				else
-					if logic == 'and' then
-						if obj[k] ~= v then flag=false; break end
-					else
-						if obj[k] == v then flag=true; break end
-					end
+					flag = (obj[k] == v)
+					
+--					if logic == 'and' then
+--						if obj[k] ~= v then flag=false; break end
+--					else
+--						if obj[k] == v then flag=true; break end
+--					end
 				end
+				---------------------------------------------------------------
+				-- logic_choice,       flag,      action,          append?
+				---------------------------------------------------------------
+				-- true (and)          true       next field       --
+				-- true (and)          false      break            no
+				-- false (or)          true       break            yes
+				-- false (or)          false      next field       --
+				---------------------------------------------------------------
+				if logic_choice ~= flag then break end
 			end
+			
 			-- if walk to this line, means find one 
 			if flag then
 				query_set:append(obj)
