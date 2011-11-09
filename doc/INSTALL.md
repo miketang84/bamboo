@@ -1,5 +1,5 @@
-Bamboo Installation
-===================
+Bamboo Installation (For Ubuntu/Debian User)
+============================================
 
 ## Prerequisites
 
