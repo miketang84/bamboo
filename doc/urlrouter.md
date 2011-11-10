@@ -8,11 +8,11 @@ In the previous chapter, you have seen an lua-table URLS for router configuratio
 		['/form_submit/'] = form_submit,
 	}
 		
-where the value of first element `URLS[1]` is corresponding to router setting in the mongrel2.conf. Usually, it is chosen as `\` for non-complicated applications. The key of key-value pair is the url for each equest, and it must have an unique handler function. The convention of keys follows as:
+where the value of first element `URLS[1]` is corresponding to router setting in the mongrel2.conf. Usually, it is chosen as `/` for non-complicated applications. The key of key-value pair is the url for each equest, and it must have an unique handler function. The convention of keys follows as:
 
-+ first character of url string with more than one letter should be not '/', like '/index/' ---> 'index/'
-+ the last character with '/' preferred, like '/form_submit' ----> 'form_submit/'
-+ the url string can also be lua regular expression, that mapping a batch of requests with the same pattern into one handler function
++ first character of url string with more than one letter should not be "/", like "/index/" ---> "index/";
++ the last character with "/" preferred, like "/form_submit" ----> "form_submit/";
++ the url string can also be lua regular expression, that mapping a batch of requests with the same pattern into one handler function.
 
 After setting up URLS table, Bamboo splits URLS into two parts, specific-url part and general-url part. For a given url string, how does Bamboo find out the proper handler function? The procedures follow as:
 
