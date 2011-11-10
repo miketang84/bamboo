@@ -278,7 +278,7 @@ handler_entry.lua
 	
 	}
 
-The router table maps each request url into an unique handler function. Given an url, Bamboo employs some rules that discussed in the chapter [router] (xxx) to select the unique handler method as its callback. Inside each handler function, the data you use comes from three datasource, input parameters from form and querys, sesssion and database. Usually you will use the processed data to render the template by View() and return to clients via web:page() or web:json(). Now you can launch myfirstapp and browser two pages back and forth.
+The router table maps each request url into an unique handler function. Given an url, Bamboo employs some rules that discussed in the chapter [router] (xxx) to select the unique handler method as its callback. Inside each handler function, the data you use comes from three datasources, input parameters from form and querys, sesssion and database. Usually you will use the processed data to render the template by View() and return to clients via web:page() or web:json(). Now you can launch myfirstapp and browser two pages back and forth.
 
 
 
