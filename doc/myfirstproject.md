@@ -104,7 +104,7 @@ then configuration information and running status of web servers could be pulled
 	cd myfirstapp_dir
 	sudo bamboo start 					-- launching the applicaiton of myfirstapp
 	
-After typing `http://localhost:6767/` in the browser, it works well if the `Welcome to Bamboo` shows up. In addition to `bamboo createapp myproject`, the Bamboo web framework provides a set of command lines for convenience.
+After typing `http://localhost:6767/` in the browser, it works well if the `Welcome to Bamboo` shows up. In addition to `bamboo createapp myproject`, the Bamboo web framework provides a set of command lines for convenience. The common used commands follows as (for details, you can refer to chapter [command] (command.md)): 
 
 	bamboo createapp myproject				-- generate several folds for each application
 	bamboo createplugin plugin_name			-- create a plugin for better reuse
@@ -153,7 +153,7 @@ As for the current application, there is only one model MYUser. To reuse code as
 	return MYUser
 
 
-After the definition of MYUser model, you can use the common model API that Bamboo provides to read/write MYUser-related data very easily. Sometimes, You should implement specific methods for your own use cases, like activity-feeding module in SNS website. Now instance method myuser_obj:save() and class method MYUser:all() are used within the handler functions of  **controller components**. For more details of definitions and usage of models, you could refer to chapter [model and its API](xxxx) for better understandings.
+After the definition of MYUser model, you can use the common model API that Bamboo provides to read/write MYUser-related data very easily. Sometimes, You should implement specific methods for your own use cases, like activity-feeding module in SNS website. Now instance method myuser_obj:save() and class method MYUser:all() are used within the handler functions of  **controller components**. For more details of definitions and usage of models, you could refer to chapter [model] (model.md)and [its API](API.md) for better understandings.
 
 
 ####View Components
