@@ -117,20 +117,20 @@ After typing `http://localhost:6767/` in the browser, it works well if the `Welc
 
 
 ## Procedures of Development of Projects
-In the *myfirstapp*, there are two pages totally, homepage and resultpage. In the homepage, it presents a form for collecting user information. After clicking the submit button, *myfirstapp* would save the information that you input into redis database server. At the same time, it will jump to the resultpage that shows your information up after pulling data from database. Usually, we construct data models for applications firstly. 
+In the *myfirstapp*, there are two pages totally, homepage and resultpage. In the homepage, it presents a form for collecting user information. After clicking the submit button, *myfirstapp* would save the information that you input into redis database server. At the same time, it will jump to the resultpage that shows all of information that you have input. Usually, we construct data models for applications firstly. 
 
 ####Model Components
-As for the current application, there is only one model MYUser. To reuse code as much as possible, Bamboo provides models.user model for specific users to inherit from. You can implement such model as the following class `MYUser`, which mainly contains fields and constructor [init() function]. For more details, you can refer to chapter [Model]().
+As for the current application, there is only one model MYUser. To reuse code as much as possible, Bamboo provides **models.user** model for specific users to inherit from. The implementation of `MYUser` model, which mainly contains fields and constructor [init() function], follows as:
 
 	module(..., package.seeall)
 
-	local User = require 'bamboo.models.user'		-- import another model/class
+	local User = require 'bamboo.models.user'		-- import the bamboo.models.user model/class
 
 	local MYUser = User:extend {
 		__tag = 'Bamboo.Model.User.MYUser';
 		__name = 'MYUser';
 		__desc = 'Generitic MYUser definition';
-		__indexfd = 'name';							-- all instances of MYUser indexed by name field 
+		__indexfd = 'name';							-- all instances of MYUser indexed by the field of name
 		__fields = {								-- several fields, that is, name, age and gender
 			['name'] = {},
 			['age'] = {},
@@ -153,41 +153,43 @@ As for the current application, there is only one model MYUser. To reuse code as
 	return MYUser
 
 
-After defining the MYUser model, you can use the common model API that Bamboo provides to read/write MYUser-related data very easily. Sometimes, You should implement specific methods for your own use cases, like activity-feeding module in SNS website. Now instance method myuser_obj:save() and class method MYUser:all() are used within handler functions of the **controller components**. 
+After the definition of MYUser model, you can use the common model API that Bamboo provides to read/write MYUser-related data very easily. Sometimes, You should implement specific methods for your own use cases, like activity-feeding module in SNS website. Now instance method myuser_obj:save() and class method MYUser:all() are used within the handler functions of  **controller components**. For more details of definitions and usage of models, you could refer to chapter [model and its API](xxxx) for better understandings.
 
 
 ####View Components
+As mentioned before, there are only two pages, that is, homepage and resultpage. For better reuse, three html files index.html, form.html and result.html are created. The index.html sets up a general layout, the others fill in slices to reuse it by two operations of powerful rendering engine, `{[ ]}` an `{: :}`.
 
-
+layout to be reused:
+index.html
+	
+	<!-- the entire page will be reused-->
 	<head>
 		<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
 		<meta name="keywords" content=" "/>
 		<meta name="description" content=" "/>
 		<meta http-equiv="Content-Language" content="utf-8" />
 		
-	 
-		<script>
-		</script>
-		
-		<title> Form Process </title>
+	 	<title> Form Process </title>
 	</head>
 
 	<body>
 
 	<div class="container">
+		<!-- the location will be filled in by other slices-->
 		{[ 'page' ]}
-
-	</div>
-		
+	</div>		
 
 	</body>
 	</html>
 	
 
+homepage:
 form.html
 
+	<!-- inherit the general layout-->
 	{: 'index.html' :}
-
+	
+	<!-- the filling slice-->
 	{[ ======= 'page' ========
 
 		<form action="/form_submit/">
@@ -200,11 +202,13 @@ form.html
 	]}
 
 
-
+resultpage:
 result.html
-
+	
+	<!-- inherit the general layout-->
 	{: 'index.html' :}
-
+	
+	<!-- the filling slice-->
 	{[ ======= 'page' ========
 	<style>
 	table td{
@@ -225,21 +229,31 @@ result.html
 	Click <a href="/"> here </a> to return form page.
 
 	]}
+
+The table part of result.html is implemented with the help of bamboo powerful rendering engine. Operator `{% %}`captures the lua statements and `{{ }}` for lua variables. For details of the rendering engine, you should look through the chapter [views and templates](xxxxx).
+	
+	
 ####Controller Components
+After finishing model and view components, we should define routers for each url request and their handler functions. Generally speaking, there are three kinds of lua files under the fold of **app**, handler_entry.lua, handler/callback functions and helper functions. For a simple application, only handler_entry.lua is enough. Now this is the case.
 
-
-
+handler_entry.lua
+	
 	require 'bamboo'
-
+	
+	-- import rendering engine View and form parse method.
 	local View = require 'bamboo.view'
 	local Form = require 'bamboo.form'
-
+	
+	-- import the model that defined in model component
 	local MYUser = require 'models.myuser'
 
+	-- homepage handler function
 	local function index(web, req)
+		-- generate response and return it to clients
 		web:page(View("form.html"){})
 	end
-
+	
+	-- submit handler function
 	local function form_submit(web, req)
 		local params = Form:parse(req)
 		DEBUG(params)
@@ -248,18 +262,23 @@ result.html
 		-- save person object to db
 		person:save()
 	
-		-- retreive all person instance from db
+		-- retreive all person instances from db
 		local all_persons = MYUser:all()
-	
+		
+		-- a simple wrapper of web:page()
 		web:html("result.html", {all_persons = all_persons})
 	end
 
-
+	
+	-- routers table 
 	URLS = { '/',
 		['/'] = index,
 		['/index/'] = index,
 		['/form_submit/'] = form_submit,
 	
 	}
+
+The router table maps each request url into an unique handler function. Given an url, Bamboo employs some rules that discussed in the chapter [router] (xxx) to select the unique handler method as its callback. Inside each handler function, the data you use comes from three datasource, input parameters from form and querys, sesssion and database. Usually you will use the processed data to render the template by View() and return to clients via web:page() or web:json(). Now you can launch myfirstapp and browser two pages back and forth.
+
 
 
