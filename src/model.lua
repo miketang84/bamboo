@@ -851,9 +851,11 @@ Model = Object:extend {
 			e = 1
 			dir = -1
 		end
-			
+		
+		local logic_choice = (logic == 'and')
 		for i = s, e, dir do
-			local flag = true	
+			local flag = logic_choice
+			
 			local obj
 			if is_query_set then
 				obj = all_ids[i]
@@ -871,20 +873,37 @@ Model = Object:extend {
 
 				if type(v) == 'function' then
 					flag = v(obj[k])
-					if logic == 'and' then
-						if not flag then break end
-					else
-						if flag then break end
-					end
+					
+--					if logic_choice ~= flag then break end
+--					if logic_choice and not flag then break end
+--					if not logic_choice and flag then break end
+					
+--					if logic == 'and' then
+--						if not flag then break end
+--					else
+--						if flag then break end
+--					end
 	
 				else
-					if logic == 'and' then
-						if obj[k] ~= v then flag=false; break end
-					else
-						if obj[k] == v then flag=true; break end
-					end
+					flag = (obj[k] == v)
+					
+--					if logic == 'and' then
+--						if obj[k] ~= v then flag=false; break end
+--					else
+--						if obj[k] == v then flag=true; break end
+--					end
 				end
+				---------------------------------------------------------------
+				-- logic_choice,       flag,      action,          append?
+				---------------------------------------------------------------
+				-- true (and)          true       next field       --
+				-- true (and)          false      break            no
+				-- false (or)          true       break            yes
+				-- false (or)          false      next field       --
+				---------------------------------------------------------------
+				if logic_choice ~= flag then break end
 			end
+			
 			-- if walk to this line, means find one 
 			if flag then
 				query_set:append(obj)
@@ -1188,8 +1207,10 @@ Model = Object:extend {
 		assert( not fld.foreign, ("[Error] %s is a foreign field, shouldn't use update function!"):format(field))
 		local model_key = getNameIdPattern(self)
 		assert(db:exists(model_key), ("[Error] Key %s does't exist! Can't apply update."):format(model_key))
-		-- apply
+		-- apply to db
 		db:hset(model_key, field, new_value)
+		-- apply to lua object
+		self[field] = new_value
 		
 		return self
     end;
@@ -1551,7 +1572,7 @@ Model = Object:extend {
 	end;
 
 	-- do sort on query set by some field
-	sortby = function (self, field, sort_func, direction)
+	sortBy = function (self, field, direction, sort_func)
 		I_AM_QUERY_SET(self)
 		checkType(field, 'string')
 		
@@ -1565,6 +1586,8 @@ Model = Object:extend {
 					return af < bf
 				elseif direction == 'dsc' then
 					return af > bf
+				else
+					return nil
 				end
 			end
 		end

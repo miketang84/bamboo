@@ -92,7 +92,7 @@ local Web = Object:extend {
 
 	loginRequired = function (self, reurl)
 		local reurl = reurl or '/index/'
-		if isFalse(req.user) then web:redirect(reurl); self:close(); return false end
+		if isFalse(req.user) then web:redirect(reurl); return false end
 		return true
 	end;
 	
