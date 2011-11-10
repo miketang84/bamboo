@@ -153,7 +153,7 @@ As for the current application, there is only one model MYUser. To reuse code as
 	return MYUser
 
 
-After the definition of MYUser model, you can use the common model API that Bamboo provides to read/write MYUser-related data very easily. Sometimes, You should implement specific methods for your own use cases, like activity-feeding module in SNS website. Now instance method myuser_obj:save() and class method MYUser:all() are used within the handler functions of  **controller components**. For more details of definitions and usage of models, you could refer to chapter [model] (model.md)and [its API](API.md) for better understandings.
+After the definition of MYUser model, you can use the common model API that Bamboo provides to read/write MYUser-related data very easily. Sometimes, You should implement specific methods for your own use cases, like activity-feeding module in SNS website. Now instance method myuser_obj:save() and class method MYUser:all() are used within the handler functions of  **controller components**. For more details of definitions and usage of models, you could refer to chapter [model] (model.md) and [its API](API.md) for better understandings.
 
 
 ####View Components
@@ -230,7 +230,7 @@ result.html
 
 	]}
 
-The table part of result.html is implemented with the help of bamboo powerful rendering engine. Operator `{% %}`captures the lua statements and `{{ }}` for lua variables. For details of the rendering engine, you should look through the chapter [views and templates](xxxxx).
+The table part of result.html is implemented with the help of bamboo powerful rendering engine. Operator `{% %}`captures the lua statements and `{{ }}` for lua variables. For details of the rendering engine, you should look through the chapter [views and templates](view&template.md).
 	
 	
 ####Controller Components
@@ -278,7 +278,7 @@ handler_entry.lua
 	
 	}
 
-The router table maps each request url into an unique handler function. Given an url, Bamboo employs some rules that discussed in the chapter [router] (xxx) to select the unique handler method as its callback. Inside each handler function, the data you use comes from three datasources, input parameters from form and querys, sesssion and database. Usually you will use the processed data to render the template by View() and return to clients via web:page() or web:json(). Now you can launch myfirstapp and browser two pages back and forth.
+The router table maps each request url into an unique handler function. Given an url, Bamboo employs some rules that discussed in the chapter [router](urlrouter.md) to select the unique handler method as its callback. Inside each handler function, the data you use comes from three datasources, input parameters from form and querys, sesssion and database. Usually you will use the processed data to render the template by View() and return to clients via web:page() or web:json(). Now you can launch myfirstapp and browser two pages back and forth.
 
 
 
