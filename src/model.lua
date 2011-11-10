@@ -1207,8 +1207,10 @@ Model = Object:extend {
 		assert( not fld.foreign, ("[Error] %s is a foreign field, shouldn't use update function!"):format(field))
 		local model_key = getNameIdPattern(self)
 		assert(db:exists(model_key), ("[Error] Key %s does't exist! Can't apply update."):format(model_key))
-		-- apply
+		-- apply to db
 		db:hset(model_key, field, new_value)
+		-- apply to lua object
+		self[field] = new_value
 		
 		return self
     end;
