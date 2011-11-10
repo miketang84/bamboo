@@ -94,17 +94,17 @@ To have Mongrel2-related sqlite database file, we still need a configuration of 
 	
 Executing the following scripts under the directory of monserver_dir, 
 	
-	mkdir sites/myfirstapp			-- mount the media file under myfirstapp/ into this location 
+	mkdir sites/myfirstapp			-- later mounting the media file under myfirstapp/ into this location 
 	m2sh load -config conf/mongrel2.conf -db conf/config.sqlite	 	-- loading  config file into sqlite database 
 	sudo m2sh start -db conf/config.sqlite -name main				-- launching mongrel web server of "main"
 	
 then configuration information and running status of web servers could be pulled out from the specific sqlite database by `m2sh` scripting. This is a better place for administrators to manage many web servers. Now you can test whether the configuration works or not. 
 	
-	redis-server /etc/redis.conf		-- start the database server 
+	redis-server /etc/redis.conf		-- start the database server of redis 
 	cd myfirstapp_dir
 	sudo bamboo start 					-- launching the applicaiton of myfirstapp
 	
-After typing http://localhost:6767/ in the browser, it works well if the `Welcome to Bamboo` shows up. In addition to `bamboo createapp myproject`, the Bamboo web framework provides a set of command lines for convenience.
+After typing `http://localhost:6767/` in the browser, it works well if the `Welcome to Bamboo` shows up. In addition to `bamboo createapp myproject`, the Bamboo web framework provides a set of command lines for convenience.
 
 	bamboo createapp myproject				-- generate several folds for each application
 	bamboo createplugin plugin_name			-- create a plugin for better reuse
@@ -112,13 +112,154 @@ After typing http://localhost:6767/ in the browser, it works well if the `Welcom
 	bamboo initdb initial_data_filename		-- initializing the database that configed in setting.lua by data file
 	bamboo pushdb new_data_filename			-- fill in more data into database
 	bamboo clearmodel Modelname				-- delete all details of the specific model-related data
-	bamboo shell 							-- open the interactive mode of bamboo for 
+	bamboo shell 							-- open the interactive mode of bamboo for working with database
 	
 
 
+## Procedures of Development of Projects
+In the *myfirstapp*, there are two pages totally, homepage and resultpage. In the homepage, it presents a form for collecting user information. After clicking the submit button, *myfirstapp* would save the information that you input into redis database server. At the same time, it will jump to the resultpage that shows your information up after pulling data from database. Usually, we construct data models for applications firstly. 
+
+####Model Components
+As for the current application, there is only one model MYUser. To reuse code as much as possible, Bamboo provides models.user model for specific users to inherit from. You can implement such model as the following class `MYUser`, which mainly contains fields and constructor [init() function]. For more details, you can refer to chapter [Model]().
+
+	module(..., package.seeall)
+
+	local User = require 'bamboo.models.user'		-- import another model/class
+
+	local MYUser = User:extend {
+		__tag = 'Bamboo.Model.User.MYUser';
+		__name = 'MYUser';
+		__desc = 'Generitic MYUser definition';
+		__indexfd = 'name';							-- all instances of MYUser indexed by name field 
+		__fields = {								-- several fields, that is, name, age and gender
+			['name'] = {},
+			['age'] = {},
+			['gender'] = {},
+
+		};
+	
+		init = function (self, t)				    -- constructor of MYUser class
+			if not t then return self end
+		
+			self.name = t.name
+			self.age = t.age
+			self.gender = t.gender
+		
+			return self
+		end;
+
+	}
+
+	return MYUser
+
+
+After defining the MYUser model, you can use the common model API that Bamboo provides to read/write MYUser-related data very easily. Sometimes, You should implement specific methods for your own use cases, like activity-feeding module in SNS website. Now instance method myuser_obj:save() and class method MYUser:all() are used within handler functions of the **controller components**. 
+
+
+####View Components
+
+
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+		<meta name="keywords" content=" "/>
+		<meta name="description" content=" "/>
+		<meta http-equiv="Content-Language" content="utf-8" />
+		
+	 
+		<script>
+		</script>
+		
+		<title> Form Process </title>
+	</head>
+
+	<body>
+
+	<div class="container">
+		{[ 'page' ]}
+
+	</div>
+		
+
+	</body>
+	</html>
+	
+
+form.html
+
+	{: 'index.html' :}
+
+	{[ ======= 'page' ========
+
+		<form action="/form_submit/">
+			Name: <input type="text" name="name" /> <br/>
+			Age: <input type="text" name="age" /> <br/>
+			Gender: <input type="text" name="gender" /> <br/>
+			<button type="submit">Submit</button>
+		</form>
+
+	]}
 
 
 
+result.html
 
+	{: 'index.html' :}
+
+	{[ ======= 'page' ========
+	<style>
+	table td{
+		border: 1px solid black;
+	}
+	</style>
+
+
+	The database have the following data:
+
+	<table>
+		<tr><th>Name</th><th>Age</th><th>Gender</th></tr>
+		{% for _, v in ipairs(all_persons) do%}
+		<tr><td>{{v.name}}</td><td>{{v.age}}</td><td>{{v.gender}}</td></tr>
+		{% end %}
+	</table>
+
+	Click <a href="/"> here </a> to return form page.
+
+	]}
+####Controller Components
+
+
+
+	require 'bamboo'
+
+	local View = require 'bamboo.view'
+	local Form = require 'bamboo.form'
+
+	local MYUser = require 'models.myuser'
+
+	local function index(web, req)
+		web:page(View("form.html"){})
+	end
+
+	local function form_submit(web, req)
+		local params = Form:parse(req)
+		DEBUG(params)
+	
+		local person = MYUser(params)
+		-- save person object to db
+		person:save()
+	
+		-- retreive all person instance from db
+		local all_persons = MYUser:all()
+	
+		web:html("result.html", {all_persons = all_persons})
+	end
+
+
+	URLS = { '/',
+		['/'] = index,
+		['/index/'] = index,
+		['/form_submit/'] = form_submit,
+	
+	}
 
 
