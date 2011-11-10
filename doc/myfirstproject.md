@@ -9,13 +9,13 @@ To begin, open a terminal, navigate to a folder where you have rights to create 
 	
 After that, just type:
 	
-	bamboo createapp blog
+	bamboo createapp myfirstapp
 	
-This will create a Bamboo application called Blog in a directory called *blog*. After you create the blog application, switch to its folder to continue work directly in that application:
+This will create a Bamboo application called myfirstapp in a directory called *myfirstapp*. After you create the myfirstapp application, switch to its folder to continue work directly in that application:
 	
-	cd blog
+	cd myfirstapp
 	
-In any case, Bamboo will create a folder in your working directory called blog. Open up that folder and explore its contents. Here is a basic rundown on the function of each folder that Bamboo creates in a new application by default. 
+In any case, Bamboo will create a folder in your working directory called myfirstapp. Open up that folder and explore its contents. Here is a basic rundown on the function of each folder that Bamboo creates in a new application by default. 
 
 	One project										# This project's directory
 	├── app											# control code directory
@@ -35,12 +35,12 @@ In any case, Bamboo will create a folder in your working directory called blog. 
 		
 		
 ###Configuration per Project
-Each project or application has a configuration file *settings.lua*. Now Bamboo web framework builds on the top of Mongrel2 and Redis, so the database to use and Mongrel2-related information on bamboo side should be specified in a configuration file. Also, Bamboo itself should be expressed clearly. The typical example follows as:
+Each project or application has a configuration file *settings.lua*. Now Bamboo web framework builds on the top of Mongrel2 and Redis, so the database to use and Mongrel2-related information on bamboo side should be specified in this configuration file. Also, Bamboo itself should be expressed clearly. The typical example follows as:
 	
-	project_name = "blog"	
+	project_name = "myfirstapp"	
 	-- Mongrel2 info 
-	monserver_dir = "/home/fisk/workspace/monserver/"		-- location of Mongrel2 web server
-	sender_id = 'f322e744-c075-4f54-a561-a6367dde466c'		-- unique id of Mongrel2 server
+	monserver_dir = "/home/fisk/workspace/monserver/"		-- location of instances of Mongrel2 web server
+	sender_id = 'f322e744-c075-4f54-a561-a6367dde466c'		-- unique id of Mongrel2 server instance
 	config_db = 'conf/config.sqlite'		-- data source of Mongrel2 web server, after loading mongrel2.conf into server
 	
 	-- Bamboo info
@@ -53,13 +53,13 @@ Each project or application has a configuration file *settings.lua*. Now Bamboo 
 	
 
 ###Configuring Mongrel2 Web Server
-To have Mongrel2-related sqlite database file, we still need a configuration of Mongrel2 web servers. Each sqlite database can contain several servers and each server has many hosts. Each server could be treated as independent process. The name of each host is corresponding to the project_name in setting.lua above. For detail, you can refer to [Mongrel manual](http://mongrel2.org/static/mongrel2-manual.html). Here one typical example is showed in the following:
+To have Mongrel2-related sqlite database file, we still need a configuration of Mongrel2 web servers. Each sqlite database can contain several servers and each server could have many hosts. Each server could be treated as independent process. The name of each host is corresponding to the project_name in setting.lua above. For detail, you can refer to [Mongrel manual](http://mongrel2.org/static/mongrel2-manual.html). Here one typical example is showed in the following:
 
 	# location of static pages
-	static_blog = Dir( base='sites/blog/', index_file='index.html', default_ctype='text/plain') 
+	static_myfirstapp = Dir( base='sites/myfirstapp/', index_file='index.html', default_ctype='text/plain') 
 	
 	# corresponding to each Bamboo process
-	handler_blog = Handler(send_spec='tcp://127.0.0.1:10001',
+	handler_myfirstapp = Handler(send_spec='tcp://127.0.0.1:10001',
 		            send_ident='ba06f707-8647-46b9-b7f7-e641d6419909',
 		            recv_spec='tcp://127.0.0.1:10002', recv_ident='')
 	
@@ -67,18 +67,18 @@ To have Mongrel2-related sqlite database file, we still need a configuration of 
 	main = Server(
 		uuid="505417b8-1de4-454f-98b6-07eb98f5cca1"
 		access_log="/logs/access.log"
-		error_log="/logs/error.log"
-		chroot="./"
+		error_log="/logs/error.log"		-- relative path w.r.t. chroot 
+		chroot="./"						-- the directory of running mongrel2 instance by m2sh start  
 		pid_file="/run/mongrel2.pid"
-		default_host="blog"
-		name="main"
+		default_host="myfirstapp"
+		name="main"   
 		port=6767
 		hosts=[ 
-			Host(   name="blog", 
+			Host(   name="myfirstapp", 
 		            routes={ 
-						'/': handler_blog,
-		                '/favicon.ico': static_blog,
-		                '/media/': static_blog
+						'/': handler_myfirstapp,
+		                '/favicon.ico': static_myfirstapp,
+		                '/media/': static_myfirstapp
 		            } 
 		    )
 		]
@@ -92,10 +92,19 @@ To have Mongrel2-related sqlite database file, we still need a configuration of 
 
 	servers = [main]
 	
-After the execution the script of `m2sh load -config conf/mongrel2.conf` and `m2sh start -db conf/config.sqlite`, the configuration information and running status of web servers could be pulled out from the specific sqlite database. This is a better place for administrators to manage many web servers. Now you can test whether the configuration works or not. 
-
-
-The Bamboo web framework provides a set of command lines for convenience.
+Executing the following scripts under the directory of monserver_dir, 
+	
+	mkdir sites/myfirstapp			-- mount the media file under myfirstapp/ into this location 
+	m2sh load -config conf/mongrel2.conf -db conf/config.sqlite	 	-- loading  config file into sqlite database 
+	sudo m2sh start -db conf/config.sqlite -name main				-- launching mongrel web server of "main"
+	
+then configuration information and running status of web servers could be pulled out from the specific sqlite database by `m2sh` scripting. This is a better place for administrators to manage many web servers. Now you can test whether the configuration works or not. 
+	
+	redis-server /etc/redis.conf		-- start the database server 
+	cd myfirstapp_dir
+	sudo bamboo start 					-- launching the applicaiton of myfirstapp
+	
+After typing http://localhost:6767/ in the browser, it works well if the `Welcome to Bamboo` shows up. In addition to `bamboo createapp myproject`, the Bamboo web framework provides a set of command lines for convenience.
 
 	bamboo createapp myproject				-- generate several folds for each application
 	bamboo createplugin plugin_name			-- create a plugin for better reuse
