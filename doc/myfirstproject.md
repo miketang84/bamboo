@@ -2,7 +2,7 @@
 
 ##Introduction 
 ###Creating a Project
-To begin, open a terminal, navigate to a folder where you have rights to create files and check whether there is a settings.lua file in the current directory. If not, you can create a new one like the following example, which are just the directory of your mongrel2 server and directory of bamboo installed:
+To begin, open a terminal, navigate to a folder where you have rights to create files and check whether there is a *settings.lua* file in the current directory. If not, you can create a new one, which are just the directory of your mongrel2 server and directory of bamboo installed, like the following example:
 	
 	monserver_dir = "/home/fisk/workspace/monserver/"
 	bamboo_dir = "/usr/local/share/lua/5.1/bamboo/" 
@@ -35,7 +35,7 @@ In any case, Bamboo will create a folder in your working directory called blog. 
 		
 		
 ###Configuration per Project
-Each project or application has a configuration file *settings.lua*. Now Bamboo web framework builds on the top of Mongrel2 and Redis, so the database to use should be specified in a configuration file. Also, Mongrel2-related and Bamboo itself should be expressed clearly. The typical example follows as:
+Each project or application has a configuration file *settings.lua*. Now Bamboo web framework builds on the top of Mongrel2 and Redis, so the database to use and Mongrel2-related information on bamboo side should be specified in a configuration file. Also, Bamboo itself should be expressed clearly. The typical example follows as:
 	
 	project_name = "blog"	
 	-- Mongrel2 info 
@@ -92,7 +92,7 @@ To have Mongrel2-related sqlite database file, we still need a configuration of 
 
 	servers = [main]
 	
-After excuting the script of `m2sh load -config conf/mongrel2.conf` and `m2sh start -db conf/config.sqlite`, the configuration information and running status of web servers could be pulled out from the specific sqlite database. This is a better place for administrators to manage many web servers. Now you can test whether the configuration works or not. 
+After the execution the script of `m2sh load -config conf/mongrel2.conf` and `m2sh start -db conf/config.sqlite`, the configuration information and running status of web servers could be pulled out from the specific sqlite database. This is a better place for administrators to manage many web servers. Now you can test whether the configuration works or not. 
 
 
 The Bamboo web framework provides a set of command lines for convenience.

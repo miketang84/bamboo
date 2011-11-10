@@ -1,8 +1,8 @@
 project_name = "workwithdb"
 
 -- please modify the following two lines on your machine
-bamboo_dir = "/home/daogang/GIT/bamboo/"
-monserver_dir = "/home/daogang/workspace/monserver/"
+bamboo_dir = "/home/fisk/github/bamboo/src/"
+monserver_dir = "/home/fisk/workspace/monserver/"
 debug_level = 1
 host = 'workwithdb'
 sender_id = '99edc750-f2bc-1f04-ffc7-cb0301efa240'
