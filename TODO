@@ -1,0 +1,17 @@
+
+v1.1
+
+1. Extend query_set:sortBy(self, field, direction, sort_func) to query_set:sortBy(self, field, direction, sort_func, ...), to support second rank sort;
+2. Dynamic field mechanism;
+3. realize cache system, using model Cutsom API;
+4. check global variables;
+5. add Menu config, binding url, handler, template automatically, to reduce the code amount;
+6. supply common parameters for rendering;
+7. supply better bug report method for erroring in views rendering.
+
+
+v1.2 
+
+1. perfect plugins system;
+2. a basic CMS;
+3. data's permanent work and migration of redis;
