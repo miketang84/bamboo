@@ -135,7 +135,7 @@ CONNECTING / 45564ef2-ca84-a0b5-9a60-0592c290ebd0 tcp://127.0.0.1:9999 tcp://127
 - END.
 
 ## Installation
-Please see [INSTALL](doc/0.INSTALL.md) in this source package.
+Please see doc/0.INSTALL.md in this source package.
 
 ## Some Websites Using Bamboo Now
 
@@ -148,7 +148,7 @@ Please see [INSTALL](doc/0.INSTALL.md) in this source package.
 
 ## Mailing List
 Bamboo use the following mailing list:
-
+  
 bamboo@librest.com
 
 You can send mail with anything to it, when you receive an reply mail, you reply this mail again, then you will join into this mailing list automatically.
