@@ -4,6 +4,7 @@ local View = require 'bamboo.view'
 local Form = require 'bamboo.form'
 
 local MYUser = require 'models.myuser'
+bamboo.registerModel(MYUser)
 
 local function index(web, req)
     web:page(View("form.html"){})
