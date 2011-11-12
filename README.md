@@ -135,7 +135,7 @@ CONNECTING / 45564ef2-ca84-a0b5-9a60-0592c290ebd0 tcp://127.0.0.1:9999 tcp://127
 - END.
 
 ## Installation
-Please see doc/0.INSTALL.md in this source package.
+Please see [INSTALL](https://github.com/daogangtang/bamboo/blob/master/doc/0.INSTALL.md) in this source package.
 
 ## Some Websites Using Bamboo Now
 
