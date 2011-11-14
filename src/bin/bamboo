@@ -346,7 +346,7 @@ COMMANDS = {
         os.execute(cmdstr)
 
 		-- copy admin files to app
-		local cmdstr = ('cp -rf %s/src/cmd_tmpls/admin/ ./%s/'):format(bamboo_dir, appname)
+		local cmdstr = ('cp -rf %s/src/cmd_tmpls/admin ./%s/'):format(bamboo_dir, appname)
         os.execute(cmdstr)
 		-- move the admin static files to media
 		local cmdstr = ('mv ./%s/admin/media ./%s/media/admin'):format(appname, appname)
