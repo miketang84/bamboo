@@ -130,7 +130,7 @@
 			<div class="accordionContent">
 
 			  <ul class="tree">
-			  {% for k, v in pairs(models) do %}
+			  {% for k, v in pairs(models or {}) do %}
 			  <!-- <li><a href="/admin/getInstances?__tag={{k}}" target="navTab">{{k}}</a></li> -->
 			  <li><a href="/admin/filter?__tag={{k}}&pageNum=1&numPerPage=20" target="navTab" rel="{{k}}">{{k}}</a></li>
 			  {% end %}
