@@ -14,6 +14,8 @@ local List = require 'lglib.list'
 
 local FieldType = require 'bamboo.mvm.prototype'
 
+CACHE_LIFE = 1800
+
 URLS = {}
 
 ------------------------------------------------------------------------

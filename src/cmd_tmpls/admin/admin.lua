@@ -6,6 +6,7 @@ local Session = require 'bamboo.session'
 -- local pic = require 'lib.pic'
 local Image = require 'bamboo.models.image'
 local Upload = require 'bamboo.models.upload'
+local getpy = require 'app.py'
 
 local function _admin_param_(a, e)
 	print('admin checking params')
@@ -200,42 +201,61 @@ local function create(web, req, e)
 	e.__tag = nil
 	local model = bamboo.getModelByName(tag)
 	e.id = nil
+	e['_'] = nil
 
 	ptable(e)
-
+	
+	local ret, err_msg = model:validate(e)
+	if not ret then
+		-- for _, v in ipairs(err_msg) do
+		-- 	print(v)
+		-- end
+		local data = {
+			["statusCode"] = "300",
+			["message"] = "修改信息出错!<br/>" .. table.concat(err_msg, '<br/>'),
+			["navTabId"] = tag,
+			["rel"] = "",
+			["callbackType"] = "",--closeCurrent",
+			["forwardUrl"] = ""
+		}
+		return web:json(data)
+	end
+	
 	local instance = model(e)
 	if instance then
 		for k, v in pairs(e) do
 			print('_____', k)
 			if model.__fields[k].foreign then
-				local foreign_model = bamboo.getModelByName(model.__fields[k].foreign)
-				-- print('foreign', k)
-				if model.__fields[k].st == 'ONE' then
-					-- print('<<<<<')
-					if tonumber(v) <= 0 then
-						local foreign_instance = instance:getForeign(k)
-						if foreign_instance then
-							instance:delForeign(k, foreign_instance)
-						end
-					else
-						instance:addForeign(k, foreign_model:getById(v))
-					end
-				elseif model.__fields[k].st == 'MANY' then
-					assert(type(v)=='table', '[Error] It is not a table')
-					local foreign_instances = foreign_model:all()
-					-- print('>>>>>>>>')
-					-- fptable(foreign_instances)
-					for _, foreign_instance in ipairs(foreign_instances) do
-						local eq = false
-						for _, foreign_id in ipairs(v) do
-							if foreign_instance.id == foreign_id then
-								eq = true
+				if model.__fields[k].widget_type == 'foreign' then
+					local foreign_model = bamboo.getModelByName(model.__fields[k].foreign)
+					-- print('foreign', k)
+					if model.__fields[k].st == 'ONE' then
+						-- print('<<<<<')
+						if tonumber(v) <= 0 then
+							local foreign_instance = instance:getForeign(k)
+							if foreign_instance then
+								instance:delForeign(k, foreign_instance)
 							end
-						end
-						if eq then
-							instance:addForeign(k, foreign_instance)
 						else
-							instance:delForeign(k, foreign_instance)
+							instance:addForeign(k, foreign_model:getById(v))
+						end
+					elseif model.__fields[k].st == 'MANY' then
+						assert(type(v)=='table', '[Error] It is not a table')
+						local foreign_instances = foreign_model:all()
+						-- print('>>>>>>>>')
+						-- fptable(foreign_instances)
+						for _, foreign_instance in ipairs(foreign_instances) do
+							local eq = false
+							for _, foreign_id in ipairs(v) do
+								if foreign_instance.id == foreign_id then
+									eq = true
+								end
+							end
+							if eq then
+								instance:addForeign(k, foreign_instance)
+							else
+								instance:delForeign(k, foreign_instance)
+							end
 						end
 					end
 				end
@@ -256,19 +276,35 @@ local function create(web, req, e)
 end
 
 local function update(web, req, e)
-	fptable(e)
+	-- fptable(e)
 	
 	local tag = e.__tag
 	e.__tag = nil
 	local id = e.id
 	e.id = nil
+	e['_'] = nil
 
 	local model = bamboo.getModelByName(tag)
 	local instance = model:getById(id)
 
 	-- print('instance')
 	-- fptable(instance)
-
+	local ret, err_msg = model:validate(e)
+	if not ret then
+		-- for _, v in ipairs(err_msg) do
+		-- 	print(v)
+		-- end
+		local data = {
+			["statusCode"] = "300",
+			["message"] = "修改信息出错!<br/>" .. table.concat(err_msg, '<br/>'),
+			["navTabId"] = tag,
+			["rel"] = "",
+			["callbackType"] = "",--closeCurrent",
+			["forwardUrl"] = ""
+		}
+		return web:json(data)
+	end
+	
 	if instance then
 		for k, v in pairs(e) do
 			-- print(k)
@@ -286,21 +322,23 @@ local function update(web, req, e)
 						instance:addForeign(k, foreign_model:getById(v))
 					end
 				elseif model.__fields[k].st == 'MANY' then
-					assert(type(v)=='table', '[Error] It is not a table')
-					local foreign_instances = foreign_model:all()
-					-- print('>>>>>>>>')
-					-- fptable(foreign_instances)
-					for _, foreign_instance in ipairs(foreign_instances) do
-						local eq = false
-						for _, foreign_id in ipairs(v) do
-							if foreign_instance.id == foreign_id then
-								eq = true
+					-- assert(type(v)=='table', '[Error] It is not a table')
+					if type(v)=='table' then
+						local foreign_instances = foreign_model:all()
+						-- print('>>>>>>>>')
+						-- fptable(foreign_instances)
+						for _, foreign_instance in ipairs(foreign_instances) do
+							local eq = false
+							for _, foreign_id in ipairs(v) do
+								if foreign_instance.id == foreign_id then
+									eq = true
+								end
 							end
-						end
-						if eq then
-							instance:addForeign(k, foreign_instance)
-						else
-							instance:delForeign(k, foreign_instance)
+							if eq then
+								instance:addForeign(k, foreign_instance)
+							else
+								instance:delForeign(k, foreign_instance)
+							end
 						end
 					end
 				end
@@ -418,6 +456,11 @@ function finish()
 	return true
 end
 
+function test()
+	-- print(getpy('测试'))
+	return web:html('test.html', {instance=req.user})
+end
+
 URLS = {
 	['/'] = {
 		handler = admin_entry,
@@ -467,8 +510,10 @@ URLS = {
 	},
 	['logout'] = {
 		handler = logout,
-	}
+	},
+	['test'] = test,
 	-- ['[%w_%-/]+/'] = {
 	-- 	handler = def,
 	-- }
 }
+

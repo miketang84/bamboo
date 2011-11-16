@@ -98,7 +98,7 @@ function del( key )
 	return db:del(key)
 end
 
-function have(key, obj)
+function has(key, obj)
 	local len = db:llen(key)
 	for i = 0, len-1 do
 		local elem = db:lindex(i)

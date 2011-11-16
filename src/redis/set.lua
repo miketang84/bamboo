@@ -43,7 +43,7 @@ function del( key )
 	return db:del(key)
 end
 
-function have(key, obj)
+function has(key, obj)
 
 	return db:sismember(key, tostring(obj))
 end

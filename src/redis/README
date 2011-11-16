@@ -14,6 +14,11 @@ Custom record
 --------------------
 Model_name:custom:custom_string			:	  this may be better, custom key, need to separate from foreign field record
 
+Cache type
+--------------------
+CACHETYPE:Model_name:custom:custom_string      string
+
+
 
 In every redis wapper module, there must be a standard API:
 
@@ -24,6 +29,6 @@ del			   : del the whole
 add (append)   : add one element to object set
 remove (pop)   : remove one element from object set
 num	(len)	   : measure the number of length of object set
-have		   : check if it is in object set
+has			   : check if it is in object set
 
 

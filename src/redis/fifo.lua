@@ -54,7 +54,7 @@ function del( key )
 	return rdlist.del(key)
 end
 
-function have(key, obj)
+function has(key, obj)
 	return rdlist.have(key, obj)
 end
 

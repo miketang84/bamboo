@@ -47,6 +47,10 @@ local function getCustomKey(self, key)
 	return getClassName(self) + ':custom:' + key
 end
 
+local function getCachetypeKey(self, key)
+	return 'CACHETYPE:' + getCustomKey(self, key)
+end
+
 -- in model global index cache (backend is zset),
 -- check the existance of some member by its id (score)
 --
@@ -946,21 +950,24 @@ Model = Object:extend {
 	-- 1. setCustom
 	-- 2. getCustom
 	-- 3. delCustom
-	-- 4. updateCustom
-	-- 5. addCustomMember
-	-- 6. removeCustomMember
-	-- 7. numCustom
+	-- 4. existCustom
+	-- 5. updateCustom
+	-- 6. addCustomMember
+	-- 7. removeCustomMember
+	-- 8. hasCustomMember
+	-- 9. numCustom
 	--
-	--- four store type
+	--- five store type
 	-- 1. string
 	-- 2. list
 	-- 3. set
 	-- 4. zset
+	-- 5. hash
 	-------------------------------------------------------------------
 	
 	-- store customize key-value pair to db
 	-- now: it support string, list and so on
-	setCustom = function (self, key, val, st)
+	setCustom = function (self, key, val, st, scores)
 		I_AM_CLASS(self)
 		checkType(key, 'string')
 		local custom_key = getCustomKey(self, key)
@@ -976,7 +983,7 @@ Model = Object:extend {
 			elseif st == 'set' then
 				rdset.save(custom_key, val)
 			elseif st == 'zset' then
-				rdzset.save(custom_key, val)
+				rdzset.save(custom_key, val, scores)
 			elseif st == 'hash' then
 				rdhash.save(custom_key, val)
 			else
@@ -984,6 +991,7 @@ Model = Object:extend {
 			end
 		end
 	end;
+
 
 	-- 
 	getCustom = function (self, key)
@@ -1019,7 +1027,19 @@ Model = Object:extend {
 
 		return db:del(custom_key)		
 	end;
-
+	
+	-- check whether exist custom key
+	existCustom = function (self, key)
+		I_AM_CLASS(self)
+		checkType(key, 'string')
+		local custom_key = getCustomKey(self, key)
+		if not db:exists(custom_key) then
+			return false
+		else 
+			return true
+		end
+	end;
+	
 	updateCustom = function (self, key, val)
 		I_AM_CLASS(self)
 		checkType(key, 'string')
@@ -1082,6 +1102,25 @@ Model = Object:extend {
 		end
 		
 	end;
+	
+	hasCustomMember = function (self, key, mem)
+		I_AM_CLASS(self)
+		checkType(key, 'string')
+		local custom_key = getCustomKey(self, key)
+		
+		local store_type = db:type(custom_key)
+		if store_type == 'string' then
+			return db:get(custom_key) == mem
+		elseif store_type == 'list' then
+			rdlist.has(custom_key, mem)
+		elseif store_type == 'set' then
+			rdset.has(custom_key, mem)
+		elseif store_type == 'zset' then
+			rdzset.has(custom_key, mem)
+		elseif store_type == 'hash' then
+			rdhash.has(custom_key, mem)
+		end
+	end;
 
 	numCustom = function (self, key)
 		I_AM_CLASS(self)
@@ -1101,8 +1140,218 @@ Model = Object:extend {
 			return rdhash.num(custom_key)
 		end
 	end;
+	
 	-----------------------------------------------------------------
+	-- Cache API
+	--- seven APIs
+	-- 1. setCache
+	-- 2. getCache
+	-- 3. delCache
+	-- 4. existCache
+	-- 5. addCacheMember
+	-- 6. removeCacheMember
+	-- 7. hasCacheMember
+	-- 8. numCache
+	-- 9. lifeCache
+	-----------------------------------------------------------------
+	setCache = function (self, key, vals, orders)
+		I_AM_CLASS(self)
+		checkType(key, 'string')
+		checkType(life, 'number')
+		local custom_key = getCustomKey(self, key)
+		local cachetype_key = getCachetypeKey(self, key)
+		
+		if type(vals) == 'string' or type(vals) == 'number' then
+			self:setCustom(key, vals, 'string')
+		else
+			checkType(vals, 'table')
+			local new_vals = {}
+			-- if `vals` is a list, insert its element's id into `new_vals`
+			-- ignore the uncorrent element
+			
+			-- elements in `vals` are ordered, but every element itself is not
+			-- nessesary containing enough order info.
+			-- for number, it contains enough
+			-- for others, it doesn't contain enough
+			-- so, we use `orders` to specify the order info
+			if #vals > 1 then
+				if isValidInstance(vals[1]) then
+					-- save instances' id
+					for i, v in ipairs(vals) do
+						table.insert(new_vals, v.id)
+					end
+					
+					db:set(cachetype_key, 'instance')
+				else
+					new_vals = vals
+					db:set(cachetype_key, 'general')
+				end
+			end
+				
+			self:setCustom(key, new_vals, 'zset', orders)
+		end
+		
+		-- set expiration
+		db:expire(custom_key, bamboo.config.cache_life or bamboo.CACHE_LIFE)
+		db:expire(cachetype_key, bamboo.config.cache_life or CACHE_LIFE)
+		
+	end;
+	
+	getCache = function (self, key)
+		I_AM_CLASS(self)
+		checkType(key, 'string')
+		local custom_key = getCustomKey(self, key)
+		local cachetype_key = getCachetypeKey(self, key)
+		
+		local cache_data = self:getCustom(key)
+		if not cache_data then return nil end
+		
+		local cachetype = db:get(cachetype_key)
+		if cachetype and cachetype == 'instance' then
+			-- if cached instance, return instance list
+			local cache_objects = List()
+			
+			for _, v in ipairs(cache_data) do
+				-- get instance object by its id
+				local obj = self:getById(v)
+				cache_objects:append(obj)
+			end
+			
+			return cache_objects
+		else
+			-- else return element list directly
+			return cache_data
+		end
+		
+		db:expire(custom_key, bamboo.config.cache_life or bamboo.CACHE_LIFE)
+		db:expire(cachetype_key, bamboo.config.cache_life or CACHE_LIFE)
+		
+	end;
+	
+	delCache = function (self, key)
+		I_AM_CLASS(self)
+		checkType(key, 'string')
+		local custom_key = getCustomKey(self, key)
+		local cachetype_key = getCachetypeKey(self, key)
 
+		db:del(cachetype_key)
+		return db:del(custom_key)	
+		
+	end;
+	
+	-- check whether exist custom key
+	existCache = function (self, key)
+		I_AM_CLASS(self)
+		
+		return self:existCustom(key)
+	end;
+	
+	-- 
+	addCacheMember = function (self, key, val, score)
+		I_AM_CLASS(self)
+		checkType(key, 'string')
+		local custom_key = getCustomKey(self, key)
+		local cachetype_key = getCachetypeKey(self, key)
+
+		local store_type = db:type(custom_key)
+		
+		if store_type == 'zset' then
+			if cachetype_key == 'instance' then
+				-- `val` is instance
+				checkType(val, 'table')
+				if isValidInstance(val) then
+					rdzset.add(custom_key, val.id, score)
+				end
+			else
+				-- `val` is string or number
+				rdzset.add(custom_key, tostring(val), score)
+			end
+		elseif store_type == 'string' then
+			db:set(custom_key, val)
+		end
+	
+		db:expire(custom_key, bamboo.config.cache_life or bamboo.CACHE_LIFE)
+		db:expire(cachetype_key, bamboo.config.cache_life or CACHE_LIFE)
+		
+	end;
+	
+	removeCacheMember = function (self, key, val)
+		I_AM_CLASS(self)
+		checkType(key, 'string')
+		local custom_key = getCustomKey(self, key)
+		local cachetype_key = getCachetypeKey(self, key)
+
+		local store_type = db:type(custom_key)
+		
+		if store_type == 'zset' then
+			if cachetype_key == 'instance' then
+				-- `val` is instance
+				checkType(val, 'table')
+				if isValidInstance(val) then
+					rdzset.remove(custom_key, val.id)
+				end
+			else
+				-- `val` is string or number
+				rdzset.remove(custom_key, tostring(val))
+			end
+
+		elseif store_type == 'string' then
+			db:set(custom_key, '')
+		end
+		
+		db:expire(custom_key, bamboo.config.cache_life or bamboo.CACHE_LIFE)
+		db:expire(cachetype_key, bamboo.config.cache_life or CACHE_LIFE)
+		
+	end;
+	
+	hasCacheMember = function (self, key, mem)
+		I_AM_CLASS(self)
+		checkType(key, 'string')
+		local custom_key = getCustomKey(self, key)
+		local cachetype_key = getCachetypeKey(self, key)
+
+		local store_type = db:type(custom_key)
+		
+		if store_type == 'zset' then
+			if cachetype_key == 'instance' then
+				-- `val` is instance
+				checkType(mem, 'table')
+				if isValidInstance(val) then
+					return rdzset.has(custom_key, val.id)
+				end
+			else
+				-- `val` is string or number
+				return rdzset.has(custom_key, tostring(mem))
+			end
+
+		elseif store_type == 'string' then
+			return db:get(custom_key) == mem
+		end
+		
+		db:expire(custom_key, bamboo.config.cache_life or bamboo.CACHE_LIFE)
+		db:expire(cachetype_key, bamboo.config.cache_life or CACHE_LIFE)
+	end;
+	
+	numCache = function (self, key)
+		I_AM_CLASS(self)
+
+		local custom_key = getCustomKey(self, key)
+		local cachetype_key = getCachetypeKey(self, key)
+
+		db:expire(custom_key, bamboo.config.cache_life or bamboo.CACHE_LIFE)
+		db:expire(cachetype_key, bamboo.config.cache_life or CACHE_LIFE)
+		
+		return self:numCustom(key)
+	end;
+	
+	lifeCache = function (self, key)
+		I_AM_CLASS(self)
+		checkType(key, 'string')
+		local custom_key = getCustomKey(self, key)
+		
+		return db:ttl(custom_key)
+	end;
+	
 	-----------------------------------------------------------------
 	-- validate form parameters by model defination
 	-- usually, params = Form:parse(req)
@@ -1297,7 +1546,7 @@ Model = Object:extend {
 			assert(length and type(length) == 'number' and length > 0 and length <= 10000, 
 				"[Error] In Zfifo foreign, the 'fifolen' must be number greater than 0!")
 			local key = getFieldPattern(self, field)
-			-- in zset, the newest member have the higher score
+			-- in zset, the newest member has the higher score
 			-- but use getForeign, we retrieve them from high to low, so newest is at left of result
 			rdzfifo.push(key, length, new_id)
 		end
@@ -1492,7 +1741,7 @@ Model = Object:extend {
 
 	-- check whether some obj is already in foreign list
 	-- instance:inForeign('some_field', obj)
-	haveForeign = function (self, field, obj)
+	hasForeign = function (self, field, obj)
 		I_AM_INSTANCE(self)
 		checkType(field, 'string')
 		local fld = self.__fields[field]
@@ -1521,13 +1770,13 @@ Model = Object:extend {
 		if fld.st == "ONE" then
 			return self[field] == new_id
 		elseif fld.st == 'MANY' then
-			return rdzset.have(model_key, new_id)
+			return rdzset.has(model_key, new_id)
 
 		elseif fld.st == 'FIFO' then
-			return rdfifo.have(model_key, new_id)
+			return rdfifo.has(model_key, new_id)
 
 		elseif fld.st == 'ZFIFO' then
-			return rdzfifo.have(model_key, new_id)
+			return rdzfifo.has(model_key, new_id)
 		end 
 	
 		return false

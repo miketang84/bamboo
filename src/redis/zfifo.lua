@@ -79,7 +79,7 @@ function del( key )
 	return rdzset.del(key)
 end
 
-function have(key, obj)
+function has(key, obj)
 
 	return rdzset.have(key, obj) 
 end

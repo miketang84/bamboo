@@ -44,7 +44,7 @@ function remove(key, tbl)
 	end
 end
 
-function have(key, keytocheck)
+function has(key, keytocheck)
 	if db:hget(key, keytocheck) then
 		return true
 	else
