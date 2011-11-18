@@ -16,7 +16,8 @@ Model_name:custom:custom_string			:	  this may be better, custom key, need to se
 
 Cache type
 --------------------
-CACHETYPE:Model_name:custom:custom_string      string
+Model_name:cache:cache_string			:	  this may be better, custom key, need to separate from foreign field record
+CACHETYPE:Model_name:cache:cache_string       string
 
 
 

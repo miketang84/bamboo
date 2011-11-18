@@ -22,6 +22,10 @@ local function getNameIdPattern(self)
 	return self.__name + ':' + self.id
 end
 
+local function getNameIdPattern2(self, id)
+	return self.__name + ':' + tostring(id)
+end
+
 local function getFieldPattern(self, field)
 	return getNameIdPattern(self) + ':' + field
 end 
@@ -47,8 +51,12 @@ local function getCustomKey(self, key)
 	return getClassName(self) + ':custom:' + key
 end
 
+local function getCacheKey(self, key)
+	return getClassName(self) + ':cache:' + key
+end
+
 local function getCachetypeKey(self, key)
-	return 'CACHETYPE:' + getCustomKey(self, key)
+	return 'CACHETYPE:' + getCacheKey(self, key)
 end
 
 -- in model global index cache (backend is zset),
@@ -1157,12 +1165,11 @@ Model = Object:extend {
 	setCache = function (self, key, vals, orders)
 		I_AM_CLASS(self)
 		checkType(key, 'string')
-		checkType(life, 'number')
-		local custom_key = getCustomKey(self, key)
+		local cache_key = getCacheKey(self, key)
 		local cachetype_key = getCachetypeKey(self, key)
 		
 		if type(vals) == 'string' or type(vals) == 'number' then
-			self:setCustom(key, vals, 'string')
+			db:set(cache_key, vals)
 		else
 			checkType(vals, 'table')
 			local new_vals = {}
@@ -1188,23 +1195,29 @@ Model = Object:extend {
 				end
 			end
 				
-			self:setCustom(key, new_vals, 'zset', orders)
+			rdzset.save(cache_key, new_vals, scores)
 		end
 		
 		-- set expiration
-		db:expire(custom_key, bamboo.config.cache_life or bamboo.CACHE_LIFE)
-		db:expire(cachetype_key, bamboo.config.cache_life or CACHE_LIFE)
+		db:expire(cache_key, bamboo.config.cache_life or bamboo.CACHE_LIFE)
+		db:expire(cachetype_key, bamboo.config.cache_life or bamboo.CACHE_LIFE)
 		
 	end;
 	
 	getCache = function (self, key)
 		I_AM_CLASS(self)
 		checkType(key, 'string')
-		local custom_key = getCustomKey(self, key)
+		local cache_key = getCacheKey(self, key)
 		local cachetype_key = getCachetypeKey(self, key)
 		
-		local cache_data = self:getCustom(key)
-		if not cache_data then return nil end
+		local cache_data_type = db:type(cache_key)
+		local cache_data
+		if cache_data_type == 'string' then
+			cache_data = db:get(cache_key)
+		elseif cache_data_type == 'zset' then
+			cache_data = rdzset.retrieve(cache_key)
+		end
+		if isFalse(cache_data) then return nil end
 		
 		local cachetype = db:get(cachetype_key)
 		if cachetype and cachetype == 'instance' then
@@ -1223,133 +1236,139 @@ Model = Object:extend {
 			return cache_data
 		end
 		
-		db:expire(custom_key, bamboo.config.cache_life or bamboo.CACHE_LIFE)
-		db:expire(cachetype_key, bamboo.config.cache_life or CACHE_LIFE)
+		db:expire(cache_key, bamboo.config.cache_life or bamboo.CACHE_LIFE)
+		db:expire(cachetype_key, bamboo.config.cache_life or bamboo.CACHE_LIFE)
 		
 	end;
 	
 	delCache = function (self, key)
 		I_AM_CLASS(self)
 		checkType(key, 'string')
-		local custom_key = getCustomKey(self, key)
+		local cache_key = getCacheKey(self, key)
 		local cachetype_key = getCachetypeKey(self, key)
 
 		db:del(cachetype_key)
-		return db:del(custom_key)	
+		return db:del(cache_key)	
 		
 	end;
 	
-	-- check whether exist custom key
+	-- check whether exist cache key
 	existCache = function (self, key)
 		I_AM_CLASS(self)
+		local cache_key = getCacheKey(self, key)
 		
-		return self:existCustom(key)
+		return db:exists(cache_key)
 	end;
 	
 	-- 
 	addCacheMember = function (self, key, val, score)
 		I_AM_CLASS(self)
 		checkType(key, 'string')
-		local custom_key = getCustomKey(self, key)
+		local cache_key = getCacheKey(self, key)
 		local cachetype_key = getCachetypeKey(self, key)
 
-		local store_type = db:type(custom_key)
+		local store_type = db:type(cache_key)
 		
 		if store_type == 'zset' then
 			if cachetype_key == 'instance' then
 				-- `val` is instance
 				checkType(val, 'table')
 				if isValidInstance(val) then
-					rdzset.add(custom_key, val.id, score)
+					rdzset.add(cache_key, val.id, score)
 				end
 			else
 				-- `val` is string or number
-				rdzset.add(custom_key, tostring(val), score)
+				rdzset.add(cache_key, tostring(val), score)
 			end
 		elseif store_type == 'string' then
-			db:set(custom_key, val)
+			db:set(cache_key, val)
 		end
 	
-		db:expire(custom_key, bamboo.config.cache_life or bamboo.CACHE_LIFE)
-		db:expire(cachetype_key, bamboo.config.cache_life or CACHE_LIFE)
+		db:expire(cache_key, bamboo.config.cache_life or bamboo.CACHE_LIFE)
+		db:expire(cachetype_key, bamboo.config.cache_life or bamboo.CACHE_LIFE)
 		
 	end;
 	
 	removeCacheMember = function (self, key, val)
 		I_AM_CLASS(self)
 		checkType(key, 'string')
-		local custom_key = getCustomKey(self, key)
+		local cache_key = getCacheKey(self, key)
 		local cachetype_key = getCachetypeKey(self, key)
 
-		local store_type = db:type(custom_key)
+		local store_type = db:type(cache_key)
 		
 		if store_type == 'zset' then
 			if cachetype_key == 'instance' then
 				-- `val` is instance
 				checkType(val, 'table')
 				if isValidInstance(val) then
-					rdzset.remove(custom_key, val.id)
+					rdzset.remove(cache_key, val.id)
 				end
 			else
 				-- `val` is string or number
-				rdzset.remove(custom_key, tostring(val))
+				rdzset.remove(cache_key, tostring(val))
 			end
 
 		elseif store_type == 'string' then
-			db:set(custom_key, '')
+			db:set(cache_key, '')
 		end
 		
-		db:expire(custom_key, bamboo.config.cache_life or bamboo.CACHE_LIFE)
-		db:expire(cachetype_key, bamboo.config.cache_life or CACHE_LIFE)
+		db:expire(cache_key, bamboo.config.cache_life or bamboo.CACHE_LIFE)
+		db:expire(cachetype_key, bamboo.config.cache_life or bamboo.CACHE_LIFE)
 		
 	end;
 	
 	hasCacheMember = function (self, key, mem)
 		I_AM_CLASS(self)
 		checkType(key, 'string')
-		local custom_key = getCustomKey(self, key)
+		local cache_key = getCacheKey(self, key)
 		local cachetype_key = getCachetypeKey(self, key)
 
-		local store_type = db:type(custom_key)
+		local store_type = db:type(cache_key)
 		
 		if store_type == 'zset' then
 			if cachetype_key == 'instance' then
 				-- `val` is instance
 				checkType(mem, 'table')
 				if isValidInstance(val) then
-					return rdzset.has(custom_key, val.id)
+					return rdzset.has(cache_key, val.id)
 				end
 			else
 				-- `val` is string or number
-				return rdzset.has(custom_key, tostring(mem))
+				return rdzset.has(cache_key, tostring(mem))
 			end
 
 		elseif store_type == 'string' then
-			return db:get(custom_key) == mem
+			return db:get(cache_key) == mem
 		end
 		
-		db:expire(custom_key, bamboo.config.cache_life or bamboo.CACHE_LIFE)
-		db:expire(cachetype_key, bamboo.config.cache_life or CACHE_LIFE)
+		db:expire(cache_key, bamboo.config.cache_life or bamboo.CACHE_LIFE)
+		db:expire(cachetype_key, bamboo.config.cache_life or bamboo.CACHE_LIFE)
 	end;
 	
 	numCache = function (self, key)
 		I_AM_CLASS(self)
 
-		local custom_key = getCustomKey(self, key)
+		local cache_key = getCacheKey(self, key)
 		local cachetype_key = getCachetypeKey(self, key)
 
-		db:expire(custom_key, bamboo.config.cache_life or bamboo.CACHE_LIFE)
-		db:expire(cachetype_key, bamboo.config.cache_life or CACHE_LIFE)
+		db:expire(cache_key, bamboo.config.cache_life or bamboo.CACHE_LIFE)
+		db:expire(cachetype_key, bamboo.config.cache_life or bamboo.CACHE_LIFE)
 		
-		return self:numCustom(key)
+		local store_type = db:type(cache_key)
+		if store_type == 'zset' then
+			return rdzset.num(cache_key)
+		elseif store_type == 'string' then
+			return 1
+		end
 	end;
 	
 	lifeCache = function (self, key)
 		I_AM_CLASS(self)
 		checkType(key, 'string')
-		local custom_key = getCustomKey(self, key)
+		local cache_key = getCacheKey(self, key)
 		
-		return db:ttl(custom_key)
+		return db:ttl(cache_key)
 	end;
 	
 	-----------------------------------------------------------------
@@ -1844,6 +1863,79 @@ Model = Object:extend {
 		table.sort(self, sort_func)
 		
 		return self		
+	end;
+	
+	addToCacheAndSortBy = function (self, cache_key, field, sort_func)
+		I_AM_INSTANCE(self)
+		checkType(cache_key, field, 'string', 'string')
+		
+		DEBUG(cache_key)
+		DEBUG('entering addToCacheAndSortBy')
+		local cache_saved_key = getCacheKey(self, cache_key)
+		if not db:exists(cache_saved_key) then 
+			print('[WARNING] The cache is missing or expired.')
+			return nil
+		end
+		
+		local cached_ids = db:zrange(cache_saved_key, 0, -1)
+		local head = db:hget(getNameIdPattern2(self, cached_ids[1]), field)
+		local tail = db:hget(getNameIdPattern2(self, cached_ids[#cached_ids]), field)
+		DEBUG(head, tail)
+		local order_type = 'asc'
+		local field_value, stop_id
+		local insert_position = 0
+		
+		if head > tail then order_type = 'dsc' end
+		local sort_func = sort_func or function (a, b)
+			if order_type == 'asc' then
+				return a > b
+			elseif order_type == 'dsc' then
+				return a < b
+			end
+		end
+		
+		DEBUG(order_type)
+		-- find the inserting position
+		-- FIXME: use 2 分查找法会提高效率，现在是顺序查找法
+		for i, id in ipairs(cached_ids) do
+			field_value = db:hget(getNameIdPattern2(self, id), field)
+			if sort_func(field_value, self[field]) then
+				stop_id = db:hget(getNameIdPattern2(self, id), 'id')
+				insert_position = i
+				break
+			end
+		end
+		DEBUG(insert_position)
+		-- 对于按小于排序和按大于排序的情况，判断的方式都是一样么？
+		-- 对于按字符串排序的情况来讲，在第一次Save的时候，内部的score号为1,2,3,4等
+		-- 所以，情况应该是一样的。
+		local new_score
+		if insert_position == 0 then 
+			-- means till the end, all element is smaller than self.field
+			-- insert_position = #cached_ids
+			-- 取末尾元素的score + 1
+			local end_score = db:zrange(cache_saved_key, -1, -1, 'withscores')[1][2]
+			new_score = end_score + 1
+		
+		elseif insert_position == 1 then
+			-- 取首元素score的一半
+			local stop_score = db:zscore(cache_saved_key, stop_id)
+			new_score = tonumber(stop_score) / 2
+		elseif insert_position > 1 then
+			-- 取相邻两个元素score的中间值
+			local stop_score = db:zscore(cache_saved_key, stop_id)
+			local stopprev_rank = db:zrank(cache_saved_key, stop_id) - 1
+			local stopprev_score = db:zrange(cache_saved_key, stopprev_rank, stopprev_rank, 'withscores')[1][2]
+			new_score = tonumber(stop_score + stopprev_score) / 2
+		
+		end
+		
+		DEBUG(new_score)
+		-- add new element to cache
+		db:zadd(cache_saved_key, new_score, self.id)
+			
+		
+		return self
 	end;
 	
 }
