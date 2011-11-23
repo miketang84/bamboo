@@ -108,6 +108,26 @@ local Upload = Model:extend {
 		['desc'] = {},
 		
 	};
+	__decorators = {
+		del = function (odel)
+			return function (self, ...)
+				I_AM_INSTANCE_OR_QUERY_SET(self)
+				-- if self is query set
+				if I_AM_QUERY_SET(self) then
+					for _, v in ipairs(self) do
+						-- remove file from disk
+						os.execute('rm ' + v.path)
+					end
+				else
+					-- remove file from disk
+					os.execute('rm ' + self.path)
+				end
+				
+				return odel(self, ...)
+			end
+		end
+	
+	};
 	
 	init = function (self, t)
 		if not t then return self end
@@ -186,12 +206,12 @@ local Upload = Model:extend {
 	end;
 
 	-- this function, encorage override by child model, to execute their own delete action
-	specDelete = function (self)
-		I_AM_INSTANCE(self)
-		-- remove file from disk
-		os.execute('rm ' + self.path)
-		return self
-	end;
+--	specDelete = function (self)
+--		I_AM_INSTANCE(self)
+--		-- remove file from disk
+--		os.execute('rm ' + self.path)
+--		return self
+--	end;
 	
 }
 

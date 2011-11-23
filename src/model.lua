@@ -1598,8 +1598,8 @@ Model = Object:extend {
 				local obj = link_model:getById (linked_id)
 				if not isValidInstance(obj) then
 					-- if get not, remove the empty foreign key
-					-- db:hdel(model_key, field)
-					-- self[field] = nil
+					db:hdel(model_key, field)
+					self[field] = nil
 					print('[Warning] invalid ONE foreign id or object.')
 					return nil
 				else
@@ -1628,7 +1628,7 @@ Model = Object:extend {
 					
 					if not isValidInstance(obj) then
 						-- if find no, remove this empty foreign key, by member
-						-- rdzset.remove(key, v)
+						rdzset.remove(key, v)
 						print('[Warning] invalid MANY foreign id or object.')
 					else
 						obj_list:append(obj)
@@ -1659,8 +1659,8 @@ Model = Object:extend {
 					-- 
 					if not isValidInstance(obj) then
 						-- if find no, remove this empty foreign
-						-- rdfifo.remove(key, v)
-					print('[Warning] invalid FIFO foreign id or object.')						
+						rdfifo.remove(key, v)
+						print('[Warning] invalid FIFO foreign id or object.')						
 					else
 						obj_list:append(obj)
 					end
@@ -1692,7 +1692,7 @@ Model = Object:extend {
 					local obj = link_model:getById(linked_id)
 					-- 
 					if not isValidInstance(obj) then
-						-- rdzfifo.remove(key, v)
+						rdzfifo.remove(key, v)
 						print('[Warning] invalid ZFIFO foreign id or object.')
 					else
 						obj_list:append(obj)
@@ -1749,7 +1749,7 @@ Model = Object:extend {
 				rdfifo.remove(key, new_id)
 				
 			elseif fld.st == 'ZFIFO' then
-				-- here, new_id is the score of that element ready to be deleted
+				-- here, new_id is the score of that element ready to be deleted?
 				-- XXX: new_id is score or member?
 				rdzfifo.remove(key, new_id)
 			end

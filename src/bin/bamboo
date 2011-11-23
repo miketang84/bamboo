@@ -345,14 +345,7 @@ COMMANDS = {
         local cmdstr = ('cp -rf %s/src/cmd_tmpls/createapp/* ./%s/'):format(bamboo_dir, appname)
         os.execute(cmdstr)
 
-		-- copy admin files to app
-		local cmdstr = ('cp -rf %s/src/cmd_tmpls/admin ./%s/'):format(bamboo_dir, appname)
-        os.execute(cmdstr)
-		-- move the admin static files to media
-		local cmdstr = ('mv ./%s/admin/media ./%s/media/admin'):format(appname, appname)
-        os.execute(cmdstr)
-		
-		-- create media directory and copy files to it
+		-- create media directory and later copy files to it
         local mediadir = ('%s/sites/%s'):format(monserver_dir, appname)
         os.execute(('mkdir -p %s'):format(mediadir))
 
@@ -640,60 +633,75 @@ host = "%s"
 		os.execute(("m2sh load -config %s -db %s"):format(servername, config_db))
     end;
 
+	importadmin = function (settings)
+        readSettings()
+		local monserver_dir = config.monserver_dir
+		local bamboo_dir = config.bamboo_dir
+
+		-- copy admin files to app
+		local cmdstr = ('cp -rf %s/src/cmd_tmpls/admin ./'):format(bamboo_dir)
+        os.execute(cmdstr)
+		-- move the admin static files to media
+		local cmdstr = 'mv ./admin/media ./media/admin'
+        os.execute(cmdstr)
+		
+		print('OK.')
+	end;
+	
     createsuperuser = function (settings)
-						  readSettings()
+		  readSettings()
 
-						  local redis = require 'bamboo.redis'
+		  local redis = require 'bamboo.redis'
 
-						  local bamboo_dir = config.bamboo_dir
+		  local bamboo_dir = config.bamboo_dir
 
-						  local host = settings.db_host or config.DB_HOST or '127.0.0.1'
-						  local port = settings.db_port or config.DB_PORT or 6379
-						  local which = settings.which_db or config.WHICH_DB or 0					  
+		  local host = settings.db_host or config.DB_HOST or '127.0.0.1'
+		  local port = settings.db_port or config.DB_PORT or 6379
+		  local which = settings.which_db or config.WHICH_DB or 0					  
 
-						  local db = redis.connect {host=host, port=port, which=which}
-						  -- make model.lua work
-						  BAMBOO_DB = db
-						  setfenv(assert(loadfile('app/handler_entry.lua') or loadfile('../app/handler_entry.lua')), _G)()
+		  local db = redis.connect {host=host, port=port, which=which}
+		  -- make model.lua work
+		  BAMBOO_DB = db
+		  setfenv(assert(loadfile('app/handler_entry.lua') or loadfile('../app/handler_entry.lua')), _G)()
 
-						  if not MAIN_USER then
-							  print("Please use registerMainUser() function to register user module")
-							  return
-						  end
-						  io.write("Username:")
-						  local username = io.read("*line")
-						  io.write("Password:")
-						  --hide password
-						  os.execute("stty -echo")
-						  local password = io.read("*line")
-						  io.write("\n")
-						  io.write("Password again:")
-						  local password2 = io.read("*line")
-						  io.write("\n")
-						  os.execute("stty echo")
-						  if password ~= password2 then
-							  print("Passwords are not equal!")
-							  return
-						  end
-						  local data = {username=username, password=password}
-						  local ret, err = MAIN_USER:validate(data)
-						  if not ret then
-							  print("Error!")
-							  for _, v in ipairs(err) do
-								  print(v)
-							  end
-							  return
-						  end
-						  
-						  local user = MAIN_USER(data)
-						  if user:save() then
-							  local Perms = require 'bamboo.models.permission'
-							  user:addForeign("perms", Perms:getByIndex("_sys_admin_"))
-							  print("Add superuser successfully!")
-						  else
-							  print("Add superuser failly!")
-						  end
-					  end;
+		  if not MAIN_USER then
+			  print("Please use registerMainUser() function to register user module")
+			  return
+		  end
+		  io.write("Username:")
+		  local username = io.read("*line")
+		  io.write("Password:")
+		  --hide password
+		  os.execute("stty -echo")
+		  local password = io.read("*line")
+		  io.write("\n")
+		  io.write("Password again:")
+		  local password2 = io.read("*line")
+		  io.write("\n")
+		  os.execute("stty echo")
+		  if password ~= password2 then
+			  print("Passwords are not equal!")
+			  return
+		  end
+		  local data = {username=username, password=password}
+		  local ret, err = MAIN_USER:validate(data)
+		  if not ret then
+			  print("Error!")
+			  for _, v in ipairs(err) do
+				  print(v)
+			  end
+			  return
+		  end
+		  
+		  local user = MAIN_USER(data)
+		  if user:save() then
+			  local Perms = require 'bamboo.models.permission'
+			  user:addForeign("perms", Perms:getByIndex("_sys_admin_"))
+			  print("Add superuser successfully!")
+		  else
+			  print("Add superuser failly!")
+		  end
+	  end;
 }
 
 
