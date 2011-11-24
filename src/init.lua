@@ -303,6 +303,11 @@ registerModel = function (model)
 			fdt:init()
 		end
 		
+		-- dynamic fields
+		if model:hasDynamicField() then
+			model:importDynamicFields()
+		end
+		
 		-- decorators
 		if not isFalse(model.__decorators) then
 			if not rawget(model, '__decorators') then
@@ -340,7 +345,10 @@ registerModel = function (model)
 					model[k] = footprintfunc(v(model[k]), k)
 				end
 			end
+			
 		end
+	
+	
 	end
 end
 
