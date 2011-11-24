@@ -11,7 +11,7 @@ local rdzfifo = require 'bamboo.redis.zfifo'
 local rdhash = require 'bamboo.redis.hash'
 
 local getModelByName  = bamboo.getModelByName 
-
+local dcollector= 'DELETED:COLLECTOR'
 
 
 local function getCounterName(self)
@@ -142,13 +142,7 @@ local delFromRedis = function (self)
 		local fld = fields[k]
 		if fld and fld.foreign then
 			local key = model_key + ':' + k
-			if fld.st == 'MANY' then
-				rdzset.del(key)
-			elseif fld.st == 'FIFO' then
-				rdfifo.del(key)
-			elseif fld.st == 'ZFIFO' then
-				rdzfifo.del(key)
-			end
+			db:del(key)
 		end
 	end
 
@@ -158,6 +152,73 @@ local delFromRedis = function (self)
 	db:zremrangebyscore(index_key, self.id, self.id)
 	-- release the lua object
 	self = nil
+end
+
+--------------------------------------------------------------
+-- Fake Deletion
+--  called by instance
+local fakedelFromRedis = function (self)
+	local model_key = getNameIdPattern(self)
+	local index_key = getIndexKey(self)
+	
+	local fields = self.__fields
+	-- in redis, delete the associated foreign key-value store
+	for k, v in pairs(self) do
+		local fld = fields[k]
+		if fld and fld.foreign then
+			local key = model_key + ':' + k
+			db:rename(key, 'DELETED:' + key)
+		end
+	end 
+
+	-- rename the key self
+	db:rename(model_key, 'DELETED:' + model_key)
+	-- delete the index in the global model index zset
+	-- when deleted, the instance's index cache was cleaned.
+	db:zremrangebyscore(index_key, self.id, self.id)
+	-- add to deleted collector
+	rdzset.add(dcollector,  model_key)
+	
+	-- release the lua object
+	self = nil
+end
+
+--------------------------------------------------------------
+-- Restore Fake Deletion
+-- called by Some Model: self, not instance
+local restoreFakeDeletedInstance = function (self, id)
+	checkType(tonumber(id),  'number')
+	local model_key = getNameIdPattern2(self)
+	local index_key = getIndexKey(self)
+	
+	-- rename the key self
+	db:rename('DELETED:' + model_key, model_key)
+	local instance = getFromRedis(self, model_key)
+	local fields = self.__fields
+	-- in redis, delete the associated foreign key-value store
+	for k, v in pairs(instance) do
+		local fld = fields[k]
+		if fld and fld.foreign then
+			local key = model_key + ':' + k
+			db:rename('DELETED:' + key, key)
+		end
+	end
+
+	-- when restore, the instance's index cache was restored.
+	db:zadd(index_key, instance.id, instance.id)
+	-- remove from deleted collector
+	db:zrem(dcollector, model_key)
+	
+	return instance
+end
+
+local sweepDeleted = function (self)
+	local deleted_keys = db:keys('DELETED:*')
+	for _, v in ipairs(deleted_keys) do
+		-- containing hash structure and foreign zset structure
+		db:del(v)
+	end
+	db:del(dcollector)
 end
 
 --------------------------------------------------------------------------------
@@ -665,7 +726,7 @@ Model = Object:extend {
 	-- 
 	all = function (self, is_rev)
 		I_AM_CLASS(self)
-		local all_instaces = QuerySet()
+		local all_instances = QuerySet()
 		
 		local index_key = getIndexKey(self)
 		local all_ids = self:allIds(is_rev)
@@ -675,10 +736,10 @@ Model = Object:extend {
 		for _, id in ipairs(all_ids) do
 			local obj = getById(self, id)
 			if isValidInstance(obj) then
-				all_instaces:append(obj)
+				all_instances:append(obj)
 			end
 		end
-		return all_instaces
+		return all_instances
 	end;
 
 	-- slice instance object list, support negative index (-1)
@@ -1398,7 +1459,7 @@ Model = Object:extend {
     --------------------------------------------------------------------
 	-- Instance Functions
 	--------------------------------------------------------------------
-    -- save instace's normal field
+    -- save instance's normal field
     save = function (self, params)
 		I_AM_INSTANCE(self)
         assert(self.id, "[Error] The main key 'id' field doesn't exist!")
@@ -1492,8 +1553,23 @@ Model = Object:extend {
     
     -- delete self instance object
     -- self can be instance or query set
-    del = function (self)
-		I_AM_INSTANCE_OR_QUERY_SET(self)
+    fakeDel = function (self)
+		-- if self is query set
+		if I_AM_QUERY_SET(self) then
+			for _, v in ipairs(self) do
+				fakedelFromRedis(v)
+				v = nil
+			end
+		else
+			fakedelFromRedis(self)
+		end
+		
+		self = nil
+    end;
+	
+	-- delete self instance object
+    -- self can be instance or query set
+    trueDel = function (self)
 		-- if self is query set
 		if I_AM_QUERY_SET(self) then
 			for _, v in ipairs(self) do
@@ -1506,7 +1582,25 @@ Model = Object:extend {
 		
 		self = nil
     end;
+	
+	
+	-- delete self instance object
+    -- self can be instance or query set
+    del = function (self)
+		I_AM_INSTANCE_OR_QUERY_SET(self)
+		if bamboo.config.use_fake_deletion == true then
+			return self:fakeDel()
+		else
+			return self:trueDel()
+		end
+    end;
 
+	-- use style: Model_name:restoreDeleted(id)
+	restoreDeleted = function (self, id)
+		I_AM_CLASS(self)
+		return restoreFakeDeletedInstance(self, id)
+	end;
+	
 	-----------------------------------------------------------------------------------
 	-- Foreign API
 	-----------------------------------------------------------------------------------

@@ -79,6 +79,10 @@ function del( key )
 	return rdzset.del(key)
 end
 
+function fakedel(key)
+	return db:rename(key, 'DELETED:' + key)
+end
+
 function has(key, obj)
 
 	return rdzset.have(key, obj) 

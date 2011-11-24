@@ -99,6 +99,10 @@ function del( key )
 	return db:del(key)
 end
 
+function fakedel(key)
+	return db:rename(key, 'DELETED:' + key)
+end
+
 function has(key, obj)
 
 	local score = db:zscore(key, tostring(obj))

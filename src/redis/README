@@ -8,7 +8,7 @@ Model_name:__index		   :	redis zset, score is xxx, member is xxxx
 
 Foreign field record
 --------------------
-Model_name:field		   :	zset (MANY), list (FIFO), zset (ZFIFO)
+Model_name:[0-9]*:field		   :	zset (MANY), list (FIFO), zset (ZFIFO)
 
 Custom record
 --------------------
@@ -19,6 +19,10 @@ Cache type
 Model_name:cache:cache_string			:	  this may be better, custom key, need to separate from foreign field record
 CACHETYPE:Model_name:cache:cache_string       string
 
+Deleted Data
+------------------------
+DELETED:Model_name:[0-9]*  					: redis hash
+DELETED:Model_name:[0-9]*:field   	: foreign zset, list
 
 
 In every redis wapper module, there must be a standard API:
