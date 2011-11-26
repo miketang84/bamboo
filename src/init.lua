@@ -11,8 +11,8 @@ module('bamboo', package.seeall)
 
 local Set = require 'lglib.set'
 local List = require 'lglib.list'
-
 local FieldType = require 'bamboo.mvm.prototype'
+local util = require 'bamboo.util'
 
 CACHE_LIFE = 1800
 
@@ -53,58 +53,58 @@ MODULE_LIST = {}
 -- 
 
 local function permissionCheck(action_perms, perms)
-				if #perms > 0 then
-					local perm_list = {}
-					for _, perm in ipairs(perms) do
-						perm_list[#perm_list + 1] = perm.name
-					end
-					
-					local perms_setA = Set(perm_list)
-					local perms_setB = Set(action_perms)
-					local flag, diff_elem = perms_setB:isSub(perms_setA)
-					
-					if flag then
-						-- if action permissions are contained by given permissions
-						-- execute success function
-						-- TODO
-						local ret = nil
-						for _, perm_name in ipairs(action_perms) do
-							local perm_do = getPermissionByName(perm_name)
-							if not perm_do then
-								print(('[Warning] This permission %s is not registered.'):format(perm_name))
-							elseif perm_do and perm_do.success_func then
-								ret = perm_do.success_func()
-								-- once one permission success function return false
-								-- jump out
-								if not ret then
-									print(('[Prompt] permission check chains was broken at %s'):format(perm_name))
-									return false
-								end
-							end
-						end
-						
-						return true
-					else
-						-- execute failure function
-						local perm_not_fit = getPermissionByName(diff_elem)
-						if perm_not_fit and perm_not_fit.failure_func then
-							print(('[Prompt] enter failure function %s.'):format(diff_elem))
-							perm_not_fit.failure_func()
-						end
-
+	if #perms > 0 then
+		local perm_list = {}
+		for _, perm in ipairs(perms) do
+			perm_list[#perm_list + 1] = perm.name
+		end
+		
+		local perms_setA = Set(perm_list)
+		local perms_setB = Set(action_perms)
+		local flag, diff_elem = perms_setB:isSub(perms_setA)
+		
+		if flag then
+			-- if action permissions are contained by given permissions
+			-- execute success function
+			-- TODO
+			local ret = nil
+			for _, perm_name in ipairs(action_perms) do
+				local perm_do = getPermissionByName(perm_name)
+				if not perm_do then
+					print(('[Warning] This permission %s is not registered.'):format(perm_name))
+				elseif perm_do and perm_do.success_func then
+					ret = perm_do.success_func()
+					-- once one permission success function return false
+					-- jump out
+					if not ret then
+						print(('[Prompt] permission check chains was broken at %s'):format(perm_name))
 						return false
 					end
-				else
-					print('[Prompt] No permissions in the given list.')
-					local perm_not_fit = getPermissionByName(action_perms[1])
-					if perm_not_fit and perm_not_fit.failure_func then
-						print(('[Prompt] enter failure function %s.'):format(action_perms[1]))
-						perm_not_fit.failure_func()
-					end
-
-					return false				
 				end
 			end
+			
+			return true
+		else
+			-- execute failure function
+			local perm_not_fit = getPermissionByName(diff_elem)
+			if perm_not_fit and perm_not_fit.failure_func then
+				print(('[Prompt] enter failure function %s.'):format(diff_elem))
+				perm_not_fit.failure_func()
+			end
+
+			return false
+		end
+	else
+		print('[Prompt] No permissions in the given list.')
+		local perm_not_fit = getPermissionByName(action_perms[1])
+		if perm_not_fit and perm_not_fit.failure_func then
+			print(('[Prompt] enter failure function %s.'):format(action_perms[1]))
+			perm_not_fit.failure_func()
+		end
+
+		return false				
+	end
+end
 
 
 registerModule = function (mdl, extra_params)
@@ -298,16 +298,18 @@ registerModel = function (model)
 
 	if not MODEL_LIST[model_name] then
 		MODEL_LIST[model_name] = model
-		for field, fdt in pairs(model.__fields) do
-			setmetatable(fdt, {__index = FieldType[fdt.widget_type or 'text']})
-			fdt:init()
-		end
-		
+
 		-- dynamic fields
 		if model:hasDynamicField() then
 			model:importDynamicFields()
 		end
 		
+		-- set metatable for each field
+		for field, fdt in pairs(model.__fields) do
+			setmetatable(fdt, {__index = FieldType[fdt.widget_type or 'text']})
+			fdt:init()
+		end
+
 		-- decorators
 		if not isFalse(model.__decorators) then
 			if not rawget(model, '__decorators') then
@@ -358,10 +360,10 @@ getModelByName = function (name)
 	return MODEL_LIST[name]
 end
 
-_G['MAIN_USER'] = nil
+bamboo.MAIN_USER = nil
 registerMainUser = function (mdl, extra_params)
 	registerModel (mdl, extra_params)
-	_G['MAIN_USER'] = mdl
+	bamboo.MAIN_USER = mdl
 end;
 
 ------------------------------------------------------------------------
@@ -485,24 +487,46 @@ getPermissionByName = function (name)
 end
 
 ------------------------------------------------------------------------
--- MENUS is a list，rather than dict。every list item has a dict in it
---MENUS = {}
-
----- here, menu_item probaly is item，or item list
---registerMenu = function (menu_item)
-	--checkType(menu_item, 'table')
+-- SiteMap
+SITE_MAP = {}
+registerSiteMap = function (tbl)
+	checkType(tbl, 'table')
+	table.update(SITE_MAP, tbl)
 	
-    -- if it is a signle item
- 	--if menu_item['name'] then
-		---- 
-		--table.append(MENUS, menu_item)
-	--else
-	---- 
-		--for i, v in ipairs(menu_item) do
-			--table.append(MENUS, v)
-		--end
-	--end
---end
+	for _, v in ipairs(SITE_MAP) do
+		assert(not SITE_MAP[v.name], '[Error] duplicated name string in Site Map')
+		SITE_MAP[v.name] = v
+		v.title  = v.title or v.name or ''
+	end
+	
+	-- push to URLs
+	for i, v in ipairs(SITE_MAP) do
+		-- v.pathkey is the generated url path for each site map element
+		-- v.rank indicate the rank of current element item
+		local k = v.name
+		if v.parent then
+			assert(SITE_MAP[v.parent], ('[Error] No this parent in registerSiteMap at %s %s.'):format(k, v.parent))
+			v.pathkey =  (SITE_MAP[v.parent].pathkey or '/') + k + '/'
+			v.rank = (SITE_MAP[v.parent].rank  or 1) + 1 
+		else
+			v.pathkey =  '/' + k + '/'
+			v.rank = 1
+		end
+		
+		-- generate new url pattern and handler
+		URLS[v.pathkey] = function (web, req)
+			-- normally, v.handler should return a table
+			local ret_args = v.handler and type(v.handler) == 'function' and v.handler(web, req)
+			if not isFalse(ret_args) then
+				-- corresponding template file
+				return web:html(k + '.html', ret_args)
+			else
+				return web:html(k + '.html')
+			end
+		end
+	end
 
+	return util.makeNavigator(SITE_MAP)
+end
 
 

@@ -220,14 +220,7 @@ local restoreFakeDeletedInstance = function (self, id)
 	return instance
 end
 
-local sweepDeleted = function (self)
-	local deleted_keys = db:keys('DELETED:*')
-	for _, v in ipairs(deleted_keys) do
-		-- containing hash structure and foreign zset structure
-		db:del(v)
-	end
-	db:del(dcollector)
-end
+
 
 --------------------------------------------------------------------------------
 -- The bellow four assertations, they are called only by class, instance or query set
@@ -1609,6 +1602,15 @@ Model = Object:extend {
 		return restoreFakeDeletedInstance(self, id)
 	end;
 	
+	-- clear all deleted instance and its foreign relations
+	sweepDeleted = function (self)
+		local deleted_keys = db:keys('DELETED:*')
+		for _, v in ipairs(deleted_keys) do
+			-- containing hash structure and foreign zset structure
+			db:del(v)
+		end
+		db:del(dcollector)
+	end;
 	-----------------------------------------------------------------------------------
 	-- Foreign API
 	-----------------------------------------------------------------------------------

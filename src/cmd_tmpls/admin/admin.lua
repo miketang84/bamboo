@@ -442,7 +442,7 @@ local function upload(web, req, e)
 end
 
 local function logout(web, req, e)
-	MAIN_USER:logout()
+	bamboo.MAIN_USER:logout()
 	return web:redirect('/admin')
 end
 

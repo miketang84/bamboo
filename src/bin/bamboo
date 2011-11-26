@@ -664,7 +664,7 @@ host = "%s"
 		  BAMBOO_DB = db
 		  setfenv(assert(loadfile('app/handler_entry.lua') or loadfile('../app/handler_entry.lua')), _G)()
 
-		  if not MAIN_USER then
+		  if not bamboo.MAIN_USER then
 			  print("Please use registerMainUser() function to register user module")
 			  return
 		  end
@@ -684,7 +684,7 @@ host = "%s"
 			  return
 		  end
 		  local data = {username=username, password=password}
-		  local ret, err = MAIN_USER:validate(data)
+		  local ret, err = bamboo.MAIN_USER:validate(data)
 		  if not ret then
 			  print("Error!")
 			  for _, v in ipairs(err) do
@@ -693,7 +693,7 @@ host = "%s"
 			  return
 		  end
 		  
-		  local user = MAIN_USER(data)
+		  local user = bamboo.MAIN_USER(data)
 		  if user:save() then
 			  local Perms = require 'bamboo.models.permission'
 			  user:addForeign("perms", Perms:getByIndex("_sys_admin_"))

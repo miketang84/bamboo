@@ -2,8 +2,8 @@ module(..., package.seeall)
 
 local function login(web, req, e)
 	ptable(e)
-	ptable(MAIN_USER)
-	MAIN_USER:login(e)
+	ptable(bamboo.MAIN_USER)
+	bamboo.MAIN_USER:login(e)
 	return web:redirect('/admin')--html('../admin/views/login.html')
 end
 
