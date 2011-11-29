@@ -374,9 +374,11 @@ local View = Object:extend {
 
         return function(context)
             assert(context, "You must always pass in a table for context.")
-            setmetatable(context, {__index=_G})
-            setfenv(func, context)
-            return func()
+			-- for global context rendering
+			context = table.update(bamboo.context, context)
+			setmetatable(context, {__index=_G})
+			setfenv(func, context)
+			return func()
         end
     end;
 }

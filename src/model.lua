@@ -1944,15 +1944,16 @@ Model = Object:extend {
 	end;
 
 	-- do sort on query set by some field
-	sortBy = function (self, field, direction, sort_func)
+	sortBy = function (self, field, direction, sort_func, ...)
 		I_AM_QUERY_SET(self)
 		checkType(field, 'string')
 		
 		local direction = direction or 'asc'
 		
+		local byfield = field
 		local sort_func = sort_func or function (a, b)
-			local af = a[field] 
-			local bf = b[field]
+			local af = a[byfield] 
+			local bf = b[byfield]
 			if af and bf then
 				if direction == 'asc' then
 					return af < bf
@@ -1966,6 +1967,42 @@ Model = Object:extend {
 		
 		table.sort(self, sort_func)
 		
+		-- secondary sort
+		local field2, dir2, sort_func2 = ...
+		if field2 then
+			checkType(field2, 'string')
+
+			-- divide to parts
+			local work_t = {{self[1]}, }
+			for i = 2, #self do
+				if self[i-1][field] == self[i][field] then
+					-- insert to the last table element of the list
+					table.insert(work_t[#work_t], self[i])
+				else
+					work_t[#work_t + 1] = {self[i]}
+				end
+			end
+
+			-- sort each part
+			local result = {}
+			byfield = field2
+			sort_func = sort_func2 or sort_func
+			for i, val in ipairs(work_t) do
+				table.sort(val, sort_func)
+				table.insert(result, val)
+			end
+
+				-- flatten to one rank table
+			local flat = {}
+			for i, val in ipairs(result) do
+				for j, v in ipairs(val) do
+					table.insert(flat, v)
+				end
+			end
+
+			self = flat
+		end
+	
 		return self		
 	end;
 	
@@ -2000,7 +2037,7 @@ Model = Object:extend {
 		
 		DEBUG(order_type)
 		-- find the inserting position
-		-- FIXME: use 2 分查找法会提高效率，现在是顺序查找法
+		-- FIXME: use 2-part searching method is better
 		for i, id in ipairs(cached_ids) do
 			field_value = db:hget(getNameIdPattern2(self, id), field)
 			if sort_func(field_value, self[field]) then
@@ -2010,23 +2047,21 @@ Model = Object:extend {
 			end
 		end
 		DEBUG(insert_position)
-		-- 对于按小于排序和按大于排序的情况，判断的方式都是一样么？
-		-- 对于按字符串排序的情况来讲，在第一次Save的时候，内部的score号为1,2,3,4等
-		-- 所以，情况应该是一样的。
+
 		local new_score
 		if insert_position == 0 then 
 			-- means till the end, all element is smaller than self.field
 			-- insert_position = #cached_ids
-			-- 取末尾元素的score + 1
+			-- the last element's score + 1
 			local end_score = db:zrange(cache_saved_key, -1, -1, 'withscores')[1][2]
 			new_score = end_score + 1
 		
 		elseif insert_position == 1 then
-			-- 取首元素score的一半
+			-- get the half of the first element
 			local stop_score = db:zscore(cache_saved_key, stop_id)
 			new_score = tonumber(stop_score) / 2
 		elseif insert_position > 1 then
-			-- 取相邻两个元素score的中间值
+			-- get the middle value of the left and right neighbours
 			local stop_score = db:zscore(cache_saved_key, stop_id)
 			local stopprev_rank = db:zrank(cache_saved_key, stop_id) - 1
 			local stopprev_score = db:zrange(cache_saved_key, stopprev_rank, stopprev_rank, 'withscores')[1][2]
