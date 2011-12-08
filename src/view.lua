@@ -5,19 +5,12 @@ local PLUGIN_LIST = bamboo.PLUGIN_LIST
 
 
 local function findTemplDir( name )
-    -- first, find user custom directory
-    if USERDEFINED_VIEWS and posix.access(USERDEFINED_VIEWS + name) then
-        return USERDEFINED_VIEWS
     -- second, find 'project_dir/views/'
-    elseif posix.access( "views/" + name) then
+    if posix.access( "views/" + name) then
         return "views/"
-    -- third, find 'project_dir/plugins/'
-    elseif posix.access( "plugins/" + name) then
-        return "plugins/"
     else
         error("Template " + name + " does not exist or wrong permissions.")
     end
-
 end
 
 local function removeSnippets(tmpl)

@@ -1992,7 +1992,7 @@ Model = Object:extend {
 				table.insert(result, val)
 			end
 
-				-- flatten to one rank table
+			-- flatten to one rank table
 			local flat = {}
 			for i, val in ipairs(result) do
 				for j, v in ipairs(val) do

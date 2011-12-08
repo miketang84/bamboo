@@ -13,7 +13,6 @@ require 'bamboo'
 _G['web'] = nil
 _G['req'] = nil
 
-USERDEFINED_VIEWS = 'views/'
 local DEFAULT_ALLOWED_METHODS = {GET = true, POST = true, PUT = true, JSON = true, XML = true}
 
 ------------------------------------------------------------------------
@@ -85,6 +84,7 @@ childenv.URLS[1] = nil
 
 table.update(bamboo.URLS, childenv.URLS)
 childenv.URLS = bamboo.URLS
+config.disconnect = childenv.disconnect
 
 bamboo.registerModule(childenv)
 local URLS = bamboo.URLS
@@ -317,8 +317,8 @@ local function run(conn, config)
 				
 				-- if client close the connection
                 if msg_type == 'disconnect' then
+					print("DISCONNECT", req.conn_id)
                     if disconnect then disconnect(req) end
-                    print("DISCONNECT", req.conn_id)
                 else
 					-- here generate connection id, that is cookie identifier, and also session id
                     conn_id = ident(req)
@@ -372,9 +372,8 @@ local function collectConfig(config)
 	config.MappingTablePattern = MappingTablePattern
 	
     -- templates' directory
-	config.templates = config.templates or (APP_DIR + USERDEFINED_VIEWS)
+	config.templates = config.templates or (APP_DIR + 'views/')
 	config.views = config.views or config.templates
-	USERDEFINED_VIEWS = config.views
 	
     -- identifier generator, user can define their own
 	config.ident = config.ident or Session.identRequest

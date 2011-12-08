@@ -6,7 +6,7 @@ local Session = require 'bamboo.session'
 -- local pic = require 'lib.pic'
 local Image = require 'bamboo.models.image'
 local Upload = require 'bamboo.models.upload'
-local getpy = require 'app.py'
+--local getpy = require 'app.py'
 
 local function _admin_param_(a, e)
 	print('admin checking params')

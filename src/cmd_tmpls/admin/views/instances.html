@@ -2,14 +2,13 @@
 	$(function(){
 		var curTab = $('.page:visible')
 		$('#delSel', curTab).click(function(){
-			// .each(function(){
-			// console.log($(this));
-			// $(this).click(function(){
-			$.post('/admin/deleteselect', $('#formInstance', curTab).serialize(), function(ret){
-				navTab.reload();
-			// 	//  });
-			});
-			
+			alertMsg.confirm("Are you sure you want to delete those records?", {
+				okCall: function(){
+					$.post('/admin/deleteselect', $('#formInstance', curTab).serialize(), function(ret){
+						navTab.reload();
+					});
+				}
+			});						
 		});
 	});
 </script>

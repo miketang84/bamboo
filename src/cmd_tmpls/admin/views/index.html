@@ -12,10 +12,14 @@
 	<![endif]-->
 
 	<!-- <script src="/media/admin/js/jquery.min.js" type="text/javascript"></script> -->
-
-
-	<script src="/media/admin/js/speedup.js" type="text/javascript"></script>
 	<script src="/media/admin/js/jquery.min.js" type="text/javascript"></script>
+	<script type="text/javascript" src="/media/admin/js/jquery.metadata.js"></script>
+	<script type="text/javascript">
+	$(function(){
+		$.metadata.setType("attr", "validate");
+	});
+	</script>
+	<script src="/media/admin/js/speedup.js" type="text/javascript"></script>
 	<script src="/media/admin/js/jquery.cookie.js" type="text/javascript"></script>
 	<script src="/media/admin/js/jquery.validate.js" type="text/javascript"></script>
 	<script src="/media/admin/js/jquery.bgiframe.js" type="text/javascript"></script>
@@ -130,7 +134,7 @@
 			<div class="accordionContent">
 
 			  <ul class="tree">
-			  {% for k, v in pairs(models or {}) do %}
+			  {% for k, v in pairs(models) do %}
 			  <!-- <li><a href="/admin/getInstances?__tag={{k}}" target="navTab">{{k}}</a></li> -->
 			  <li><a href="/admin/filter?__tag={{k}}&pageNum=1&numPerPage=20" target="navTab" rel="{{k}}">{{k}}</a></li>
 			  {% end %}

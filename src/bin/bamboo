@@ -231,16 +231,18 @@ COMMANDS = {
 		local appname = config.project_name
 		local monserver_dir = config.monserver_dir
        
-		local fd = io.popen('mount', 'r')
-		local content = fd:read('*a')
-		fd:close()
-
-		local matched = content:match(("media on %ssites/%s type none"):format(monserver_dir, appname))
-		if not matched then
-			-- mount it
-			local cmdstr = ("sudo mount -B media  %ssites/%s"):format(monserver_dir, appname)
-			os.execute(cmdstr)
-		end
+		-- mount media directory
+--		local fd = io.popen('mount', 'r')
+--		local content = fd:read('*a')
+--		fd:close()
+--
+--		local matched = content:match(("media on %ssites/%s type none"):format(monserver_dir, appname))
+--		if not matched then
+--			-- mount it
+--			local cmdstr = ("mount -B media  %ssites/%s"):format(monserver_dir, appname)
+--			print(cmdstr)
+--			os.execute(cmdstr)
+--		end
 
         --for i,v in pairs(settings) do print(i,v) end
         -- here, app is a directory pattern string, for glob
@@ -321,10 +323,10 @@ COMMANDS = {
 		local matched = content:match(("media on %ssites/%s type none"):format(monserver_dir, appname))
 		if matched then
 			-- umount it
-			local cmdstr = ("sudo umount %ssites/%s"):format(monserver_dir, appname)
+			local cmdstr = ("umount %ssites/%s"):format(monserver_dir, appname)
 			local ret = os.execute(cmdstr)
 			if ret ~= 0 then
-				os.execute(("sudo umount -l %ssites/%s"):format(monserver_dir, appname))
+				os.execute(("umount -l %ssites/%s"):format(monserver_dir, appname))
 			end
 		end
 
@@ -347,12 +349,13 @@ COMMANDS = {
 
 		-- create media directory and later copy files to it
         local mediadir = ('%s/sites/%s'):format(monserver_dir, appname)
-        os.execute(('mkdir -p %s'):format(mediadir))
+        --os.execute(('mkdir -p %s'):format(mediadir))
+		os.execute(('ln -sdf $(pwd)/%s/media %s'):format(appname, mediadir))
 
         -- do mount --bind
         -- os.execute(('sudo mount -B %s/media %s'):format(appname, mediadir))        
 
-        -- modify the md5 string in appname/app/settings.lua
+        -- modify the md5 string in settings.lua
         local fd = io.open(('%s/settings.lua'):format(appname), 'r')
 		local ctx = fd:read('*all')
 		fd:close()
@@ -370,6 +373,18 @@ host = "%s"
 		local fd = io.open(('%s/settings.lua'):format(appname), 'w')
 		fd:write(ctx)
 		fd:close()
+		
+		-- modify the mongrel2 config file template string
+        local fd = io.open(('%s/mongrel2.conf'):format(appname), 'r')
+		local ctx = fd:read('*all')
+		fd:close()
+
+		ctx = ctx:gsub('%$PROJECT_NAME%$', appname)
+
+		local fd = io.open(('%s/mongrel2.conf'):format(appname), 'w')
+		fd:write(ctx)
+		fd:close()
+		
 		
         print(('[OK] Successfully created application %s.'):format(appname))
     end;

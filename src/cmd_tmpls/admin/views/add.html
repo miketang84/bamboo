@@ -3,14 +3,20 @@
   display: none;
   }
 </style>
-<script type="text/javascript" src="/media/js/fileuploader.js"></script>
-<script type="text/javascript">
+
+<form action="/admin/create" class="required-validate pageForm" onsubmit="return validateCallback(this, navTabAjaxDone)">
+  <div class="pageFormContent nowrap" style="overflow:auto" layouth="56">
+	{% if instance.__tag:startsWith('Bamboo.Model.Upload') then %}
+	<div id="__upload">
+	  <script type="text/javascript" src="/media/js/fileuploader.js"></script>
+	  <script type="text/javascript">
 	$(function(){
 		// $('div.page #__upload').each(function(){
 		// 	console.log(this);
 		// });
+		var curTab = $('.page:visible')
 		var uploader = new qq.FileUploader({
-			element: $('#__upload')[0],
+			element: $('#__upload', curTab)[0],
 			action: '/admin/upload',
 			debug: false,
 			sizeLimit: 500000,
@@ -39,21 +45,8 @@
 			onComplete: function(){navTab.reload('')}		
 		});
 	});        
-</script>
-<form action="/admin/create" class="required-validate pageForm" onsubmit="return validateCallback(this, navTabAjaxDone)">
-  <div class="pageFormContent nowrap" style="overflow:auto" layouth="56">
-	<!-- {* instance, -->
-	<!-- filters={st=eq('')}, -->
-	<!-- attached={wrap='<dl><dd>%s</dd></dl><div class="divider"></div>', editable=true}, -->
-	<!-- *} -->
-	{% if instance.__tag:startsWith('Bamboo.Model.Upload') then %}
-	<div id="__upload">
+	  </script>
 	</div>
-<!--	<div class="button">
-	  <div class="buttonContent">
-		<button type="button" id="__upload">Upload</button>
-	  </div>
-	</div> -->
 	{% end %}
 
 	{{instance:toHtml{
