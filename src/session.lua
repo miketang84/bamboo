@@ -125,8 +125,8 @@ local Session = Object:extend {
         return true
     end;
 
-    get = function (self)
-        local session_key = PREFIX+req.session_id
+    get = function (self, session_id)
+        local session_key = PREFIX + (session_id or req.session_id)
         db:expire(session_key, bamboo.config.expiration or SMALL_EXPIRE_TIME)
         return db:hgetall(session_key)
     end;
@@ -146,9 +146,9 @@ local Session = Object:extend {
         return true
     end;
 
-    getKey = function (self, key)
+    getKey = function (self, key, session_id)
         checkType(key, 'string')
-        local session_key = PREFIX+req.session_id
+        local session_key = PREFIX + (session_id or req.session_id)
         db:expire(session_key, bamboo.config.expiration or SMALL_EXPIRE_TIME)
         
         return db:hget(session_key, key)
