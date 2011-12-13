@@ -1531,7 +1531,8 @@ Model = Object:extend {
 	-- can only apply to none foreign field
     update = function (self, field, new_value)
 		I_AM_INSTANCE(self)
-		checkType(field, new_value, 'string', 'string')
+		checkType(field, 'string')
+		assert(type(new_value) == 'string' or type(new_value) == 'number')
 		local fld = self.__fields[field]
 		if not fld then print(("[Warning] Field %s doesn't be defined!"):format(field)); return nil end
 		assert( not fld.foreign, ("[Error] %s is a foreign field, shouldn't use update function!"):format(field))
