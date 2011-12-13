@@ -84,7 +84,8 @@ local User = Model:extend {
 	end;
 	
 	logout = function (self)
-		I_AM_CLASS(self)
+		-- I_AM_CLASS(self)
+		-- Class and instance can both call this function
 		return Session:delKey('user_id')
 	end;
 	
