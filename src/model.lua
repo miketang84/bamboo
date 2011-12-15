@@ -51,6 +51,10 @@ local function getCustomKey(self, key)
 	return getClassName(self) + ':custom:' + key
 end
 
+local function getCustomIdKey(self, key)
+	return getClassName(self) + ':' + self.id + ':custom:'  + key
+end
+
 local function getCacheKey(self, key)
 	return getClassName(self) + ':cache:' + key
 end
@@ -269,6 +273,15 @@ _G['I_AM_INSTANCE_OR_QUERY_SET'] = function (self)
 	if not ok then
 		print(debug.traceback())
 		error('[Error] This function is only allowed to be called by instance or query set.', 3)
+	end
+end
+
+_G['I_AM_CLASS_OR_INSTANCE'] = function (self)
+	assert(self.isClass or self.isInstance, '[Error] The caller is not a valid class or instance.')
+	local ok = self:isClass() or self:isInstance()
+	if not ok then
+		print(debug.traceback())
+		error('[Error] This function is only allowed to be called by class or instance.', 3)
 	end
 end
 
@@ -1038,9 +1051,9 @@ Model = Object:extend {
 	-- store customize key-value pair to db
 	-- now: it support string, list and so on
 	setCustom = function (self, key, val, st, scores)
-		I_AM_CLASS(self)
+		I_AM_CLASS_OR_INSTANCE(self)
 		checkType(key, 'string')
-		local custom_key = getCustomKey(self, key)
+		local custom_key = self:isClass() and getCustomKey(self, key) or getCustomIdKey(self, key)
 
 		if not st or st == 'string' then
 			assert( type(val) == 'string' or type(val) == 'number',
@@ -1065,9 +1078,9 @@ Model = Object:extend {
 
 	-- 
 	getCustom = function (self, key)
-		I_AM_CLASS(self)
+		I_AM_CLASS_OR_INSTANCE(self)
 		checkType(key, 'string')
-		local custom_key = getCustomKey(self, key)
+		local custom_key = self:isClass() and getCustomKey(self, key) or getCustomIdKey(self, key)
 		if not db:exists(custom_key) then
 			print(("[Warning] Key %s doesn't exist!"):format(custom_key))
 			return nil
@@ -1100,9 +1113,10 @@ Model = Object:extend {
 	
 	-- check whether exist custom key
 	existCustom = function (self, key)
-		I_AM_CLASS(self)
+		I_AM_CLASS_OR_INSTANCE(self)
 		checkType(key, 'string')
-		local custom_key = getCustomKey(self, key)
+		local custom_key = self:isClass() and getCustomKey(self, key) or getCustomIdKey(self, key)
+		
 		if not db:exists(custom_key) then
 			return false
 		else 
@@ -1111,9 +1125,9 @@ Model = Object:extend {
 	end;
 	
 	updateCustom = function (self, key, val)
-		I_AM_CLASS(self)
+		I_AM_CLASS_OR_INSTANCE(self)
 		checkType(key, 'string')
-		local custom_key = getCustomKey(self, key)
+		local custom_key = self:isClass() and getCustomKey(self, key) or getCustomIdKey(self, key)
 
 		local store_type = db:type(custom_key)
 		if store_type == 'string' then
@@ -1134,9 +1148,9 @@ Model = Object:extend {
 	end;
 
 	removeCustomMember = function (self, key, val)
-		I_AM_CLASS(self)
+		I_AM_CLASS_OR_INSTANCE(self)
 		checkType(key, 'string')
-		local custom_key = getCustomKey(self, key)
+		local custom_key = self:isClass() and getCustomKey(self, key) or getCustomIdKey(self, key)
 
 		local store_type = db:type(custom_key)
 		if store_type == 'string' then
@@ -1154,9 +1168,9 @@ Model = Object:extend {
 	end;
 	
 	addCustomMember = function (self, key, val)
-		I_AM_CLASS(self)
+		I_AM_CLASS_OR_INSTANCE(self)
 		checkType(key, 'string')
-		local custom_key = getCustomKey(self, key)
+		local custom_key = self:isClass() and getCustomKey(self, key) or getCustomIdKey(self, key)
 
 		local store_type = db:type(custom_key)
 		if store_type == 'string' then
@@ -1174,9 +1188,9 @@ Model = Object:extend {
 	end;
 	
 	hasCustomMember = function (self, key, mem)
-		I_AM_CLASS(self)
+		I_AM_CLASS_OR_INSTANCE(self)
 		checkType(key, 'string')
-		local custom_key = getCustomKey(self, key)
+		local custom_key = self:isClass() and getCustomKey(self, key) or getCustomIdKey(self, key)
 		
 		local store_type = db:type(custom_key)
 		if store_type == 'string' then
@@ -1193,9 +1207,9 @@ Model = Object:extend {
 	end;
 
 	numCustom = function (self, key)
-		I_AM_CLASS(self)
+		I_AM_CLASS_OR_INSTANCE(self)
 		checkType(key, 'string')
-		local custom_key = getCustomKey(self, key)
+		local custom_key = self:isClass() and getCustomKey(self, key) or getCustomIdKey(self, key)
 
 		local store_type = db:type(custom_key)
 		if store_type == 'string' then
