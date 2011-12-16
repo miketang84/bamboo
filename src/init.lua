@@ -14,6 +14,11 @@ local List = require 'lglib.list'
 local FieldType = require 'bamboo.mvm.prototype'
 local util = require 'bamboo.util'
 
+_G['View'] = require 'bamboo.view'
+_G['Form'] = require 'bamboo.form'
+_G['Model'] = require 'bamboo.model'
+_G['Session'] = require 'bamboo.session'
+
 -- for global rendering usage
 context = {}
 -- for cache life time

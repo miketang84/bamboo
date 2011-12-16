@@ -131,9 +131,9 @@ local Session = Object:extend {
         return db:hgetall(session_key)
     end;
 
-    setKey = function (self, key, value)
+    setKey = function (self, key, value, session_id)
         checkType(key, value, 'string', 'string')
-        local session_key = PREFIX+req.session_id
+        local session_key = PREFIX + (session_id or req.session_id)
         
         local session_t = db:hgetall(session_key)
         session_t[key] = value
@@ -154,9 +154,9 @@ local Session = Object:extend {
         return db:hget(session_key, key)
     end;
 
-    delKey = function (self, key)
+    delKey = function (self, key, session_id)
         checkType(key, 'string')
-        local session_key = PREFIX+req.session_id   
+        local session_key = PREFIX + (session_id or req.session_id)   
         req.session[key] = nil
 
         return db:hdel(session_key, key)

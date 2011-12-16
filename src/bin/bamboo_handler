@@ -70,6 +70,7 @@ local errors = require 'bamboo.errors'
 local Model = require 'bamboo.model'
 local Web = require 'bamboo.web'
 local Session = require 'bamboo.session'
+local Form = require 'bamboo.form'
 
 ------------------------------------------------------------------------
 -- URLS combination
@@ -179,6 +180,19 @@ local function getHandlerByPath(path)
 	
 	-- if walks here, means no suited case matched
 	return nil
+end
+
+
+local function preparse(req)
+	if req.method == 'GET' then
+		req.GET = Form:parseQuery(req)
+		req.POST = {}
+		req.PARAMS = req.GET
+	elseif req.method == 'POST' then
+		req.GET = Form:parseQuery(req)
+		req.POST = Form:parse(req)
+		req.PARAMS = table.update(req.GET, req.POST)
+	end
 end
 
 
@@ -344,6 +358,8 @@ local function run(conn, config)
 						print(('[Warning] No handler to process this path: %s.'):format(path))
 						conn:reply_http(req, '<h2>Page Not Found.</h2>', 404, 'Not Found', req.headers)
 					else
+						-- inject req.GET, req.POST, req.PARAMS
+						preparse(req)
 						-- this is the default way
 						runStateless(conn, main, req, before, after)
 					end
