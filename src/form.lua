@@ -88,11 +88,11 @@ local Form = Object:extend {
                 params = extractMultiparts(req.body, encparams)
                 params.multipart = true
             else
-                print(("POST RECEIVED BUT NO CONTENT TYPE WE UNDERSTAND: %s."):format(ctype))
+                -- for other format case
+				--print(("POST RECEIVED BUT NO CONTENT TYPE WE UNDERSTAND: %s."):format(ctype))
             end
         end
         
-
         return params
     end;
 

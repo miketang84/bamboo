@@ -64,13 +64,15 @@ local WHICH_DB = config.WHICH_DB or 0
 -- create a redis connection in this process
 -- we will create one redis connection for every process
 BAMBOO_DB = redis.connect {host=DB_HOST, port=DB_PORT, which = WHICH_DB}
+assert(BAMBOO_DB, '[Error] Database connection is failed.')
 
 require 'bamboo.util'
+_G['View'] = require 'bamboo.view'
+_G['Form'] = require 'bamboo.form'
+_G['Model'] = require 'bamboo.model'
+_G['Session'] = require 'bamboo.session'
 local errors = require 'bamboo.errors'
-local Model = require 'bamboo.model'
 local Web = require 'bamboo.web'
-local Session = require 'bamboo.session'
-local Form = require 'bamboo.form'
 
 ------------------------------------------------------------------------
 -- URLS combination

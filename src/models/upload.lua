@@ -190,7 +190,8 @@ local Upload = Model:extend {
 			end
 		else
 		-- for uploading in html4 way
-			local params = Form:parse(req)
+		-- here, in formal html4 form, req.POST always has value in, 
+			local params = req.POST   -- or Form:parse(req)
 			local files = self:batch ( req, params, dest_dir, prefix, postfix, rename_func )
 			if files:isEmpty() then return nil, '[Error] empty file.' end
 			
