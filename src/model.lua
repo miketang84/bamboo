@@ -866,35 +866,43 @@ Model = Object:extend {
 	-- @note: this function can be called by class object and query set
 	filter = function (self, query_args, is_rev, starti, length, dir)
 		I_AM_CLASS_OR_QUERY_SET(self)
+		local is_query_table = (type(query_args) == 'table')
 		
 		local is_query_set = false
 		if isList(self) then is_query_set = true end
+		local logic = 'and'
 		
 		-- normalize the direction value
 		local dir = dir or 1
 		assert( dir == 1 or dir == -1, '[Error] dir must be 1 or -1.')
 		
-		if query_args and query_args['id'] then
-			-- remove 'id' query argument
-			print("[Warning] Filter doesn't support search by id.")
-			query_args['id'] = nil 
-			
-		end
-		
-		-- if query table is empty, return slice instances
-		if isFalse(query_args) then 
-			local stop = starti + length - 1
-			local nums = self:numbers()
-			return self:slice(starti, stop, is_rev), (stop < nums) and stop or nums 
-		end
+		if is_query_table then
 
-		-- normalize the 'and' and 'or' logic
-		local logic = 'and'
-		if query_args[1] then
-			if query_args[1] == 'or' then
-				logic = 'or'
+			if query_args and query_args['id'] then
+				-- remove 'id' query argument
+				print("[Warning] Filter doesn't support search by id.")
+				query_args['id'] = nil 
+				
 			end
-			query_args[1] = nil
+			
+			-- if query table is empty, return slice instances
+			if isFalse(query_args) then 
+				local stop = starti + length - 1
+				local nums = self:numbers()
+				return self:slice(starti, stop, is_rev), (stop < nums) and stop or nums 
+			end
+
+			-- normalize the 'and' and 'or' logic
+			
+			if query_args[1] then
+				if query_args[1] == 'or' then
+					logic = 'or'
+				end
+				query_args[1] = nil
+			end
+		else
+		-- query_arg is function
+			checkType(query_args, 'function')
 		end
 		
 		-- create a query set
@@ -954,41 +962,29 @@ Model = Object:extend {
 			local fields = obj.__fields
 			assert(not isFalse(fields), "[Error] object's description table must not be blank.")
 			
-			for k, v in pairs(query_args) do
-				-- to redundant query condition, once meet, jump immediately
-				if not fields[k] then flag=false; break end
+			if is_query_table then
+				for k, v in pairs(query_args) do
+					-- to redundant query condition, once meet, jump immediately
+					if not fields[k] then flag=false; break end
 
-				if type(v) == 'function' then
-					flag = v(obj[k])
-					
---					if logic_choice ~= flag then break end
---					if logic_choice and not flag then break end
---					if not logic_choice and flag then break end
-					
---					if logic == 'and' then
---						if not flag then break end
---					else
---						if flag then break end
---					end
-	
-				else
-					flag = (obj[k] == v)
-					
---					if logic == 'and' then
---						if obj[k] ~= v then flag=false; break end
---					else
---						if obj[k] == v then flag=true; break end
---					end
+					if type(v) == 'function' then
+						flag = v(obj[k])
+					else
+						flag = (obj[k] == v)
+					end
+					---------------------------------------------------------------
+					-- logic_choice,       flag,      action,          append?
+					---------------------------------------------------------------
+					-- true (and)          true       next field       --
+					-- true (and)          false      break            no
+					-- false (or)          true       break            yes
+					-- false (or)          false      next field       --
+					---------------------------------------------------------------
+					if logic_choice ~= flag then break end
 				end
-				---------------------------------------------------------------
-				-- logic_choice,       flag,      action,          append?
-				---------------------------------------------------------------
-				-- true (and)          true       next field       --
-				-- true (and)          false      break            no
-				-- false (or)          true       break            yes
-				-- false (or)          false      next field       --
-				---------------------------------------------------------------
-				if logic_choice ~= flag then break end
+			else
+				-- call this query args function
+				flag = query_args(obj)
 			end
 			
 			-- if walk to this line, means find one 
