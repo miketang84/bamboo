@@ -186,11 +186,11 @@ end
 
 
 local function preparse(req)
-	if req.method == 'GET' then
+	if req.METHOD == 'GET' then
 		req.GET = Form:parseQuery(req)
 		req.POST = {}
 		req.PARAMS = req.GET
-	elseif req.method == 'POST' then
+	elseif req.METHOD == 'POST' then
 		req.GET = Form:parseQuery(req)
 		req.POST = Form:parse(req)
 		req.PARAMS = table.update(req.GET, req.POST)
