@@ -186,11 +186,11 @@ end
 
 
 local function preparse(req)
-	if req.METHOD == 'GET' then
+	if req.method == 'GET' then
 		req.GET = Form:parseQuery(req)
 		req.POST = {}
 		req.PARAMS = req.GET
-	elseif req.METHOD == 'POST' then
+	elseif req.method == 'POST' then
 		req.GET = Form:parseQuery(req)
 		req.POST = Form:parse(req)
 		req.PARAMS = table.update(req.GET, req.POST)
@@ -341,13 +341,13 @@ local function run(conn, config)
 					-- normalize the path's format
 					path = trailingPath(req.path)
 
-					req.METHOD = req.headers.METHOD
+					req.method = req.headers.METHOD
 					req.path = path
 					if req.headers['x-requested-with'] == 'XMLHttpRequest' then
 						req['ajax'] = true
 					end
 
-					print(("req %s: %s"):format(config.route, req.conn_id), os.date(), req.path, req.METHOD, req.session_id)
+					print(("req %s: %s"):format(config.route, req.conn_id), os.date(), req.path, req.method, req.session_id)
 					
 					-- record session
 					Session:set(req)
