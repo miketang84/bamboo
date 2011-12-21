@@ -1053,7 +1053,7 @@ Model = Object:extend {
 
 		if not st or st == 'string' then
 			assert( type(val) == 'string' or type(val) == 'number',
-					"[Error] In the string mode of setCustom, val should be string or number.")
+					"[Error] @setCustom - In the string mode of setCustom, val should be string or number.")
 			db:set(custom_key, val)
 		else
 			checkType(val, 'table')
@@ -1066,7 +1066,7 @@ Model = Object:extend {
 			elseif st == 'hash' then
 				rdhash.save(custom_key, val)
 			else
-				error("[Error] st must be one of 'string', 'list', 'set' or 'zset'")
+				error("[Error] @setCustom - st must be one of 'string', 'list', 'set' or 'zset'")
 			end
 		end
 	end;
@@ -1078,7 +1078,7 @@ Model = Object:extend {
 		checkType(key, 'string')
 		local custom_key = self:isClass() and getCustomKey(self, key) or getCustomIdKey(self, key)
 		if not db:exists(custom_key) then
-			print(("[Warning] Key %s doesn't exist!"):format(custom_key))
+			print(("[Warning] @getCustom - Key %s doesn't exist!"):format(custom_key))
 			if not atype or atype == 'string' then return nil
 			else
 				return {}
@@ -1087,7 +1087,7 @@ Model = Object:extend {
 		
 		-- get the store type in redis
 		local store_type = db:type(custom_key)
-		if atype then assert(store_type == atype, '[Error] The specified type is not equal the type stored in db.') end
+		if atype then assert(store_type == atype, '[Error] @getCustom - The specified type is not equal the type stored in db.') end
 		if store_type == 'string' then
 			return db:get(custom_key), store_type
 		elseif store_type == 'list' then
@@ -1129,6 +1129,7 @@ Model = Object:extend {
 		checkType(key, 'string')
 		local custom_key = self:isClass() and getCustomKey(self, key) or getCustomIdKey(self, key)
 
+		assert(db:exists(custom_key), '[Error] @updateCustom - This custom key does not exist.')
 		local store_type = db:type(custom_key)
 		if store_type == 'string' then
 			db:set(custom_key, tostring(val))
@@ -1152,6 +1153,7 @@ Model = Object:extend {
 		checkType(key, 'string')
 		local custom_key = self:isClass() and getCustomKey(self, key) or getCustomIdKey(self, key)
 
+		assert(db:exists(custom_key), '[Error] @removeCustomMember - This custom key does not exist.')
 		local store_type = db:type(custom_key)
 		if store_type == 'string' then
 			db:set(custom_key, '')
@@ -1172,6 +1174,7 @@ Model = Object:extend {
 		checkType(key, 'string')
 		local custom_key = self:isClass() and getCustomKey(self, key) or getCustomIdKey(self, key)
 
+		assert(db:exists(custom_key), '[Error] @addCustomMember - This custom key does not exist.')
 		local store_type = db:type(custom_key)
 		if store_type == 'string' then
 			db:set(custom_key, val)
@@ -1192,6 +1195,7 @@ Model = Object:extend {
 		checkType(key, 'string')
 		local custom_key = self:isClass() and getCustomKey(self, key) or getCustomIdKey(self, key)
 		
+		assert(db:exists(custom_key), '[Error] @hasCustomMember - This custom key does not exist.')
 		local store_type = db:type(custom_key)
 		if store_type == 'string' then
 			return db:get(custom_key) == mem
@@ -1211,6 +1215,7 @@ Model = Object:extend {
 		checkType(key, 'string')
 		local custom_key = self:isClass() and getCustomKey(self, key) or getCustomIdKey(self, key)
 
+		assert(db:exists(custom_key), '[Error] @numCustom - This custom key does not exist.')
 		local store_type = db:type(custom_key)
 		if store_type == 'string' then
 			return 1
@@ -1271,7 +1276,7 @@ Model = Object:extend {
 				end
 			end
 				
-			rdzset.save(cache_key, new_vals, scores)
+			rdzset.save(cache_key, new_vals, orders)
 		end
 		
 		-- set expiration
