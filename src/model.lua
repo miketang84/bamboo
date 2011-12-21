@@ -1073,17 +1073,21 @@ Model = Object:extend {
 
 
 	-- 
-	getCustom = function (self, key)
+	getCustom = function (self, key, atype)
 		I_AM_CLASS_OR_INSTANCE(self)
 		checkType(key, 'string')
 		local custom_key = self:isClass() and getCustomKey(self, key) or getCustomIdKey(self, key)
 		if not db:exists(custom_key) then
 			print(("[Warning] Key %s doesn't exist!"):format(custom_key))
-			return nil
+			if not atype or atype == 'string' then return nil
+			else
+				return {}
+			end
 		end
-
+		
 		-- get the store type in redis
 		local store_type = db:type(custom_key)
+		if atype then assert(store_type == atype, '[Error] The specified type is not equal the type stored in db.') end
 		if store_type == 'string' then
 			return db:get(custom_key), store_type
 		elseif store_type == 'list' then
