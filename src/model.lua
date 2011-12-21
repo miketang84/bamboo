@@ -1104,10 +1104,10 @@ Model = Object:extend {
 	end;
 
 	delCustom = function (self, key)
-		I_AM_CLASS(self)
+		I_AM_CLASS_OR_INSTANCE(self)
 		checkType(key, 'string')
-		local custom_key = getCustomKey(self, key)
-
+		local custom_key = self:isClass() and getCustomKey(self, key) or getCustomIdKey(self, key)
+		
 		return db:del(custom_key)		
 	end;
 	
