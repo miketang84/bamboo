@@ -3,6 +3,17 @@ module(..., package.seeall)
 local PLUGIN_LIST = bamboo.PLUGIN_LIST
 
 
+local function getlocales(context)
+	local i = 1
+	while true do
+		local name, value = debug.getlocal(4, i)
+		if not name then break end
+		context[name] = value
+		i = i + 1
+	end
+	return context
+end
+
 
 local function findTemplDir( name )
     -- second, find 'project_dir/views/'
@@ -366,7 +377,8 @@ local View = Object:extend {
         end
 
         return function(context)
-            assert(context, "You must always pass in a table for context.")
+            assert(type(context) == 'table', "You must always pass in a table for context.")
+			if context[1] == 'locales' then  context[1] = nil; context = getlocales(context) end
 			-- for global context rendering
 			context = table.update(bamboo.context, context)
 			setmetatable(context, {__index=_G})
