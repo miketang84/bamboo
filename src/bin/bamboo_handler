@@ -81,9 +81,9 @@ local childenv = {}
 setfenv(assert(loadfile(handler_file)), setmetatable(childenv, {__index=_G}))()
 
 -- get the router and simplify the entry file's URLS
-assert(not isFalse(childenv.URLS[1]), '[Error] URLS value is not right. URLS[1] must be string and NOT be blank.')
-local router = childenv.URLS[1]
-childenv.URLS[1] = nil
+-- assert(not isFalse(childenv.URLS[1]), '[Error] URLS value is not right. URLS[1] must be string and NOT be blank.')
+local router = childenv.URLS[1] or '/'
+if childenv.URLS[1] then childenv.URLS[1] = nil end
 
 table.update(bamboo.URLS, childenv.URLS)
 childenv.URLS = bamboo.URLS
