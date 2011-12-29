@@ -380,7 +380,11 @@ local View = Object:extend {
             assert(type(context) == 'table', "You must always pass in a table for context.")
 			if context[1] == 'locales' then  context[1] = nil; context = getlocales(context) end
 			-- for global context rendering
-			context = table.update(bamboo.context, context)
+			for k, v in pairs(bamboo.context) do
+				if not context[k] then
+					context[k] = v
+				end
+			end
 			setmetatable(context, {__index=_G})
 			setfenv(func, context)
 			return func()
