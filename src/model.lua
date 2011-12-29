@@ -1200,13 +1200,13 @@ Model = Object:extend {
 		if store_type == 'string' then
 			return db:get(custom_key) == mem
 		elseif store_type == 'list' then
-			rdlist.has(custom_key, mem)
+			return rdlist.has(custom_key, mem)
 		elseif store_type == 'set' then
-			rdset.has(custom_key, mem)
+			return rdset.has(custom_key, mem)
 		elseif store_type == 'zset' then
-			rdzset.has(custom_key, mem)
+			return rdzset.has(custom_key, mem)
 		elseif store_type == 'hash' then
-			rdhash.has(custom_key, mem)
+			return rdhash.has(custom_key, mem)
 		end
 	end;
 
