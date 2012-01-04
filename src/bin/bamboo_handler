@@ -347,7 +347,7 @@ local function run(conn, config)
 						req['ajax'] = true
 					end
 
-					-- print(("req %s: %s"):format(config.route, req.conn_id), os.date(), req.path, req.method, req.session_id)
+					print(("req %s: %s"):format(config.route, req.conn_id), os.date(), req.path, req.method, req.session_id)
 					
 					-- record session
 					Session:set(req)
