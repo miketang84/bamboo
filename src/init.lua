@@ -109,6 +109,114 @@ local function permissionCheck(action_perms, perms)
 	end
 end
 
+local function actionTransform(web, req, action)
+	if type(action) == 'function' then
+		return action
+	elseif type(action) == 'table' then
+		local fun = action.handler
+		checkType(fun, 'function')
+		
+		return function (web, req, inited_params)
+			local propagated_params = inited_params or {}
+			local filter_flag, permission_flag = true, true
+			
+			-- check filters
+			local action_filters = action.filters
+			if action_filters and #action_filters > 0 then
+				checkType(action_filters, 'table')
+				
+				filter_flag = true
+				-- execute all filters bound to this handler
+				for _, filter_name in ipairs(action_filters) do
+					local filter, args_list = parseFilterName(filter_name)
+					-- if filter is invalid, ignore it
+					if filter then 
+						local ret
+						ret, propagated_params = filter(args_list, propagated_params)
+						if not ret then 
+							filter_flag = false 
+							print(("[Warning] Filter chains was broken at %s."):format(filter_name))
+							break 
+						end
+					else
+						print(('[Warning] This filter %s is not registered.'):format(filter_name))
+					end
+				end
+				
+			end
+			
+			-- check perms
+			if action.perms and #action.perms > 0 then
+				checkType(action.perms, 'table')
+				-- TODO
+				--
+				local user = req.user
+				if user then
+					-- check the user's permissions
+					if user.perms then
+						local perms = user:getForeign('perms')
+						permission_flag = permissionCheck(action.perms, perms)	
+						
+					end
+					
+					-- check groups' permissions
+					if user.groups then
+						local groups = user:getForeign('groups')
+						for _, group in ipairs(groups) do
+							if group then
+								if group.perms then
+									local group_perms = group:getForeign('perms')
+									local ret = permissionCheck(action.perms, group_perms)
+									-- once a group's permissions fit action_perms, return true
+									if ret then permission_flag = true; break end
+								end
+							end
+						end
+					end
+				end
+			end
+		
+			if not filter_flag or not permission_flag then
+				print("[Prompt] user was denied to execute this handler.")
+				return false
+			end
+
+			-- execute handler
+			-- after execute filters and permissions check, pass here, then execute this handler
+			local ret, propagated_params = fun(web, req, propagated_params)
+			
+			-- check post filters
+			local action_post_filters = action.post_filters
+			if ret and action_post_filters and #action_post_filters > 0 then
+				checkType(action_post_filters, 'table')
+				
+				filter_flag = true
+				-- execute all filters bound to this handler
+				for _, filter_name in ipairs(action_post_filters) do
+					local filter, args_list = parseFilterName(filter_name)
+					-- if filter is invalid, ignore it
+					if filter then 
+						ret, propagated_params = filter(args_list, propagated_params)
+						if not ret then 
+							filter_flag = false 
+							print(("[Warning] PostFilter chains was broken at %s."):format(filter_name))
+							break 
+						end
+					else
+						print(('[Warning] This post filter %s is not registered.'):format(filter_name))
+					end
+				end
+				
+			end
+			
+			-- return from lua function
+			return ret, propagated_params
+		end
+	else
+		error("Action mush be function or table.", 2)
+	end
+end
+
 
 registerModule = function (mdl, extra_params)
 	checkType(mdl, 'table')
@@ -142,121 +250,13 @@ registerModule = function (mdl, extra_params)
 				end
 			end
 			
-						
-			
-			local function actionTransform(web, req)
-				if type(action) == 'function' then
-					return action
-				elseif type(action) == 'table' then
-					local fun = action.handler
-					checkType(fun, 'function')
-					
-					return function (web, req, inited_params)
-						local propagated_params = inited_params or {}
-						local filter_flag, permission_flag = true, true
-						
-						-- check filters
-						local action_filters = action.filters
-						if action_filters and #action_filters > 0 then
-							checkType(action_filters, 'table')
-							
-							filter_flag = true
-							-- execute all filters bound to this handler
-							for _, filter_name in ipairs(action_filters) do
-								local filter, args_list = parseFilterName(filter_name)
-								-- if filter is invalid, ignore it
-								if filter then 
-									local ret
-									ret, propagated_params = filter(args_list, propagated_params)
-									if not ret then 
-										filter_flag = false 
-										print(("[Warning] Filter chains was broken at %s."):format(filter_name))
-										break 
-									end
-								else
-									print(('[Warning] This filter %s is not registered.'):format(filter_name))
-								end
-							end
-							
-						end
-						
-						-- check perms
-						if action.perms and #action.perms > 0 then
-							checkType(action.perms, 'table')
-							-- TODO
-							--
-							local user = req.user
-							if user then
-								-- check the user's permissions
-								if user.perms then
-									local perms = user:getForeign('perms')
-									permission_flag = permissionCheck(action.perms, perms)	
-									
-								end
-								
-								-- check groups' permissions
-								if user.groups then
-									local groups = user:getForeign('groups')
-									for _, group in ipairs(groups) do
-										if group then
-											if group.perms then
-												local group_perms = group:getForeign('perms')
-												local ret = permissionCheck(action.perms, group_perms)
-												-- once a group's permissions fit action_perms, return true
-												if ret then permission_flag = true; break end
-											end
-										end
-									end
-								end
-							end
-						end
-					
-						if not filter_flag or not permission_flag then
-							print("[Prompt] user was denied to execute this handler.")
-							return false
-						end
-
-						-- execute handler
-						-- after execute filters and permissions check, pass here, then execute this handler
-						local ret, propagated_params = fun(web, req, propagated_params)
-						
-						-- check post filters
-						local action_post_filters = action.post_filters
-						if ret and action_post_filters and #action_post_filters > 0 then
-							checkType(action_post_filters, 'table')
-							
-							filter_flag = true
-							-- execute all filters bound to this handler
-							for _, filter_name in ipairs(action_post_filters) do
-								local filter, args_list = parseFilterName(filter_name)
-								-- if filter is invalid, ignore it
-								if filter then 
-									ret, propagated_params = filter(args_list, propagated_params)
-									if not ret then 
-										filter_flag = false 
-										print(("[Warning] PostFilter chains was broken at %s."):format(filter_name))
-										break 
-									end
-								else
-									print(('[Warning] This post filter %s is not registered.'):format(filter_name))
-								end
-							end
-							
-						end
-						
-						-- return from lua function
-						return ret, propagated_params
-					end
-				end
-			end
-			
 			if mdl.init and type(mdl.init) == 'function' and not exclude_flag then
 				nfun = function (web, req)
 					local ret, inited_params = mdl.init(extra_params or {})
 					local finished_params
 					local last_params
 					if ret then
-						ret, finished_params = actionTransform(web, req)(web, req, inited_params)
+						ret, finished_params = actionTransform(web, req, action)(web, req, inited_params)
 					end
 					
 					if ret and mdl.finish and type(mdl.finish) == 'function' then
@@ -268,7 +268,7 @@ registerModule = function (mdl, extra_params)
 				end
 			elseif mdl.finish and type(mdl.finish) == 'function' and not exclude_flag then
 				nfun = function (web, req)
-					local ret, finished_params = actionTransform(web, req)(web, req)
+					local ret, finished_params = actionTransform(web, req, action)(web, req)
 
 					local last_params
 					if ret then
@@ -279,7 +279,7 @@ registerModule = function (mdl, extra_params)
 					return ret, last_params or finished_params
 				end
 			else
-				nfun = actionTransform(web, req)
+				nfun = actionTransform(web, req, action)
 			end
 
 			URLS[nurl] = nfun
@@ -529,14 +529,18 @@ registerSiteMap = function (tbl)
 		end
 		
 		-- generate new url pattern and handler
-		URLS[v.pathkey] = function (web, req)
-			-- normally, v.handler should return a table
-			local ret_args = v.handler and type(v.handler) == 'function' and v.handler(web, req)
-			if not isFalse(ret_args) then
-				-- corresponding template file
-				return web:html(v.pathkey:sub(1, -2) + '.html', ret_args)
-			else
-				return web:html(v.pathkey:sub(1, -2) + '.html')
+		if not v.hidden then
+			URLS[v.pathkey] = function (web, req)
+				-- normally, v.handler should return a table
+				local ret_args = v.handler and actionTransform(web, req, v.handler)(web, req)
+				if not isFalse(ret_args) then
+					if type(ret_args) == 'table' then
+						-- corresponding template file
+						return web:html(v.pathkey:sub(1, -2) + '.html', ret_args)
+					else
+						return web:html(v.pathkey:sub(1, -2) + '.html')
+					end
+				end
 			end
 		end
 	end

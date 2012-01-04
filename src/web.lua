@@ -119,12 +119,14 @@ local Web = Object:extend {
             headers['content-type'] = nil
         end
 
-        return self.conn:reply_http(self.req, data, code, status, headers)
+        self.conn:reply_http(self.req, data, code, status, headers)
+		return false
     end;
 	
 	html = function (self, html_tmpl, tbl)
 		local tbl = tbl or {}
-		return self:page(View(html_tmpl)(tbl))
+		self:page(View(html_tmpl)(tbl))
+		return false
 	end;
 	
     ok = function (self, msg) self:page(msg or 'OK', 200, 'OK') end;
