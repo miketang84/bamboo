@@ -534,9 +534,9 @@ registerSiteMap = function (tbl)
 			local ret_args = v.handler and type(v.handler) == 'function' and v.handler(web, req)
 			if not isFalse(ret_args) then
 				-- corresponding template file
-				return web:html(k + '.html', ret_args)
+				return web:html(v.pathkey:sub(1, -2) + '.html', ret_args)
 			else
-				return web:html(k + '.html')
+				return web:html(v.pathkey:sub(1, -2) + '.html')
 			end
 		end
 	end
