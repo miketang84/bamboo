@@ -49,7 +49,7 @@ local $MODEL = Model:extend {
 
 	end;
 	
-	getAllInstances = function (web, req)
+	getInstances = function (web, req)
 
 	end;
 
