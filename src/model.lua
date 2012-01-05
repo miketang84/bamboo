@@ -1731,14 +1731,14 @@ Model = Object:extend {
 				end
 			end
 		elseif fld.st == 'MANY' then
-			if isFalse(self[field]) then return List() end
+			if isFalse(self[field]) then return QuerySet() end
 			
 			local key = getFieldPattern(self, field)
 			local list = rdzset.retrieve(key)
-			if list:isEmpty() then return List() end
+			if list:isEmpty() then return QuerySet() end
 			
 			list = list:slice(start, stop, is_rev)
-			if list:isEmpty() then return List() end
+			if list:isEmpty() then return QuerySet() end
 			
 			if fld.foreign == 'ANYSTRING' then
 				-- return string list directly
@@ -1763,13 +1763,13 @@ Model = Object:extend {
 			end
 			
 		elseif fld.st == 'FIFO' then
-			if isFalse(self[field]) then return List() end
+			if isFalse(self[field]) then return QuerySet() end
 		
 			local key = getFieldPattern(self, field)
 			local list = rdfifo.retrieve(key)
 			
 			list = list:slice(start, stop, is_rev)
-			if isFalse(list) then return List() end
+			if isFalse(list) then return QuerySet() end
 	
 			if fld.foreign == 'ANYSTRING' then
 				-- 
@@ -1794,7 +1794,7 @@ Model = Object:extend {
 			end
 			
 		elseif fld.st == 'ZFIFO' then
-			if isFalse(self[field]) then return List() end
+			if isFalse(self[field]) then return QuerySet() end
 		
 			local key = getFieldPattern(self, field)
 			-- due to FIFO, the new id is at left, old id is at right
@@ -1802,7 +1802,7 @@ Model = Object:extend {
 			local list = rdzfifo.retrieve(key)
 			
 			list = list:slice(start, stop, is_rev)
-			if isFalse(list) then return List() end
+			if isFalse(list) then return QuerySet() end
 	
 			if fld.foreign == 'ANYSTRING' then
 				--
