@@ -353,19 +353,6 @@ registerModel = function (model)
 			
 		end
 	
-
-		local url_prefix = '/' + ( model.__urlprefix or model_name) + '/'
-		-- auto create some url bindings
-		local funcs = { 'newView', 'editView', 'delView', 'getInstance', 'getInstances', 'createInstance', 'updateInstance', 'delInstance' }
-		for i, func_name in ipairs(funcs) do
-			local method = rawget(model, func_name)
-			if method then
-				checkType(method, 'function')
-				URLS[url_prefix + func_name + '/'] = method
-			end
-		end
-		
-	
 	end
 end
 

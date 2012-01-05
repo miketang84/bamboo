@@ -426,6 +426,7 @@ host = "%s"
         local fd = io.open(newfile, 'r')
 		local ctx = fd:read('*all')
 		fd:close()
+		model_name = model_name:sub(1, 1):upper() + model_name:sub(2):lower()
 		ctx = ctx:gsub('%$MODEL', model_name)
 
 		local fd = io.open(newfile, 'w')
@@ -433,6 +434,30 @@ host = "%s"
 		fd:close()
         
         print(('[OK] Successfully created model %s.'):format(model_name))  
+    end;
+	
+	createcontroller = function(settings)
+        local controller_name = settings[1] or 'bamboocontroller'
+		controller_name = controller_name:lower()
+   		readSettings()
+		local bamboo_dir = config.bamboo_dir
+        
+        local newfile = ('./%s.lua'):format(controller_name + '_controller')
+        local cmdstr = ('cp -rf %s/src/cmd_tmpls/createcontroller/newcontroller.lua %s'):format(bamboo_dir, newfile)
+        os.execute(cmdstr)
+
+        local fd = io.open(newfile, 'r')
+		local ctx = fd:read('*all')
+		fd:close()
+		ctx = ctx:gsub('%$CONTROLLER', controller_name)
+		local controller_model = controller_name:sub(1, 1):upper() + controller_name:sub(2):lower()
+		ctx = ctx:gsub('%$MODEL', controller_model)
+		
+		local fd = io.open(newfile, 'w')
+		fd:write(ctx)
+		fd:close()
+        
+        print(('[OK] Successfully created controller %s.'):format(controller_name))  
     end;
     
     initdb = function (settings)

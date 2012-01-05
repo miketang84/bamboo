@@ -20,38 +20,7 @@ local $MODEL = Model:extend {
 		return self
 	end;
 	
-	-- default methods
-	newView = function (web, req)
 
-	end;
-	
-	createInstance = function (web, req)
-
-	end;
-	
-	editView = function (web, req)
-
-	end;
-	
-	updateInstance = function (web, req)
-
-	end;
-	
-	delView = function (web, req)
-
-	end;
-	
-	delInstance = function (web, req)
-
-	end;
-	
-	getInstance = function (web, req)
-
-	end;
-	
-	getInstances = function (web, req)
-
-	end;
 
 }
 
