@@ -3,7 +3,7 @@ module(..., package.seeall)
 local PLUGIN_LIST = bamboo.PLUGIN_LIST
 
 
-local function getlocales(context)
+local function getlocals(context)
 	local i = 1
 	while true do
 		local name, value = debug.getlocal(4, i)
@@ -378,7 +378,7 @@ local View = Object:extend {
 
         return function(context)
             assert(type(context) == 'table', "You must always pass in a table for context.")
-			if context[1] == 'locales' then  context[1] = nil; context = getlocales(context) end
+			if context[1] == 'locals' then  context[1] = nil; context = getlocals(context) end
 			-- for global context rendering
 			for k, v in pairs(bamboo.context) do
 				if not context[k] then
