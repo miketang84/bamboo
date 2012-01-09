@@ -225,6 +225,16 @@ COMMANDS = {
             print "[Warning] Running in PRODUCTION mode, won't run tests."
         end
     end,
+    
+    config = function (settings)
+    	local home = os.getenv('HOME')
+    	local fd = io.open(home + '/.bambooconfig', 'a')
+    	for k, v in pairs(settings) do
+    		if type(k) == 'string' then
+    			fd:write(k + ' = "' + v + '"\n')
+    		end
+    	end
+    end,
 
     start = function(settings)
 		readSettings()
