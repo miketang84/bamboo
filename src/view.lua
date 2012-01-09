@@ -391,7 +391,7 @@ local View = Object:extend {
 			-- add temporarily
 			local ret = func()
 			local newret = ret
-			for specials in ret:gmatch("{{([%w_ ]+)}}") do
+			for specials in ret:gmatch("{{([%.%w_ ]+)}}") do
 				if context[specials] then newret = ret:gsub("{{([%w_ ]+)}}", context[specials])  end
 			end
 			
