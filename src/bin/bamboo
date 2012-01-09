@@ -24,39 +24,24 @@ local config = {}
 
 local function readSettings()
 	-- only support boot in app directory
-	local setting_file = loadfile('settings.lua') or loadfile('../settings.lua')
+	local setting_file = loadfile('~/.bambooconfig') or loadfile('settings.lua') or loadfile('../settings.lua')
 	if not setting_file then
 		print [[
-[Warning] You should make sure the existance of settings.lua in your workspace!
+[Warning] You should make sure the existance of ~/.bambooconfig 
 
-The content of the settings.lua can be like following, 
-copy them to your 'settings.lua' file, if it doesn't exist, create it:
+You can use:
+	bamboo config -monserver_dir your_mongrel2_dir
+	bamboo config -bamboo_dir your_bamboo_dir
 
-------------------------------------------------------
-monserver_dir = "$your_mongrel2_server's_directory"
-bamboo_dir = "$the_directory_bamboo_installed"
-------------------------------------------------------
+to create this config file. Good Luck.
 ]]
 
 		os.exit()
 	end
 	setfenv(assert(setting_file), config)()
 	config.bamboo_dir = config.bamboo_dir or '/usr/local/share/lua/5.1/bamboo/'
-	config.monserver_dir = config.monserver_dir or '/root/workspace/monserver/'
+	config.monserver_dir = config.monserver_dir
 
-	if config.monserver_dir == "$your_mongrel2_server's_directory" 
-	or config.bamboo_dir == "$the_directory_bamboo_installed" 
-	then
-		print [[
-[ERROR] You should make sure the validation of the bamboo_dir and monserver_dir!
-
-Change the value of them like following:
-	bamboo_dir = "/usr/local/share/lua/5.1/bamboo/"
-	monserver_dir = "/root/workspace/monserver/"
-]]
-
-		os.exit()
-	end
 
 	-- check whether have a global production setting
 	local production = loadfile('/etc/bamboo_production')
