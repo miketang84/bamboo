@@ -13,9 +13,15 @@ local $MODEL = Model:extend {
 	};
 	
 	init = function (self, t)
-		if not t then return self end
+		if isFalse(t) then return self end
 		
-		self.name = t.name
+		-- auto fill non-foreign fields with params t
+		local fields = self.__fields
+		for k, v in pairs(t) do
+			if fields[k] and not fields[k].foreign then
+				self[k] = tostring(v)
+			end
+		end
 		
 		return self
 	end;
