@@ -1827,6 +1827,61 @@ Model = Object:extend {
 			end
 		end
 
+	end;
+
+	getForeignIds = function (self, field, start, stop, is_rev)
+		I_AM_INSTANCE(self)
+		checkType(field, 'string')
+		local fld = self.__fields[field]
+		assert(fld, ("[Error] Field %s doesn't be defined!"):format(field))
+		assert(fld.foreign, ("[Error] This field %s is not a foreign field."):format(field))
+		assert(fld.st, ("[Error] No store type setting for this foreign field %s."):format(field))
+				
+		if fld.st == 'ONE' then
+			if isFalse(self[field]) then return nil end
+
+			return self[field]
+
+		elseif fld.st == 'MANY' then
+			if isFalse(self[field]) then return List() end
+			
+			local key = getFieldPattern(self, field)
+			local list = rdzset.retrieve(key)
+			if list:isEmpty() then return List() end
+			
+			list = list:slice(start, stop, is_rev)
+			if list:isEmpty() then return List() end
+			
+			return list
+			
+		elseif fld.st == 'FIFO' then
+			if isFalse(self[field]) then return List() end
+		
+			local key = getFieldPattern(self, field)
+			local list = rdfifo.retrieve(key)
+			if list:isEmpty() then return List() end
+	
+			list = list:slice(start, stop, is_rev)
+			if list:isEmpty() then return List() end
+	
+			return list
+			
+		elseif fld.st == 'ZFIFO' then
+			if isFalse(self[field]) then return List() end
+		
+			local key = getFieldPattern(self, field)
+			-- due to FIFO, the new id is at left, old id is at right
+			-- 
+			local list = rdzfifo.retrieve(key)
+			if list:isEmpty() then return List() end
+			
+			list = list:slice(start, stop, is_rev)
+			if list:isEmpty() then return List() end
+	
+			return list
+			
+		end
+
 	end;    
 	
 	delForeign = function (self, field, obj)
