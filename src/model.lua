@@ -1285,7 +1285,7 @@ Model = Object:extend {
 		
 	end;
 	
-	getCache = function (self, key)
+	getCache = function (self, key, start, stop, is_rev)
 		I_AM_CLASS(self)
 		checkType(key, 'string')
 		local cache_key = getCacheKey(self, key)
@@ -1295,10 +1295,14 @@ Model = Object:extend {
 		local cache_data
 		if cache_data_type == 'string' then
 			cache_data = db:get(cache_key)
+			if isFalse(cache_data) then return nil end
 		elseif cache_data_type == 'zset' then
 			cache_data = rdzset.retrieve(cache_key)
+			if start or stop then
+				cache_data = cache_data:slice(start, stop, is_rev)
+			end
+			if isFalse(cache_data) then return List() end
 		end
-		if isFalse(cache_data) then return nil end
 		
 		local cachetype = db:get(cachetype_key)
 		if cachetype and cachetype == 'instance' then

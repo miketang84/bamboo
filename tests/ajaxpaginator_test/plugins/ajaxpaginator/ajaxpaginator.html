@@ -1,0 +1,95 @@
+
+
+<style>
+
+.paginator {}
+.paginator select {width: 60px; display: inline;background: #fff; border: 1px solid #aaa;}
+.paginator form {display: inline;} 
+.paginator input {width: 40px; border: 1px solid #aaa;}
+</style>
+
+<script>
+$(document).ready(function() {
+	var paginator_wrapper = $('.paginator_wrapper');
+	var pageurl = paginator_wrapper.attr('pageurl');
+	var thepage = paginator_wrapper.attr('thepage');
+	var npp = paginator_wrapper.attr('npp');
+	var totalpages = paginator_wrapper.attr('totalpages');
+	
+	var paginator_htmlcontent = $('.paginator_htmlcontent', paginator_wrapper);
+	console.log(paginator_wrapper, paginator_htmlcontent)
+	
+	
+	var helper = function (query) {
+		$.get(pageurl, query, function (data) {
+			if (data.success) {
+				paginator_htmlcontent.html(data.htmlcontent);
+				pselector.val(data.thepage);
+				paginator_wrapper.attr('thepage', data.thepage);
+			}
+		});
+	}
+	
+	var pselector = $('select', paginator_wrapper);
+	pselector.change(function () {
+		var queryjson = {thepage: $(this).val(), npp: npp,	totalpages: totalpages};
+		helper(queryjson);
+		return false;
+	});
+	
+	$('a', paginator_wrapper).click(function () {
+		var queryjson = {};
+		if ($(this).hasClass('paginator_head')) {
+			queryjson = {thepage: 1, npp: npp,	totalpages: totalpages};
+		}
+		else if ($(this).hasClass('paginator_tail')) {
+			queryjson = {thepage: totalpages, npp: npp,	totalpages: totalpages};
+		}
+		else if ($(this).hasClass('paginator_prev')) {
+			var thepage = parseInt(paginator_wrapper.attr('thepage')) - 1;
+			if (thepage < 1) thepage = 1;
+			queryjson = {thepage: thepage, npp: npp, totalpages: totalpages};
+		}
+		else if ($(this).hasClass('paginator_next')) {
+			var thepage = parseInt(paginator_wrapper.attr('thepage')) + 1;
+			if (thepage > totalpages) thepage = totalpages;
+			queryjson = {thepage: thepage, npp: npp, totalpages: totalpages};
+		}
+
+		helper(queryjson);
+		return false;
+	});
+
+	var paginator_form = $('form', paginator_wrapper);
+	paginator_form.submit(function () {
+		var query = $(this).serialize();
+		helper(query);
+		return false;
+	})		
+
+});
+</script>
+
+<div class="paginator_wrapper" pageurl="{{pageurl}}" thepage="{{thepage}}" npp="{{npp}}" totalpages="{{totalpages}}">
+	<div class="paginator_htmlcontent"> {{htmlcontent}} </div>
+
+	<div class="paginator" >
+		<a class="paginator_head paginator_item" href="#">首页</a>
+		<a class="paginator_prev paginator_item" href="#">上一页</a>
+		<select class="paginator_select">
+			{% for i=1, totalpages do %}
+			<option value="{{i}}" {% if i == thepage then %} selected="true" {% end %}>{{i}}/{{totalpages}}</option>
+			{% end %}
+		</select>
+		<form method="post" class="paginator_form">
+			<input type="text" name="thepage" maxlength="4" size='4' />
+			<input type="hidden" name="npp" value="{{npp}}" />
+			<input type="hidden" name="totalpages" value="{{totalpages}}" />
+		</form>
+
+		<a class="paginator_next paginator_item" href="#">下一页</a>
+		<a class="paginator_tail paginator_item" href="#">末页</a>
+	</div>
+
+</div>
+

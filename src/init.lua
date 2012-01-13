@@ -21,6 +21,7 @@ CACHE_LIFE = 1800
 -- global URLS definition
 URLS = {}
 
+paginator_callbacks = {}
 ------------------------------------------------------------------------
 PLUGIN_LIST = {}
 

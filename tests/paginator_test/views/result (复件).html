@@ -1,0 +1,55 @@
+{: 'index.html' :}
+
+{[ ======= 'page' ========
+<style>
+table td{
+	border: 1px solid black;
+}
+</style>
+
+
+<style>
+
+.paginator {}
+.paginator select {width: 60px; display: inline;background: #fff; border: 1px solid #aaa;}
+.paginator form {display: inline;} 
+.paginator input {width: 40px; border: 1px solid #aaa;}
+
+
+</style>
+
+
+
+
+The database have the following data:
+<div class="paginator_wrapper">
+<table>
+	<tr><th>Name</th><th>Age</th><th>Gender</th></tr>
+	{% for _, v in ipairs(all_persons) do%}
+	<tr><td>{{v.name}}</td><td>{{v.age}}</td><td>{{v.gender}}</td></tr>
+	{% end %}
+</table>
+
+
+<div class="paginator" npp="{{npp}}" pages="{{pages}}" >
+	<a class="paginator_head" class="paginator_item" href="/page/getInstance/?thepage=1">首页</a>
+	<a class="paginator_prev" class="paginator_item" href="/page/getInstance/?thepage={{prevpage}}">上一页</a>
+	<select class="paginator_select">
+		{% for i=1, pages do %}
+		<option value="{{i}}" {% if i == thepage then %} selected="true" {% end %}>{{i}}/{{pages}}</option>
+		{% end %}
+	</select>
+	<form method="post" class="paginator_form">
+		<input type="text" maxlength="4" size='4' />   
+	</form>
+
+	<a class="paginator_next" class="paginator_item" href="/page/getInstance/?thepage={{nextpage}}">下一页</a>
+	<a class="paginator_tail" class="paginator_item" href="/page/getInstance/?thepage={{pages}}">末页</a>
+</div>
+
+</div>
+
+Click <a href="/"> here </a> to return form page.
+
+]}
+

@@ -1,4 +1,5 @@
 module(..., package.seeall)
+local lgstring = require "lgstring"
 
 local PLUGIN_LIST = bamboo.PLUGIN_LIST
 
@@ -24,62 +25,10 @@ local function findTemplDir( name )
     end
 end
 
-local function removeSnippets(tmpl)
-	-- for html
-	-- remove all comments except something like <!--[if lg IE 6]> <![endif]-->
-	local frags = {}
-
-	local ob = 1
-	local b, l = 1, 0
-	while b do
-		b, l = tmpl:find('%<%!%-%-.-%-%-%>', l+1)
-		if b then
-			if tmpl:sub(b, b+4) == '<!--[' then
-				-- do nothing now
-				frags[#frags + 1] = tmpl:sub(ob, l)
-			else
-				frags[#frags + 1] = tmpl:sub(ob, b - 1)
-			end
-			ob = l + 1
-		end
-	end
-
-	if ob <= #tmpl then
-		frags[#frags + 1] = tmpl:sub(ob, #tmpl)
-	end
-
-	return table.concat(frags)
-end
-
-
-local localvars_pattern_list = {
-    -- judge whether contains repeatation
-    'for%s+([%w_%s,]-)%s+in',
-    -- judge whether contains new local variable definations
-    'local([%w_%s,]+)=',
-}
-
 -- template rendering directives
 local VIEW_ACTIONS = {
     -- embeding lua sentances
     ['{%'] = function(code)
-        -- add new generated local variable to _G enviroment
-        local varstr
-        local morestr = " local _env = getfenv();"
-        for _, pattern in ipairs(localvars_pattern_list) do
-            varstr = code:match(pattern)
-            if varstr then
-                local varlist = varstr:split(',')
-                for _, v in ipairs(varlist) do
-                    local t = v:trim()
-                    if not isFalse(t) and t ~= '_' then
-                        morestr = morestr + (" _env['%s'] = %s; "):format(t, t)
-                    end
-                end
-            end
-        end
-
-        code = code + morestr
         return code
     end,
     -- embeding lua variables
@@ -114,7 +63,7 @@ local VIEW_ACTIONS = {
         local name = deserialize(code)
         local tmpl_dir = findTemplDir(name)
         local base_page = io.loadFile(tmpl_dir, name)
-        local new_page = removeSnippets(base_page)
+        local new_page = base_page
         for block in new_page:gmatch("({%[[%s_%w%.%-\'\"]+%]})") do
             -- remove the outer tags
             local block_content = block:sub(3, -3):trim()
@@ -167,116 +116,8 @@ local VIEW_ACTIONS = {
             return ('_result[#_result+1] = [==[%s]==]'):format(PLUGIN_LIST[plugin_name]({}))
         end
     end,
-
---    ['{*'] = function (code)
---		local code = code:trim()
---		assert( code ~= '', 'Instance name must not be blank.')
---		local instance_lexical, restcode = code:match('^([%w_%.]+),?%s*(.*)$')
---		-- print(instance_lexical, restcode)
---		restcode = restcode:gsub('\n', ' ')
---		return ([[
---            local mvm = require 'bamboo.mvm'
---						local fragment = mvm.process(%s, [==[%s]==])
---            _result[#_result+1] = fragment
---        ]]):format(instance_lexical, restcode)
---
---    end,
-
-
 }
 
-
-local function clearScriptsAndCsses(tmpl)
-	local loc_b, loc_e = 1, 0
-	local script_array = {}
-	local script_snippet = ''
-	while true do
-		loc_b, loc_e, script_snippet  = tmpl:find("(%<script *[%w=\'\"/]*%>.-%</script%>)", loc_e + 1)
-		if not loc_b then break end
-
-		script_array[#script_array + 1] = script_snippet
-		tmpl = table.concat({tmpl:sub(1, loc_b - 1), '####SCRIPT_TOBEFILLED####', tmpl:sub(loc_e + 1, -1)})
-		loc_e = loc_b - 1
-	end
-	if #script_array > 0 then has_script = true end
-
-	-- now, script_array contains all script part of a html file
-
-	local css_array = {}
-	local css_snippet = ''
-	loc_b = 1
-	loc_e = 0
-	while true do
-		loc_b, loc_e, css_snippet  = tmpl:find("(%<style%>.-%</style%>)", loc_e + 1)
-		if not loc_b then break end
-
-		css_array[#css_array + 1] = css_snippet
-		tmpl = table.concat({tmpl:sub(1, loc_b - 1), '####CSS_TOBEFILLED####', tmpl:sub(loc_e + 1, -1)})
-
-		loc_e = loc_b - 1
-	end
-	if #css_array > 0 then has_css = true end
-	-- now, script_array contains all script part of a html file
-
-	return tmpl, has_script, script_array, has_css, css_array
-
-end
-
-local function restoreScriptsAndCsses(tmpl, has_script, script_array, has_css, css_array)
-	local loc_b, loc_e = 1, 0
-	-- restore the script and css part to each fragment
-	if has_script then
-		local loc_e = 1
-		local scripts_tofill = {}
-		while true do
-			loc_b, loc_e = tmpl:find("####SCRIPT_TOBEFILLED####", loc_e + 1)
-			if not loc_b then break end
-
-			scripts_tofill[#scripts_tofill + 1] = {loc_b, loc_e}
-		end
-
-		local frags = {}
-		local head = 1
-		for i, v in ipairs(scripts_tofill) do
-			frags[#frags + 1] = tmpl:sub(head, v[1] - 1)
-			frags[#frags + 1] = script_array[i] or ''
-			head = v[2] + 1
-		end
-		if head < #tmpl then
-			frags[#frags + 1] = tmpl:sub(head, -1)
-		end
-		tmpl = table.concat(frags)
-		-- print(tmpl)
-	end
-
-
-	-- restroe css part
-	if has_css then
-		local loc_e = 1
-		local css_tofill = {}
-		while true do
-			loc_b, loc_e = tmpl:find("####CSS_TOBEFILLED####", loc_e + 1)
-			if not loc_b then break end
-
-			css_tofill[#css_tofill + 1] = {loc_b, loc_e}
-		end
-
-		local frags = {}
-		local head = 1
-		for i, v in ipairs(css_tofill) do
-			frags[#frags + 1] = tmpl:sub(head, v[1] - 1)
-			frags[#frags + 1] = css_array[i] or ''
-			head = v[2] + 1
-		end
-		if head < #tmpl then
-			frags[#frags + 1] = tmpl:sub(head, -1)
-		end
-		tmpl = table.concat(frags)
-		-- print(tmpl)
-	end
-
-	return tmpl
-end
 
 -- NOTE: the instance of this class is a function
 local View = Object:extend {
@@ -293,7 +134,7 @@ local View = Object:extend {
         local tmpl_dir = findTemplDir(name)
         -- print('Template file dir:', tmpl_dir, name)
 
-        if os.getenv('PROD') then
+		if bamboo.config.PRODUCTION then
             local tmpf = io.loadFile(tmpl_dir, name)
             tmpf = self.preprocess(tmpf)
             return self.compileView(tmpf, name)
@@ -310,8 +151,6 @@ local View = Object:extend {
 
 	-- preprocess course
 	preprocess = function(tmpl)
-
-		local tmpl = removeSnippets(tmpl)
 
 		if tmpl:match('{:') then
             -- if there is inherited tag in page, that tag must be put in the front of this file
@@ -338,18 +177,12 @@ local View = Object:extend {
     -- @return: middle rendering function
     ------------------------------------------------------------------------
     compileView = function (tmpl, name)
-        local tmpl = ('%s{}'):format(tmpl)
+        local tmpl = ('%s{{""}}'):format(tmpl)
         local code = {'local _result, _children = {}, {}\n'}
-		local has_script, has_css = false, false
-		local script_array, css_array
-
-		-- remove scripts and csses first
-		tmpl, has_script, script_array, has_css, css_array = clearScriptsAndCsses(tmpl)
-		-- now, script_array contains all script part of a html file
 
 		-- render the rest
 		local text, block
-		for text, block in tmpl:gmatch("([^{]-)(%b{})") do
+		for text, block in lgstring.matchtagset(tmpl) do
 			local act = VIEW_ACTIONS[block:sub(1,2)]
 
 			if act then
@@ -364,10 +197,7 @@ local View = Object:extend {
 
         code[#code+1] = 'return table.concat(_result)'
         code = table.concat(code, '\n')
-        -- print(code)
-
-        -- restore scripts and csses
-		code = restoreScriptsAndCsses(code, has_script, script_array, has_css, css_array)
+        --print(code)
 
         -- compile the whole string code
         local func, err = loadstring(code, name)
@@ -387,16 +217,7 @@ local View = Object:extend {
 			end
 			setmetatable(context, {__index=_G})
 			setfenv(func, context)
-			-- return func()
-			-- add temporarily
-			local ret = func()
-			local newret = ret
-			for specials in ret:gmatch("{{[%.%w_ ]+}}") do
-				if context[specials] then newret = ret:gsub(specials, tostring(context[specials]))  end
-			end
-			
-			return newret
-			----
+			return func()
         end
     end;
 }

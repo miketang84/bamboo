@@ -1,0 +1,7 @@
+
+<table>
+	<tr><th>Name</th><th>Age</th><th>Gender</th></tr>
+	{% for _, v in ipairs(all_persons) do %}
+	<tr><td>{{v.name}}</td><td>{{v.age}}</td><td>{{v.gender}}</td></tr>
+	{% end %}
+</table>
