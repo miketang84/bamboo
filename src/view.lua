@@ -116,6 +116,10 @@ local VIEW_ACTIONS = {
             return ('_result[#_result+1] = [==[%s]==]'):format(PLUGIN_LIST[plugin_name]({}))
         end
     end,
+    
+    ['{-'] = function (code)
+		return ""
+    end,
 }
 
 
