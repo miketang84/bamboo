@@ -396,6 +396,7 @@ end
 -- @filters   
 executeFilters = function ( filters, params )
 	checkType(filters, 'table')
+	params = params or {}
 	for _, filter_name in ipairs(filters) do
 		local filter, args_list = parseFilterName(filter_name)
 		if filter then
