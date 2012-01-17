@@ -1215,7 +1215,7 @@ Model = Object:extend {
 		checkType(key, 'string')
 		local custom_key = self:isClass() and getCustomKey(self, key) or getCustomIdKey(self, key)
 
-		assert(db:exists(custom_key), '[Error] @numCustom - This custom key does not exist.')
+		if not db:exists(custom_key) then return 0 end
 		local store_type = db:type(custom_key)
 		if store_type == 'string' then
 			return 1
