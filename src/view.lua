@@ -114,13 +114,13 @@ local VIEW_ACTIONS = {
 					val = tonumber(val)
 				else
 					-- val is variable
-					val = '{{ ' + val + '}}'
+					val = '{{' + val + '}}'
 				end
                 
                 params[var] = val
             end
 
-            return ('_result[#_result+1] = [==[%s]==]'):format(PLUGIN_LIST[plugin_name](params))
+            return ('View.compileView(_result[#_result+1] = [==[%s]==])(getfenv())'):format(PLUGIN_LIST[plugin_name](params)))
         else
             -- if divider_loc is nil, means this plugin has no arguents
             plugin_name = code
