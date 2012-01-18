@@ -14,8 +14,8 @@ function main(args)
 	local npp = tonumber(params.npp) or tonumber(args.npp) or 5
 	local starti = (thepage-1) * npp + 1
 	local endi = thepage * npp
-	local pageurl = args.pageurl:sub(2, -2)
-	local callback = args.callback:sub(2, -2)
+	local pageurl = args.pageurl
+	local callback = args.callback
 	
 	-- the callback should return 2 values: html fragment and totalnum
 	local htmlcontent, totalnum = bamboo.paginator_callbacks[callback](web, req, starti, endi)

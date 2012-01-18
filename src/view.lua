@@ -105,6 +105,18 @@ local VIEW_ACTIONS = {
                 assert( var ~= '' )
                 assert( val ~= '' )
 
+                -- now, we start treate val
+                if val:sub(1,1) == '"' and val:sub(-1,-1) == '"' or val:sub(1,1) == "'" and val:sub(-1,-1) == "'" then
+                	-- val is a string
+                	val = val:sub(2, -2)
+				elseif type(tonumber(val)) == 'number' then
+					-- val is number
+					val = tonumber(val)
+				else
+					-- val is variable
+					val = '{{ ' + val + '}}'
+				end
+                
                 params[var] = val
             end
 
