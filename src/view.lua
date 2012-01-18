@@ -97,6 +97,7 @@ local VIEW_ACTIONS = {
             param_str = code:sub(divider_loc + 1)
 
             local tlist = param_str:trim():split(',')
+            local has_variable = false
             for i, v in ipairs(tlist) do
                 local v = v:trim()
                 local var, val = v:splitOut('=')
@@ -105,7 +106,7 @@ local VIEW_ACTIONS = {
                 assert( var ~= '' )
                 assert( val ~= '' )
 
-                -- now, we start treate val
+				-- now, we start treate val
                 if val:sub(1,1) == '"' and val:sub(-1,-1) == '"' or val:sub(1,1) == "'" and val:sub(-1,-1) == "'" then
                 	-- val is a string
                 	val = val:sub(2, -2)
@@ -115,17 +116,24 @@ local VIEW_ACTIONS = {
 				else
 					-- val is variable
 					val = '{{' + val + '}}'
+					has_variable = true
 				end
                 
                 params[var] = val
             end
-
-            return ('View.compileView(_result[#_result+1] = [==[%s]==])(getfenv())'):format(PLUGIN_LIST[plugin_name](params)))
+            
+            if has_variable then
+            	-- twice rendering
+            	return ('_result[#_result+1] = ([==[ %s ]==]):format(View.compileView([=[$text]=])(getfenv()))'):gsub('$text', PLUGIN_LIST[plugin_name](params))
+            else
+            	return ('_result[#_result+1] = [==[%s]==]'):format(PLUGIN_LIST[plugin_name](params))
+            end
         else
             -- if divider_loc is nil, means this plugin has no arguents
             plugin_name = code
 
             return ('_result[#_result+1] = [==[%s]==]'):format(PLUGIN_LIST[plugin_name]({}))
+
         end
     end,
     
