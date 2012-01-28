@@ -1,5 +1,4 @@
 sender_id = '####'
 io_threads = 1
-views = "views/"
-config_db = 'conf/config.sqlite'
+config_file = 'config.lua'
 WHICH_DB = 15

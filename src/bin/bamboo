@@ -24,7 +24,8 @@ local config = {}
 
 local function readSettings()
 	-- only support boot in app directory
-	local setting_file = loadfile('~/.bambooconfig') or loadfile('settings.lua') or loadfile('../settings.lua')
+	local home = os.getenv("HOME")
+	local setting_file = loadfile(home + '/.bambooconfig') or loadfile('settings.lua') or loadfile('../settings.lua')
 	if not setting_file then
 		print [[
 [Warning] You should make sure the existance of ~/.bambooconfig 
@@ -65,7 +66,7 @@ function parse_args(arg)
 	-- make the liner command line args become key value pairs
 	local function beatArgs(arg)
 		for i, opt in ipairs(arg) do
-		    local token = opt:match("\-+([a-z\-]+)")
+		    local token = opt:match("\-+([a-z\-_]+)")
 
 		    if token then
 		        last_opt = token
@@ -357,10 +358,10 @@ COMMANDS = {
 
 		ctx = ([[
 project_name = "%s"
+host = "%s"
 bamboo_dir = "%s"
 monserver_dir = "%s"
-host = "%s"
-]]):format(appname, bamboo_dir, monserver_dir, appname) .. ctx
+]]):format(appname, appname, bamboo_dir, monserver_dir) .. ctx
 		
 		local md5str = makemd5()
 		ctx = ctx:gsub('####', md5str)
@@ -369,14 +370,14 @@ host = "%s"
 		fd:write(ctx)
 		fd:close()
 		
-		-- modify the mongrel2 config file template string
-        local fd = io.open(('%s/mongrel2.conf'):format(appname), 'r')
+		-- modify the monserver config file template string
+        local fd = io.open(('%s/monconfig.lua'):format(appname), 'r')
 		local ctx = fd:read('*all')
 		fd:close()
 
 		ctx = ctx:gsub('%$PROJECT_NAME%$', appname)
 
-		local fd = io.open(('%s/mongrel2.conf'):format(appname), 'w')
+		local fd = io.open(('%s/monconfig.lua'):format(appname), 'w')
 		fd:write(ctx)
 		fd:close()
 		
@@ -600,29 +601,29 @@ host = "%s"
     
 	startserver = function (settings)
 		local servername = settings[1]
-		local config_db = settings.db or 'conf/config.sqlite'
-		local m2conf = assert(mconfig.read(config_db),
-					"Failed to load the mongrel2 config: " .. config_db) 
+		local config_file = settings.config_file or 'config.lua'
+		local _config = {}
+		setfenv(assert(loadfile(config_file), "Failed to load the monserver's config: " .. config_file), _config)()
 		
 		if not servername then
 			print("You can start the following servers:")
 			print('', 'all')
-			for _, server in ipairs(m2conf.servers) do
+			for _, server in ipairs(_config.servers) do
 				print('', server.name)
 			end
 		elseif servername == 'all' then
 			print("================== Ready to start servers ===================")
-			for _, server in ipairs(m2conf.servers) do
+			for _, server in ipairs(_config.servers) do
 				assert(server and server.name, '[ERROR] server or server.name is nil.')
-				os.execute(('m2sh start --db %s -name %s'):format(config_db, server.name))
+				os.execute(('mongrel2 %s %s'):format(config_file, server.name))
 				print('------------------------ Successful -------------------------')
 			end
 			print("OK.")
 		else
-			print("================== Ready to start servers ===================")
-			for _, server in ipairs(m2conf.servers) do
+			print("================== Ready to start server ===================")
+			for _, server in ipairs(_config.servers) do
 				if server and server.name == servername then
-					os.execute(('m2sh start --db %s -name %s'):format(config_db, server.name))
+					os.execute(('mongrel2 %s %s'):format(config_file, server.name))
 					print('------------------------ Successful -------------------------')
 				end
 			end
@@ -633,27 +634,27 @@ host = "%s"
 	
 	stopserver = function (settings)
 		local servername = settings[1]
-		local config_db = settings.db or 'conf/config.sqlite'
-		local m2conf = assert(mconfig.read(config_db),
-					"Failed to load the mongrel2 config: " .. config_db) 
+		local config_file = settings.config_file or 'config.lua'
+		local _config = {}
+		setfenv(assert(loadfile(config_file), "Failed to load the monserver's config: " .. config_file), _config)()
 					
 		if not servername then
 			print("You can stop the following servers:")
 			print('', 'all')
-			for _, server in ipairs(m2conf.servers) do
+			for _, server in ipairs(_config.servers) do
 				print('', server.name)
 			end
 		elseif servername == 'all' then
 			print("==== Ready to stop servers ====")
-			for _, server in ipairs(m2conf.servers) do
-				os.execute(('m2sh stop --db %s -name %s'):format(config_db, server.name))
+			for _, server in ipairs(_config.servers) do
+				--os.execute(('m2sh stop --db %s -name %s'):format(config_db, server.name))
 			end
 			print("OK.")
 		else
-			print("==== Ready to stop servers ====")
-			for _, server in ipairs(m2conf.servers) do
+			print("==== Ready to stop server ====")
+			for _, server in ipairs(_config.servers) do
 				if server and server.name == servername then
-					os.execute(('m2sh stop --db %s -name %s'):format(config_db, server.name))
+					--os.execute(('m2sh stop --db %s -name %s'):format(config_db, server.name))
 				end
 			end
 			print("OK.")
@@ -661,12 +662,14 @@ host = "%s"
 		
 	end;
     
+    --[[
     loadconfig = function (settings)
 		local servername = settings[1] or 'conf/mongrel2.conf'
-		local config_db = settings[2] or 'conf/config.sqlite'
+		local config_file = settings[2] or 'config.lua'
 		
 		os.execute(("m2sh load -config %s -db %s"):format(servername, config_db))
     end;
+    --]]
 
 	importadmin = function (settings)
         readSettings()

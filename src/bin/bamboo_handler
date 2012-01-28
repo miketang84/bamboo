@@ -405,9 +405,10 @@ local function collectConfig(config)
     -- make allowed_methods_header
 	config.allowed_methods_header = table.concat(allowed, ' ')
 	
+	config.config_file = config.config_file or "config.lua"
 	if config.monserver_dir then
-		-- format full directory of config_db, to find mongrel2's configuration in that sqlite3 db file
-		config.config_db = config.monserver_dir + '/' + config.config_db
+		-- format full directory of config_file, to find mongrel2's configuration
+		config.config_file = config.monserver_dir + '/' + config.config_file
 	end
 
 	return config

@@ -1,5 +1,4 @@
 local mongrel2 = require 'mongrel2'
-local mconfig = require 'mongrel2.config'
 
 module('bamboo.m2', package.seeall)
 
@@ -21,10 +20,12 @@ end
 -- 
 ------------------------------------------------------------------------
 function loadConfig(config)
-    local m2conf = assert(mconfig.read(config.config_db),
-        "Failed to load the mongrel2 config: " .. config.config_db)
+	local config_file = loadfile(config.config_file)
+	-- release the global variables to config table
+	setfenv(assert(config_file, "Failed to load monserver config file."), config)()
+	ptable(config)
 
-    local handler = findHandler(m2conf, config.route, config.host)
+    local handler = findHandler(config, config.route, config.host)
     assert(handler, "Failed to find route: " .. config.route ..
             ". Make sure you set config.host to a host in your mongrel2.conf.")
 
