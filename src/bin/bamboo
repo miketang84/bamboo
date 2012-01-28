@@ -4,8 +4,6 @@ require 'posix'
 require 'signal'
 require 'bamboo'
 require 'redis'
-local mconfig = require 'mongrel2.config'
-
         
 local env = {}
 BAMBOO_DB = nil
@@ -31,7 +29,7 @@ local function readSettings()
 [Warning] You should make sure the existance of ~/.bambooconfig 
 
 You can use:
-	bamboo config -monserver_dir your_mongrel2_dir
+	bamboo config -monserver_dir your_monserver_dir
 	bamboo config -bamboo_dir your_bamboo_dir
 
 to create this config file. Good Luck.
@@ -615,7 +613,7 @@ monserver_dir = "%s"
 			print("================== Ready to start servers ===================")
 			for _, server in ipairs(_config.servers) do
 				assert(server and server.name, '[ERROR] server or server.name is nil.')
-				os.execute(('mongrel2 %s %s'):format(config_file, server.name))
+				os.execute(('monserver %s %s'):format(config_file, server.name))
 				print('------------------------ Successful -------------------------')
 			end
 			print("OK.")
@@ -623,7 +621,7 @@ monserver_dir = "%s"
 			print("================== Ready to start server ===================")
 			for _, server in ipairs(_config.servers) do
 				if server and server.name == servername then
-					os.execute(('mongrel2 %s %s'):format(config_file, server.name))
+					os.execute(('monserver %s %s'):format(config_file, server.name))
 					print('------------------------ Successful -------------------------')
 				end
 			end
@@ -662,15 +660,6 @@ monserver_dir = "%s"
 		
 	end;
     
-    --[[
-    loadconfig = function (settings)
-		local servername = settings[1] or 'conf/mongrel2.conf'
-		local config_file = settings[2] or 'config.lua'
-		
-		os.execute(("m2sh load -config %s -db %s"):format(servername, config_db))
-    end;
-    --]]
-
 	importadmin = function (settings)
         readSettings()
 		local monserver_dir = config.monserver_dir
