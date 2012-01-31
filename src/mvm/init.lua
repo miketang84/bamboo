@@ -61,35 +61,35 @@ local function constructHtmlTable(instance, field, value, fdt)
 								<script type="text/javascript">
 								$(function(){
 										  var uploader = new qq.FileUploader({
-																				 element: $('#__upload')[0],
-																				 action: '/admin/upload',
-																				 debug: false,
-																				 sizeLimit: 500000,
-																				 maxConnections: 1,
-																				 //listElement: page_upload_list_table[0],
-																				 fileTemplate: '<div class="qq-uploading hide">' +
-																					 '<span class="qq-upload-file"></span>' +
-																					 '<span class="qq-upload-spinner"></span>' +
-																					 '<span class="qq-upload-size"></span>' +
-																					 '<a class="qq-upload-cancel" href="#">Cancel</a>' +
-																					 '<span class="qq-upload-failed-text">Failed</span>' +
-																					 '</div>',
-																				 template: '<div class="qq-uploader">' +
-																					 '<div class="qq-upload-drop-area"><span>Drop files here to upload</span></div>' +
-																					 '<div class="qq-upload-button"><a>上传</a></div>' +
-																					 '<ul class="qq-upload-list"></ul>' +
-																					 '</div>',
-																				 messages: {
-																					 typeError: "{file} 扩展名不合要求。只有扩展名为 {extensions} 的文件被允许上传。",
-																					 sizeError: "{file} 文件太大，最大限制为 {sizeLimit}。",
-																					 minSizeError: "{file} 文件太小，最小限制为 {minSizeLimit}。",
-																					 emptyError: "{file} 文件是空的，请重新选择文件。",
-																					 onLeave: "文件正在上传，如果此时离开，将会停止上传。"            
-																				 },
-																				 onComplete: function(){navTab.reload('')}		
-																							 });
-																			 });        
-																				 </script>
+									 element: $('#__upload')[0],
+									 action: '/admin/upload',
+									 debug: false,
+									 sizeLimit: 500000,
+									 maxConnections: 1,
+									 //listElement: page_upload_list_table[0],
+									 fileTemplate: '<div class="qq-uploading hide">' +
+										 '<span class="qq-upload-file"></span>' +
+										 '<span class="qq-upload-spinner"></span>' +
+										 '<span class="qq-upload-size"></span>' +
+										 '<a class="qq-upload-cancel" href="#">Cancel</a>' +
+										 '<span class="qq-upload-failed-text">Failed</span>' +
+										 '</div>',
+									 template: '<div class="qq-uploader">' +
+										 '<div class="qq-upload-drop-area"><span>Drop files here to upload</span></div>' +
+										 '<div class="qq-upload-button"><a>上传</a></div>' +
+										 '<ul class="qq-upload-list"></ul>' +
+										 '</div>',
+									 messages: {
+										 typeError: "{file} 扩展名不合要求。只有扩展名为 {extensions} 的文件被允许上传。",
+										 sizeError: "{file} 文件太大，最大限制为 {sizeLimit}。",
+										 minSizeError: "{file} 文件太小，最小限制为 {minSizeLimit}。",
+										 emptyError: "{file} 文件是空的，请重新选择文件。",
+										 onLeave: "文件正在上传，如果此时离开，将会停止上传。"            
+									 },
+									 onComplete: function(){navTab.reload('')}		
+												 });
+								 });        
+							 </script>
 
 						]==]
 				else
