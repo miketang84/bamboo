@@ -30,6 +30,10 @@ local function getFieldPattern(self, field)
 	return getNameIdPattern(self) + ':' + field
 end 
 
+local function getFieldPattern2(self, id, field)
+	return getNameIdPattern2(self, id) + ':' + field
+end 
+
 -- return the key of some string like 'User'
 --
 local function getClassName(self)
@@ -144,8 +148,8 @@ end
 --------------------------------------------------------------
 -- this function can only be called by instance
 --
-local delFromRedis = function (self)
-	local model_key = getNameIdPattern(self)
+local delFromRedis = function (self, id)
+	local model_key = id and getNameIdPattern2(self, id) or getNameIdPattern(self)
 	local index_key = getIndexKey(self)
 	
 	local fields = self.__fields
@@ -169,8 +173,8 @@ end
 --------------------------------------------------------------
 -- Fake Deletion
 --  called by instance
-local fakedelFromRedis = function (self)
-	local model_key = getNameIdPattern(self)
+local fakedelFromRedis = function (self, id)
+	local model_key = id and getNameIdPattern2(self, id) or getNameIdPattern(self)
 	local index_key = getIndexKey(self)
 	
 	local fields = self.__fields
@@ -1456,6 +1460,45 @@ Model = Object:extend {
 		return db:ttl(cache_key)
 	end;
 	
+	-- delete self instance object
+    -- self can be instance or query set
+    delById = function (self, ids)
+		I_AM_CLASS(self)
+		if bamboo.config.use_fake_deletion == true then
+			return self:fakeDelById(ids)
+		else
+			return self:trueDelById(ids)
+		end
+    end;
+    
+    fakeDelById = function (self, ids)
+    	local idtype = type(ids)
+    	if idtype == 'table' then
+    		for _, v in ipairs(ids) do
+    			v = tostring(v)
+		    	fakedelFromRedis(self, v)
+    			
+    		end
+		else
+			fakedelFromRedis(self, tostring(ids))			
+    	end
+    end;
+    
+    trueDelById = function (self, ids)
+    	local idtype = type(ids)
+    	if idtype == 'table' then
+    		for _, v in ipairs(ids) do
+    			v = tostring(v)
+		    	delFromRedis(self, v)
+    			
+    		end
+		else
+			delFromRedis(self, tostring(ids))			
+    	end
+    end;
+    
+	
+	
 	-----------------------------------------------------------------
 	-- validate form parameters by model defination
 	-- usually, params = Form:parse(req)
@@ -1888,23 +1931,26 @@ Model = Object:extend {
 
 	end;    
 	
+	-- delelte a foreign member
+	-- obj can be instance object, also can be object's id, also can be anystring.
 	delForeign = function (self, field, obj)
 		I_AM_INSTANCE(self)
 		checkType(field, 'string')
 		local fld = self.__fields[field]
+		assert(not isFalse(obj), "[Error] @delForeign. param obj must not be nil.")
 		assert(fld, ("[Error] Field %s doesn't be defined!"):format(field))
-		assert( fld.foreign, ("[Error] This field %s is not a foreign field."):format(field))
-		assert( fld.st, ("[Error] No store type setting for this foreign field %s."):format(field))
-		assert( fld.foreign == 'ANYSTRING' or obj.id, "[Error] This object doesn't contain id, it's not a valid object!")
-		assert( fld.foreign == 'ANYSTRING' or fld.foreign == 'UNFIXED' or fld.foreign == getClassName(obj), ("[Error] This foreign field '%s' can't accept the instance of model '%s'."):format(field, getClassName(obj) or tostring(obj)))
+		assert(fld.foreign, ("[Error] This field %s is not a foreign field."):format(field))
+		assert(fld.st, ("[Error] No store type setting for this foreign field %s."):format(field))
+		--assert( fld.foreign == 'ANYSTRING' or obj.id, "[Error] This object doesn't contain id, it's not a valid object!")
+		assert(fld.foreign == 'ANYSTRING' or fld.foreign == 'UNFIXED' or (type(obj) == 'table' and fld.foreign == getClassName(obj)), ("[Error] This foreign field '%s' can't accept the instance of model '%s'."):format(field, getClassName(obj) or tostring(obj)))
 
 		-- if self[field] is nil, it must be wrong somewhere
 		if isFalse(self[field]) then return nil end
 		
 		local new_id
-		if fld.foreign == 'ANYSTRING' then
-			checkType(obj, 'string')
-			new_id = obj
+		if type(obj) == 'string' or type(obj) == 'number' then
+			-- obj is id or anystring
+			new_id = tostring(obj)
 		else
 			checkType(obj, 'table')
 			if fld.foreign == 'UNFIXED' then
@@ -2017,8 +2063,6 @@ Model = Object:extend {
 
 	--- return the class name of an instance
 	classname = function (self)
-		-- I_AM_INSTANCE(self)
-		
 		return getClassName(self)
 	end;
 
