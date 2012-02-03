@@ -6,8 +6,8 @@ local function index(web, req)
     web:page(View("index.html"){})
 end
 
-URLS = { '/',
+URLS = {
     ['/'] = index,
-    ['index/'] = index,
+    ['/index/'] = index,
 }
 
