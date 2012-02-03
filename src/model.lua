@@ -1965,6 +1965,7 @@ Model = Object:extend {
 			-- we must check the equality of self[filed] and new_id before perform delete action
 			local key = getNameIdPattern(self)
 			if self[field] == new_id then
+				-- maybe here is rude
 				db:hdel(key, field)
 				self[field] = nil
 			end
