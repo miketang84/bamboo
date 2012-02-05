@@ -1060,7 +1060,7 @@ Model = Object:extend {
 					"[Error] @setCustom - In the string mode of setCustom, val should be string or number.")
 			db:set(custom_key, val)
 		else
-			checkType(val, 'table')
+			-- checkType(val, 'table')
 			if st == 'list' then
 				rdlist.save(custom_key, val)
 			elseif st == 'set' then
@@ -1138,7 +1138,7 @@ Model = Object:extend {
 		if store_type == 'string' then
 			db:set(custom_key, tostring(val))
 		else
-			checkType(val, 'table')
+			-- checkType(val, 'table')
 			if store_type == 'list' then
 				rdlist.update(custom_key, val)
 			elseif store_type == 'set' then
@@ -1256,7 +1256,7 @@ Model = Object:extend {
 		if type(vals) == 'string' or type(vals) == 'number' then
 			db:set(cache_key, vals)
 		else
-			checkType(vals, 'table')
+			-- checkType(vals, 'table')
 			local new_vals = {}
 			-- if `vals` is a list, insert its element's id into `new_vals`
 			-- ignore the uncorrent element
@@ -2265,7 +2265,17 @@ Model = Object:extend {
 		end
 		
 		return self
-	end;	
+	end;
+
+	querySetIds = function (self)
+		I_AM_QUERY_SET(self)
+		local ids = List()
+		for _, v in ipairs(self) do
+			ids:append(v.id)
+		end
+		return ids
+	end;
+	
 }
 
 

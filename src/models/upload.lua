@@ -4,6 +4,7 @@ module(..., package.seeall)
 
 require 'posix'
 local http = require 'lglib.http'
+local normalizePath = require('lglib.path').normalize
 
 local Model = require 'bamboo.model'
 local Form = require 'bamboo.form'
@@ -40,7 +41,7 @@ local function savefile(t)
 	local req, file_obj = t.req, t.file_obj
 
 	local dest_dir = t.dest_dir and ('media/uploads/' + t.dest_dir + '/') or 'media/uploads/'
-	dest_dir = string.trailingPath(dest_dir)
+	dest_dir = normalizePath(dest_dir)
 
 	local prefix = t.prefix or ''
 	local postfix = t.postfix or ''

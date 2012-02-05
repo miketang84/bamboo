@@ -103,14 +103,7 @@ end
 checkURLS(URLS)
 
 
-local function trailingPath(path)
-	local path = path:gsub('//+', '/')
-	if path:sub(-1) ~= '/' then
-		path = ('%s/'):format(path)
-	end
-	
-	return path
-end
+local normalizePath = require('lglib.path').normalize
 
 -- urls processing work
 local function makeUrlHandlerMapping(URLS)
@@ -121,7 +114,7 @@ local function makeUrlHandlerMapping(URLS)
 	for k, v in pairs(URLS) do
 		local url_t = base + k
 		-- remove abundant '/'
-		url_t = trailingPath(url_t)
+		url_t = normalizePath(url_t)
 		
 		-- separate the pattern format from normal concrete format
 		if url_t:find('%[?%%[%%%-_a-zA-Z]+%]?%+?') then
@@ -339,7 +332,7 @@ local function run(conn, config)
 					-- here generate connection id, that is cookie identifier, and also session id
                     conn_id = ident(req)
 					-- normalize the path's format
-					path = trailingPath(req.path)
+					path = normalizePath(req.path)
 
 					req.method = req.headers.METHOD
 					req.path = path

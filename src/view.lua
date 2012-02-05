@@ -96,13 +96,10 @@ local VIEW_ACTIONS = {
             plugin_name = code:sub(1, divider_loc - 1)
             param_str = code:sub(divider_loc + 1)
 
-            local tlist = param_str:trim():split(',')
+            local tlist = param_str:splittrim(',')
             local has_variable = false
             for i, v in ipairs(tlist) do
-                local v = v:trim()
-                local var, val = v:splitOut('=')
-                var = var:trim()
-                val = val:trim()
+                local var, val = unpack(v:splittrim('='))
                 assert( var ~= '' )
                 assert( val ~= '' )
 
