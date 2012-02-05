@@ -129,11 +129,11 @@ local getFromRedis = function (self, model_key)
 			-- in redis, we don't save MANY foreign key in db, but we want to fill them when
 			-- form lua object
 			if st == 'MANY' then
-				data[k] = 'FOREIGN MANY'
+				data[k] = 'FOREIGN MANY ' .. getClassName(self)
 			elseif st == 'FIFO' then
-				data[k] = 'FOREIGN FIFO'
+				data[k] = 'FOREIGN FIFO ' .. getClassName(self)
 			elseif st == 'ZFIFO' then
-				data[k] = 'FOREIGN ZFIFO'
+				data[k] = 'FOREIGN ZFIFO ' .. getClassName(self)
 			end
 		end
 	end
