@@ -23,7 +23,11 @@ local config = {}
 local function readSettings()
 	-- only support boot in app directory
 	local home = os.getenv("HOME")
-	local setting_file = loadfile(home + '/.bambooconfig') or loadfile('settings.lua') or loadfile('../settings.lua')
+	local global_configfile = loadfile(home + '/.bambooconfig')
+	if global_configfile then
+		setfenv(assert(global_configfile), config)()
+	end
+	local setting_file = loadfile('settings.lua')
 	if not setting_file then
 		print [[
 [Warning] You should make sure the existance of ~/.bambooconfig 
@@ -39,8 +43,6 @@ to create this config file. Good Luck.
 	end
 	setfenv(assert(setting_file), config)()
 	config.bamboo_dir = config.bamboo_dir or '/usr/local/share/lua/5.1/bamboo/'
-	config.monserver_dir = config.monserver_dir
-
 
 	-- check whether have a global production setting
 	local production = loadfile('/etc/bamboo_production')

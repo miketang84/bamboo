@@ -3,7 +3,7 @@ module (..., package.seeall)
 function main(args)
 
 	assert(type(args.pageurl) == 'string', '[Error] pageurl missing in plugin paginator.')
-	assert(type(args.callback) == 'string' and type(bamboo.paginator_callbacks[args.callback:sub(2, -2)]) == 'function', '[Error] callback missing in plugin paginator.')
+	assert(type(args.callback) == 'string' and type(bamboo.paginator_callbacks[args.callback]) == 'function', '[Error] callback missing in plugin paginator.')
 	
 	local params = req.PARAMS
 	
