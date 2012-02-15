@@ -37,7 +37,7 @@ $(document).ready(function() {
 		return false;
 	});
 	
-	$('a', paginator_wrapper).click(function () {
+	$('.paginator a', paginator_wrapper).click(function () {
 		var queryjson = {};
 		if ($(this).hasClass('paginator_head')) {
 			queryjson = {thepage: 1, npp: npp,	totalpages: totalpages};

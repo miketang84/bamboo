@@ -10,6 +10,12 @@ local HOSTID = posix.hostid()
 local RNG_BYTES = 8 						-- 64 bits of randomness should be good
 local RNG_DEVICE = '/dev/urandom'
 
+local rdlist = require 'bamboo.redis.list'
+local rdset = require 'bamboo.redis.set'
+local rdzset = require 'bamboo.redis.zset'
+local rdfifo = require 'bamboo.redis.fifo'
+local rdzfifo = require 'bamboo.redis.zfifo'
+local rdhash = require 'bamboo.redis.hash'
 
 local db = BAMBOO_DB
 -- Thouge Session is not a model, but we use model way to process it
@@ -106,7 +112,7 @@ local Session = Object:extend {
             db:hset(session_key, 'session_id', req.session_id)
         end
 
-        local session = db:hgetall(session_key)
+        local session = Session:get(req.session_id)
         -- in session, we could not use User model to record something,
 		-- because session is lower api, and shouldn't be limited as User model
         if session['user_id'] then
@@ -127,21 +133,58 @@ local Session = Object:extend {
 
     get = function (self, session_id)
         local session_key = PREFIX + (session_id or req.session_id)
-        db:expire(session_key, bamboo.config.expiration or SMALL_EXPIRE_TIME)
-        return db:hgetall(session_key)
-    end;
-
-    setKey = function (self, key, value, session_id)
-        checkType(key, value, 'string', 'string')
-        local session_key = PREFIX + (session_id or req.session_id)
-        
         local session_t = db:hgetall(session_key)
-        session_t[key] = value
+        
+        local ext_key
         for k, v in pairs(session_t) do
-            db:hset(session_key, k, v)
+        	if v == "__list__" then
+				ext_key = ("%s:%s:list"):format(session_key, k)
+        		session_t[k] = rdlist.retrieve(ext_key)
+			elseif v == "__set__" then
+				ext_key = ("%s:%s:set"):format(session_key, k)
+        		session_t[k] = rdset.retrieve(ext_key)			
+			elseif v == "__zset__" then
+				ext_key = ("%s:%s:zset"):format(session_key, k)			
+        		session_t[k] = rdzset.retrieve(ext_key)					
+        	end
         end
         
-        req.session = session_t
+        db:expire(session_key, bamboo.config.expiration or SMALL_EXPIRE_TIME)
+        return session_t
+    end;
+
+    setKey = function (self, key, value, st, session_id)
+        checkType(key, 'string')
+        local session_key = PREFIX + (session_id or req.session_id)
+        local st = st or 'string'
+		local ext_key = ("%s:%s:%s"):format(session_key, key, st)
+        
+        --local session_t = db:hgetall(session_key)
+        --session_t[key] = value
+        --for k, v in pairs(session_t) do
+        --end
+
+		if st == 'string' then
+			assert( isNumOrStr(value),
+					"[Error] @Session:setKey - Value should be string or number.")
+            db:hset(session_key, key, value)
+		else
+			-- checkType(val, 'table')
+			if st == 'list' then
+				rdlist.save(ext_key, value)
+				db:hset(session_key, key, "__list__")
+			elseif st == 'set' then
+				rdset.save(ext_key, value)
+				db:hset(session_key, key, "__set__")
+			elseif st == 'zset' then
+				rdzset.save(ext_key, value)
+				db:hset(session_key, key, "__zset__")
+			else
+				error("[Error] @Session:setKey - st must be one of 'string', 'list', 'set' or 'zset'")
+			end
+		end
+        
+        --req.session = session_t
         db:expire(session_key, bamboo.config.expiration or SMALL_EXPIRE_TIME)
         return true
     end;
@@ -182,7 +225,7 @@ local Session = Object:extend {
 
 	parseSessionId = parseSessionId;
 	
-	setExpiration = function (seconds)
+	setExpiration = function (self, seconds)
 		checkType(seconds, 'number')
 		bamboo.config.expiration = seconds
 	end;
