@@ -1948,7 +1948,7 @@ Model = Object:extend {
 		if isFalse(self[field]) then return nil end
 		
 		local new_id
-		if type(obj) == 'string' or type(obj) == 'number' then
+		if isStrOrNum(obj) then
 			-- obj is id or anystring
 			new_id = tostring(obj)
 		else
@@ -2003,9 +2003,9 @@ Model = Object:extend {
 		if isFalse(self[field]) then return nil end
 
 		local new_id
-		if fld.foreign == 'ANYSTRING' then
-			checkType(obj, 'string')
-			new_id = obj
+		if isStrOrNum(obj) then
+			-- obj is id or anystring
+			new_id = tostring(obj)
 		else
 			checkType(obj, 'table')
 			if fld.foreign == 'UNFIXED' then

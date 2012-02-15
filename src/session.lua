@@ -165,7 +165,7 @@ local Session = Object:extend {
         --end
 
 		if st == 'string' then
-			assert( isNumOrStr(value),
+			assert( isStrOrNum(value),
 					"[Error] @Session:setKey - Value should be string or number.")
             db:hset(session_key, key, value)
 		else
