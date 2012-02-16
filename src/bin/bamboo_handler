@@ -54,6 +54,7 @@ local is_production = loadfile('/etc/bamboo_production')
 if is_production then
 	config.PRODUCTION = true
 end
+bamboo.config = config
 
 local redis = require 'bamboo.redis'
 
@@ -424,7 +425,7 @@ local function start(config)
 end
 
 collectConfig(config)
-bamboo.config = config
+--bamboo.config = config
 bamboo.EXPORT_FOR_TESTING = {
 	config = config,
 	run = run,
