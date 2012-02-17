@@ -19,14 +19,14 @@ local function form_submit(web, req)
 	person:save()
 	
 	local all_persons
-	if not MYUser:existCache('persons_list') then
+	if not MYUser:existCache('aapersons_list') then
 		-- retreive all person instance from db
 		all_persons = MYUser:all():sortBy('name')
-		MYUser:setCache('persons_list', all_persons)
+		MYUser:setCache('aapersons_list', all_persons)
 		DEBUG('-----vvvv---------')
 	else
 		DEBUG('entering cache block.')
-		all_persons = MYUser:getCache('persons_list')
+		all_persons = MYUser:getCache('aapersons_list')
 		
 	end
 	

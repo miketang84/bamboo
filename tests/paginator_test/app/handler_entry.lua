@@ -72,18 +72,18 @@ local function form_submit2(web, req, starti, endi)
 
 	
 	local all_persons
-	if not MYUser:existCache('persons_list') then
+	if not MYUser:existCache('aa_persons_list') then
 		-- retreive all person instance from db
 		all_persons = MYUser:all():sortBy('name')
-		MYUser:setCache('persons_list', all_persons)
+		MYUser:setCache('aa_persons_list', all_persons)
 		all_persons = all_persons:slice(starti, endi)
 	else
 		DEBUG('entering cache block.')
-		all_persons = MYUser:getCache('persons_list', starti, endi)
+		all_persons = MYUser:getCache('aa_persons_list', starti, endi)
 		
 	end
 	fptable(all_persons)
-	local total = MYUser:numCache('persons_list')	
+	local total = MYUser:numCache('aa_persons_list')	
 	
 	return View("item.html"){all_persons = all_persons}, total
 end
