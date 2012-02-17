@@ -25,6 +25,11 @@ DELETED:Model_name:[0-9]*  					: redis hash
 DELETED:Model_name:[0-9]*:field   	: foreign zset, list
 
 
+Session Data
+-------------------
+Session:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx					: hash
+Session:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx:field_name:type	: list, set, zset
+
 In every redis wapper module, there must be a standard API:
 
 save	 	   : create, batch import
