@@ -33,7 +33,7 @@ update = function (web, req)
 
 end
 
-del = function (web, req)
+delete = function (web, req)
 
 end
 
@@ -45,6 +45,6 @@ URLS = {
 	["/" + urlprefix + "/list/"] = list,
 	["/" + urlprefix + "/create/"] = create,
 	["/" + urlprefix + "/update/"] = update,
-	["/" + urlprefix + "/del/"] = del,
+	["/" + urlprefix + "/delete/"] = delete,
 
 }

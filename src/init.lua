@@ -41,7 +41,7 @@ end
 ------------------------------------------------------------------------
 
 local function parseFilterName( filter_name )
-	local name_part, args_part = filter_name:trim():match("^([%w_]+):? *([%w_ /%-]*)")
+	local name_part, args_part = filter_name:trim():match("^([%w_]+):? *([%w_ /%-%.]*)")
 	local args_list = {}
 	if args_part and args_part ~= '' then
 		args_list = args_part:trim():split(' +')
@@ -348,6 +348,7 @@ registerModel = function (model)
 
 			for k, v in pairs(rawget(model, '__decorators') or {}) do
 				if decoratorSet:has(k) then
+					-- add decorator wrapper function to model self
 					model[k] = footprintfunc(v(model[k]), k)
 				end
 			end
@@ -422,7 +423,7 @@ end
 ------------------------------------------------------------------------
 PERMISSION_LIST = {}
 
-function executePermissionsCheck(perms)
+function executePermissionCheck(perms)
 	local permission_flag = true
 	local user = req.user
 	if user then

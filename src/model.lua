@@ -1173,7 +1173,7 @@ Model = Object:extend {
 		
 	end;
 	
-	addCustomMember = function (self, key, val)
+	addCustomMember = function (self, key, val, score)
 		I_AM_CLASS_OR_INSTANCE(self)
 		checkType(key, 'string')
 		local custom_key = self:isClass() and getCustomKey(self, key) or getCustomIdKey(self, key)
@@ -1187,7 +1187,7 @@ Model = Object:extend {
 		elseif store_type == 'set' then
 			rdset.add(custom_key, val)
 		elseif store_type == 'zset' then
-			rdzset.add(custom_key, val)
+			rdzset.add(custom_key, val, score)
 		elseif store_type == 'hash' then
 			rdhash.add(custom_key, val)
 		end
@@ -2215,7 +2215,7 @@ Model = Object:extend {
 		
 		
 		local fields = self.__fields
-		if not fields then prift('[Warning] This model has no __fields.'); return nil end
+		if not fields then print('[Warning] This model has no __fields.'); return nil end
 		-- if already exist, can not override it
 		-- ensure the added is new field
 		if not fields[field_name] then
@@ -2249,6 +2249,7 @@ Model = Object:extend {
 		-- get field description table
 		db:del(dfield)
 		db:lrem(dfindex, 0, field_name)
+		self.__fields[field_name] = nil
 		
 		return self
 	end;
