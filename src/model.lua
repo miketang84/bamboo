@@ -1266,7 +1266,7 @@ Model = Object:extend {
 			-- for number, it contains enough
 			-- for others, it doesn't contain enough
 			-- so, we use `orders` to specify the order info
-			if #vals > 1 then
+			if #vals >= 1 then
 				if isValidInstance(vals[1]) then
 					-- save instances' id
 					for i, v in ipairs(vals) do
