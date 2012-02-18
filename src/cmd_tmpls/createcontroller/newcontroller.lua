@@ -5,46 +5,46 @@ local $MODEL = require "models.$CONTROLLER"
 local urlprefix = "$CONTROLLER"
 
 -- default methods
-newView = function (web, req)
+newview = function (web, req)
 
 end
 
-editView = function (web, req)
+editview = function (web, req)
 
 end
 
-delView = function (web, req)
+delview = function (web, req)
 
 end
 
-getInstance = function (web, req)
+item = function (web, req)
 
 end
 
-getInstances = function (web, req)
+list = function (web, req)
 
 end
 
-createInstance = function (web, req)
+create = function (web, req)
 
 end
 
-updateInstance = function (web, req)
+update = function (web, req)
 
 end
 
-delInstance = function (web, req)
+del = function (web, req)
 
 end
 
 URLS = {
-	["/" + urlprefix + "/newView/"] = newView,
-	["/" + urlprefix + "/editView/"] = editView,
-	["/" + urlprefix + "/delView/"] = delView,
-	["/" + urlprefix + "/getInstance/"] = getInstance,
-	["/" + urlprefix + "/getInstances/"] = getInstances,
-	["/" + urlprefix + "/createInstance/"] = createInstance,
-	["/" + urlprefix + "/updateInstance/"] = updateInstance,
-	["/" + urlprefix + "/delInstance/"] = delInstance,
+	["/" + urlprefix + "/newview/"] = newview,
+	["/" + urlprefix + "/editview/"] = editview,
+	["/" + urlprefix + "/delview/"] = delview,
+	["/" + urlprefix + "/item/"] = item,
+	["/" + urlprefix + "/list/"] = list,
+	["/" + urlprefix + "/create/"] = create,
+	["/" + urlprefix + "/update/"] = update,
+	["/" + urlprefix + "/del/"] = del,
 
 }

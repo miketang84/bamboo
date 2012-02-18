@@ -2145,12 +2145,14 @@ Model = Object:extend {
 		local cached_ids = db:zrange(cache_saved_key, 0, -1)
 		local head = db:hget(getNameIdPattern2(self, cached_ids[1]), field)
 		local tail = db:hget(getNameIdPattern2(self, cached_ids[#cached_ids]), field)
+		assert(head and tail, "[Error] @addToCacheAndSortBy. the object referring to head or tail of cache list may be deleted, please check.")
 		DEBUG(head, tail)
 		local order_type = 'asc'
 		local field_value, stop_id
 		local insert_position = 0
 		
 		if head > tail then order_type = 'dsc' end
+		-- should always keep `a` and `b` have the same type
 		local sort_func = sort_func or function (a, b)
 			if order_type == 'asc' then
 				return a > b
