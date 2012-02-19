@@ -26,11 +26,9 @@ local function readSettings()
 	local global_configfile = loadfile(home + '/.bambooconfig')
 	if global_configfile then
 		setfenv(assert(global_configfile), config)()
-	end
-	local setting_file = loadfile('settings.lua')
-	if not setting_file then
+	else
 		print [[
-[Warning] You should make sure the existance of ~/.bambooconfig 
+[Error] You should make sure the existance of ~/.bambooconfig 
 
 You can use:
 	bamboo config -monserver_dir your_monserver_dir
@@ -38,10 +36,19 @@ You can use:
 
 to create this config file. Good Luck.
 ]]
-
 		os.exit()
 	end
-	setfenv(assert(setting_file), config)()
+	
+	local setting_file = loadfile('settings.lua') or loadfile('../settings.lua')
+	if not setting_file then
+		print [[
+[Error] You should ensure the existance of settings.lua in current directory or above directory!
+]]
+
+		os.exit()
+	else
+		setfenv(assert(setting_file), config)()
+	end
 	config.bamboo_dir = config.bamboo_dir or '/usr/local/share/lua/5.1/bamboo/'
 
 	-- check whether have a global production setting
