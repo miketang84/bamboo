@@ -24,6 +24,7 @@ function reportError(conn, request, err, state)
 		source = info.source
     end
     
+    --[[
     -- print(request.code)
     local errorlinenum = tonumber(string.match(trace, ":(%d+):"))
     -- print(errorlinenum)
@@ -34,6 +35,7 @@ function reportError(conn, request, err, state)
     else
     	io.write('\n')
     end
+    --]]
     print("Error", err)
 
 -- Error info template
