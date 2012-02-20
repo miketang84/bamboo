@@ -3,7 +3,6 @@ local lgstring = require "lgstring"
 
 local PLUGIN_LIST = bamboo.PLUGIN_LIST
 
-
 local function getlocals(context)
 	local i = 1
 	while true do
@@ -219,6 +218,8 @@ local View = Object:extend {
         code[#code+1] = 'return table.concat(_result)'
         code = table.concat(code, '\n')
         --print(code)
+        -- assigned to req to report error if error
+        req.code = code
 
         -- compile the whole string code
         local func, err = loadstring(code, name)

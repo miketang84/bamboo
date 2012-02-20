@@ -72,7 +72,6 @@ _G['View'] = require 'bamboo.view'
 _G['Form'] = require 'bamboo.form'
 _G['Model'] = require 'bamboo.model'
 _G['Session'] = require 'bamboo.session'
-local errors = require 'bamboo.errors'
 local Web = require 'bamboo.web'
 
 ------------------------------------------------------------------------
@@ -290,6 +289,7 @@ local function runStateless(conn, main, req, before, after)
 			web.conn:reply_http(req, '<h2>Page error.</h2>', 500, 'Page error.', req.headers)
 			print('[Error] Page error.')
 		else
+			local errors = require 'bamboo.errors'
 			errors.reportError(conn, req, err, state)
 		end
     end
@@ -320,6 +320,7 @@ local function run(conn, config)
         if req and not err then
 			-- if http directive is not in the range of bamboo specified 
             if not config.methods[req.headers.METHOD] then
+                local errors = require 'bamboo.errors'
                 errors.basicError(conn, req, "Method Not Allowed",
                     405, "Method Not Allowed", {Allow = config.allowed_methods_header})
             else
