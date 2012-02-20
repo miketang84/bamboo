@@ -3,7 +3,7 @@ module (..., package.seeall)
 function main(args)
 
 	assert(type(args.pageurl) == 'string', '[Error] pageurl missing in plugin paginator.')
-	assert(type(args.callback) == 'string' and type(bamboo.paginator_callbacks[args.callback]) == 'function', '[Error] callback missing in plugin paginator.')
+	assert(type(args.callback) == 'string' and type(bamboo.getPluginCallbackByName(args.callback)) == 'function', '[Error] callback missing in plugin paginator.')
 	
 	local params = req.PARAMS
 	
@@ -18,7 +18,7 @@ function main(args)
 	local callback = args.callback
 	
 	-- the callback should return 2 values: html fragment and totalnum
-	local htmlcontent, totalnum = bamboo.paginator_callbacks[callback](web, req, starti, endi)
+	local htmlcontent, totalnum = bamboo.getPluginCallbackByName(callback)(web, req, starti, endi)
 	
 	if totalnum then
 		totalpages = math.ceil(totalnum/npp)

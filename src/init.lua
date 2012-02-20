@@ -21,9 +21,9 @@ CACHE_LIFE = 1800
 -- global URLS definition
 URLS = {}
 
-paginator_callbacks = {}
 ------------------------------------------------------------------------
 PLUGIN_LIST = {}
+PLUGIN_CALLBACKS = {}
 
 registerPlugin = function (name, mdl)
 	checkType(name, mdl, 'string', 'table')
@@ -38,6 +38,23 @@ registerPlugin = function (name, mdl)
 		table.update(URLS, mdl.URLS)
 	end	
 end
+
+registerPluginCallback = function (name, callback)
+	checkType(name, callback, 'string', 'function')
+	assert( name ~= '', 'Plugin callback name must not be blank.' )
+	
+	if PLUGIN_CALLBACKS[name] then
+		print('[Warning] This callback name:"'.. name ..'" has been used')
+	end
+	PLUGIN_CALLBACKS[name] = callback
+	
+end
+
+getPluginCallbackByName = function (name)
+	checkType(name, 'string')
+	return PLUGIN_CALLBACKS[name]
+end
+
 ------------------------------------------------------------------------
 
 local function parseFilterName( filter_name )

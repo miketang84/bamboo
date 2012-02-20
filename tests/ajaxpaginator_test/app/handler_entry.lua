@@ -51,7 +51,7 @@ local function form_submit2(web, req, starti, endi)
 	return View("item.html"){all_persons = all_persons}, total
 end
 
-bamboo.paginator_callbacks['page_callback'] = form_submit2
+bamboo.registerPluginCallback('page_callback', form_submit2)
 
 function test (web, req)
 	local x, y, z = 10, 100, 1000
