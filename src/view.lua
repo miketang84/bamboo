@@ -32,7 +32,6 @@ local VIEW_ACTIONS = {
     end,
     -- embeding lua variables
     ['{{'] = function(code)
-
         return ('_result[#_result+1] = %s'):format(code)
     end,
     -- containing child template

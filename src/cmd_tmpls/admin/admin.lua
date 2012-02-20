@@ -447,7 +447,7 @@ local function logout(web, req, e)
 end
 
 function init()
-	local flag = bamboo.executeFilters{'_admin_logined_'} and bamboo.executePermissionsCheck{'_sys_admin_'}
+	local flag = bamboo.executeFilters{'_admin_logined_'} and bamboo.executePermissionCheck{'_sys_admin_'}
 	-- local flag = true
 	return flag
 end
