@@ -24,19 +24,18 @@ function reportError(conn, request, err, state)
 		source = info.source
     end
     
-    --[[
-    -- print(request.code)
-    local errorlinenum = tonumber(string.match(trace, ":(%d+):"))
-    -- print(errorlinenum)
-    local errorline = string.split(request.code, '\n')[errorlinenum]
-    io.write("Error\t[errorline]: ", errorline, '\t')
-    if errorline:find(" = ") then
-    	print("[occured at]: ", errorline:sub(errorline:find(" = ") + 3, -1))
-    else
-    	io.write('\n')
+    local erroutput = ""
+    local target = err:match("%[%w* *\"(%S+)\"%]:")
+    local errorlinenum = tonumber(string.match(err, ":(%d+):"))
+    if target and errorlinenum then
+    	local elines = string.split(request.viewcode[target], '\n')
+    	local errorline = elines[errorlinenum]
+    	if errorline then
+    		erroutput = "[Error] error occured at: " .. (errorline:match("_result%[%#_result%+1%] = (.+)$") or errorline)
+		end
     end
-    --]]
-    print("Error", err)
+    print(erroutput)
+    print("[Error]", err)
 
 -- Error info template
 local ERROR_PAGE = View.compileView [[
@@ -45,6 +44,7 @@ local ERROR_PAGE = View.compileView [[
 <p>There was an error processing your request.</p>
 <h1>Stack Trace</h1>
 <pre>
+{{ erroutput }} <br/>
 {{ err }}
 </pre>
 <h1>Source Code</h1>
@@ -59,7 +59,9 @@ local ERROR_PAGE = View.compileView [[
 </html>
 ]]
 
-    local page = ERROR_PAGE {err=trace, source=source, request=pretty_req}
+	-- remove the viewcode part to show on page.
+	request.viewcode = nil
+    local page = ERROR_PAGE {err=trace, source=source, request=pretty_req, erroutput = erroutput}
     conn:reply_http(request, page, 500, "Internal Server Error")
 end
 

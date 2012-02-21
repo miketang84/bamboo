@@ -38,10 +38,8 @@ local VIEW_ACTIONS = {
     ['{('] = function(code)
         return ([[
             if not _children[%s] then
-                local View = require 'bamboo.view'
                 _children[%s] = View(%s)
             end
-
             _result[#_result+1] = _children[%s](getfenv())
         ]]):format(code, code, code, code)
     end,
@@ -216,9 +214,11 @@ local View = Object:extend {
 
         code[#code+1] = 'return table.concat(_result)'
         code = table.concat(code, '\n')
-        --print(code)
-        -- assigned to req to report error if error
-        req.code = code
+        --print('-----', code)
+        -- recode each middle view code to request
+        if type(name) == 'string' then
+        	req.viewcode[name] = code
+		end
 
         -- compile the whole string code
         local func, err = loadstring(code, name)
