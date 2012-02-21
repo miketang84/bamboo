@@ -5,7 +5,6 @@ local View = require 'bamboo.view'
 
 -- Reports errors back to the browser so the user has something to work with.
 function reportError(conn, request, err, state)
-    local pretty_req = "Request\n " +  serialize(request or {})
     local trace = debug.traceback(state.controller, err)
     local info
     local source = nil
@@ -61,6 +60,7 @@ local ERROR_PAGE = View.compileView [[
 
 	-- remove the viewcode part to show on page.
 	request.viewcode = nil
+    local pretty_req = "Request\n " +  serialize(request or {})
     local page = ERROR_PAGE {err=trace, source=source, request=pretty_req, erroutput = erroutput}
     conn:reply_http(request, page, 500, "Internal Server Error")
 end
