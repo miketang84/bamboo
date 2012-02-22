@@ -115,7 +115,6 @@ This file looks usually like follows:
 - Start mongrel2;
 
 	`cd ~/workspace/monserver`  
-	`bamboo loadconfig`  
 	`bamboo startserver main`  
 If mongrel2 server occupy this terminal, open a new terminal before next step;  
 
@@ -149,7 +148,7 @@ Please see [INSTALL](https://github.com/daogangtang/bamboo/blob/master/doc/0.INS
 ## Mailing List
 Bamboo use the following mailing list:
   
-bamboo@librest.com
+bamboo-global@googlegroups.com		# for global world people
+bamboo-cn@googlegroups.com			# for Chinese people
 
-You can send mail with anything to it, when you receive an reply mail, you reply this mail again, then you will join into this mailing list automatically.
-
+Welcome to discuss.
