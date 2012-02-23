@@ -1987,6 +1987,21 @@ Model = Object:extend {
 	
 		return self
 	end;
+	
+	clearForeign = function (self, field)
+		I_AM_INSTANCE(self)
+		checkType(field, 'string')
+		local fld = self.__fields[field]
+		assert(fld, ("[Error] Field %s doesn't be defined!"):format(field))
+		assert(fld.foreign, ("[Error] This field %s is not a foreign field."):format(field))
+		assert(fld.st, ("[Error] No store type setting for this foreign field %s."):format(field))
+
+		local key = getFieldPattern(self, field)		
+		-- delete the foreign key
+		db:del(key)
+		
+		return self		
+	end;
 
 	-- check whether some obj is already in foreign list
 	-- instance:inForeign('some_field', obj)
