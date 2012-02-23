@@ -116,7 +116,8 @@ end
 -- @param model_key:
 --
 local getFromRedis = function (self, model_key)
-	-- here, the data table contain ordinary field, ONE foreign key, but not MANY foreign key 
+	-- here, the data table contain ordinary field, ONE foreign key, but not MANY foreign key
+	-- all fields are strings 
 	local data = db:hgetall(model_key)
 	if not isValidInstance(data) then print("[Warning] Can't get object by", model_key); return nil end
 
@@ -124,7 +125,11 @@ local getFromRedis = function (self, model_key)
 	for k, fld in pairs(fields) do
 		-- ensure the correction of field description table
 		checkType(fld, 'table')
-		if fld.foreign then
+		-- convert the number type field
+		if fld.type == 'number' then
+			data[k] = tonumber(data[k])
+			
+		elseif fld.foreign then
 			local st = fld.st
 			-- in redis, we don't save MANY foreign key in db, but we want to fill them when
 			-- form lua object
