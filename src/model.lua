@@ -120,7 +120,9 @@ local getFromRedis = function (self, model_key)
 	-- all fields are strings 
 	local data = db:hgetall(model_key)
 	if not isValidInstance(data) then print("[Warning] Can't get object by", model_key); return nil end
-
+	-- make id type is number
+	data[id] = tonumber(data.id)
+	
 	local fields = self.__fields
 	for k, fld in pairs(fields) do
 		-- ensure the correction of field description table
@@ -583,71 +585,72 @@ Model = Object:extend {
 	-- make every object creatation from here: every object has the 'id' and 'name' fields
 	init = function (self)
 		-- get the latest instance counter
+		-- id type is number
 		self.id = self:getCounter() + 1
 
 		return self 
 	end;
     
 
-	toHtml = function (self, params)-- field)
-				 I_AM_INSTANCE(self)
-				 params = params or {}
-				 
-				 if params.field and type(params.field) == 'string' then
-					 for k, v in pairs(params.attached) do
-						 if v == 'html_class' then
-							 self.__fields[params.field][k] = self.__fields[params.field][k] .. ' ' .. v
-						 else
-							 self.__fields[params.field][k] = v
-						 end
-					 end
-					 
-					 return (self.__fields[params.field]):toHtml(self, params.field, params.format)
+	toHtml = function (self, params)
+		 I_AM_INSTANCE(self)
+		 params = params or {}
+		 
+		 if params.field and type(params.field) == 'string' then
+			 for k, v in pairs(params.attached) do
+				 if v == 'html_class' then
+					 self.__fields[params.field][k] = self.__fields[params.field][k] .. ' ' .. v
+				 else
+					 self.__fields[params.field][k] = v
 				 end
-				 
-				 params.attached = params.attached or {}
-				 
-				 local output = ''
-				 for field, fdt_old in pairs(self.__fields) do
-					 local fdt = table.copy(fdt_old)
-					 setmetatable(fdt, getmetatable(fdt_old))
-					 for k, v in pairs(params.attached) do
-						 if type(v) == 'table' then
-							 for key, val in pairs(v) do
-								 fdt[k] = fdt[k] or {}
-								 fdt[k][key] = val
-							 end
-						 else
-							 fdt[k] = v
-						 end
+			 end
+			 
+			 return (self.__fields[params.field]):toHtml(self, params.field, params.format)
+		 end
+		 
+		 params.attached = params.attached or {}
+		 
+		 local output = ''
+		 for field, fdt_old in pairs(self.__fields) do
+			 local fdt = table.copy(fdt_old)
+			 setmetatable(fdt, getmetatable(fdt_old))
+			 for k, v in pairs(params.attached) do
+				 if type(v) == 'table' then
+					 for key, val in pairs(v) do
+						 fdt[k] = fdt[k] or {}
+						 fdt[k][key] = val
 					 end
+				 else
+					 fdt[k] = v
+				 end
+			 end
 
-					 local flag = true
-					 params.filters = params.filters or {}
-					 for k, v in pairs(params.filters) do
-						 -- to redundant query condition, once meet, jump immediately
-						 if not fdt[k] then
-							 -- if k == 'vl' then self.__fields[field][k] = 0 end
-							 if k == 'vl' then fdt[k] = 0 end
-						 end
-
-						 if type(v) == 'function' then
-							 flag = v(fdt[k] or '')
-							 if not flag then break end
-						 else
-							 if fdt[k] ~= v then flag=false; break end
-						 end
-					 end
-
-					 if flag then
-						 output = output .. fdt:toHtml(self, field, params.format or nil)
-					 end
-
+			 local flag = true
+			 params.filters = params.filters or {}
+			 for k, v in pairs(params.filters) do
+				 -- to redundant query condition, once meet, jump immediately
+				 if not fdt[k] then
+					 -- if k == 'vl' then self.__fields[field][k] = 0 end
+					 if k == 'vl' then fdt[k] = 0 end
 				 end
 
-				 return output
-			 end,
-	
+				 if type(v) == 'function' then
+					 flag = v(fdt[k] or '')
+					 if not flag then break end
+				 else
+					 if fdt[k] ~= v then flag=false; break end
+				 end
+			 end
+
+			 if flag then
+				 output = output .. fdt:toHtml(self, field, params.format or nil)
+			 end
+
+		 end
+
+		 return output
+	 end,
+
 
 	--------------------------------------------------------------------
 	-- Class Functions. Called by class object.
@@ -803,17 +806,42 @@ Model = Object:extend {
 	-- return the first instance found by query set
 	--
 	get = function (self, query_args, is_rev)
-		I_AM_CLASS(self)
-		local id = query_args.id
-		
+		I_AM_CLASS_OR_QUERY_SET(self)
+		local is_query_table = (type(query_args) == 'table')
+		local is_query_set = false
+		if isList(self) then is_query_set = true end
+		local logic = 'and'
+		local id = nil
+
+		if is_query_table then
+			-- get the id if exist
+			if query_args and query_args['id'] then
+				id = query_args.id
+				query_args['id'] = nil 
+			end
+			-- normalize the 'and' and 'or' logic
+			if query_args[1] == 'or' then
+				logic = 'or'
+				query_args[1] = nil
+			end
+		else
+			-- query_arg is function
+			checkType(query_args, 'function')
+		end
+
 		-- if there is 'id' field in query set, use id as the main query key
 		-- because id is stored as part of the key, so need to treat it separately 
 		if id then
-			-- remove the id field, for later we will use query_args to continue query
-			query_args['id'] = nil
-
+			local obj = nil
+			if is_query_set then
+				-- if self is query set, we think of all_ids as object list, rather than id string list
+				for i, v in ipairs(self) do
+					if tonumber(v.id) == tonumber(id) then obj = v end
+				end
+			else
+				obj = self:getById( id )
+			end
 			-- retrieve this instance by id
-			local obj = self:getById( id )
 			if not isValidInstance(obj) then return nil end
 			
 			local fields = obj.__fields
@@ -834,27 +862,57 @@ Model = Object:extend {
 
 			-- if process walk here, means having found an instance object
 			return obj
-		
 		else
-			-- if there is no id in query parameters
-			local all_ids = self:allIds(is_rev)
-			local getById = self.getById 
-			for _, kk in ipairs(all_ids) do
-				-- get an object by key 'kk'
-				local obj = getById(self, kk)
-				assert(isValidInstance(obj), "[Error] object must not be empty.")
-				local flag = true
-				local fields = obj.__fields
-				for k, v in pairs(query_args) do
-					if not fields[k] then flag=false; break end
-					
-					if type(v) == 'function' then
-						flag = v(obj[k])
-						if not flag then break end
-					else
-						if obj[k] ~= v then flag=false; break end
-					end
+			local all_ids
+			if is_query_set then
+				-- if self is query set, we think of all_ids as object list, rather than id string list
+				all_ids = (is_rev == 'rev') and self:reverse() or self
+			else
+				-- all_ids is id string list
+				all_ids = self:allIds(is_rev)
+			end
+
+			local getById = self.getById
+			local logic_choice = (logic == 'and')
+			for i = 1, #all_ids do
+				local flag = logic_choice
+				
+				local obj
+				if is_query_set then
+					obj = all_ids[i]
+				else
+					local kk = all_ids[i]
+					obj = getById (self, kk)
 				end
+				assert(isValidInstance(obj), "[Error] object must not be empty.")
+				local fields = obj.__fields
+				assert(not isFalse(fields), "[Error] object's description table must not be blank.")
+				
+				if is_query_table then
+					for k, v in pairs(query_args) do
+						-- to redundant query condition, once meet, jump immediately
+						if not fields[k] then flag=false; break end
+
+						if type(v) == 'function' then
+							flag = v(obj[k])
+						else
+							flag = (obj[k] == v)
+						end
+						---------------------------------------------------------------
+						-- logic_choice,       flag,      action,          append?
+						---------------------------------------------------------------
+						-- true (and)          true       next field       --
+						-- true (and)          false      break            no
+						-- false (or)          true       break            yes
+						-- false (or)          false      next field       --
+						---------------------------------------------------------------
+						if logic_choice ~= flag then break end
+					end
+				else
+					-- call this query args function
+					flag = query_args(obj)
+				end
+				
 				if flag then
 					return obj
 				end
@@ -920,7 +978,7 @@ Model = Object:extend {
 		local all_ids
 		if is_query_set then
 			-- if self is query set, we think of all_ids as object list, rather than id string list
-			all_ids = self
+			all_ids = (is_rev == 'rev') and self:reverse() or self
 		else
 			-- all_ids is id string list
 			all_ids = self:allIds(is_rev)
