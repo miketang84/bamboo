@@ -14,6 +14,7 @@ local List = require 'lglib.list'
 local FieldType = require 'bamboo.mvm.prototype'
 local util = require 'bamboo.util'
 
+config = {}
 -- for global rendering usage
 context = {}
 -- for cache life time

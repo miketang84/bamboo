@@ -241,7 +241,7 @@ end
 _G['I_AM_QUERY_SET'] = function (self)
 	if rawget(self, '__spectype') == nil 
 	and self.__spectype == 'QuerySet' 
-	and self.__typename == 'List' 
+	and self.__typename == 'list' 
 	and self.__tag == 'Bamboo.Model'
 	then return true
 	else return false
@@ -1758,7 +1758,7 @@ Model = Object:extend {
 		local fld = self.__fields[field]
 		assert(fld, ("[Error] Field %s doesn't be defined!"):format(field))
 		assert(fld.foreign, ("[Error] This field %s is not a foreign field."):format(field))
-		assert( fld.st, ("[Error] No store type setting for this foreign field %s."):format(field))
+		assert(fld.st, ("[Error] No store type setting for this foreign field %s."):format(field))
 				
 		if fld.st == 'ONE' then
 			if isFalse(self[field]) then return nil end
