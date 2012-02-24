@@ -241,9 +241,8 @@ end
 -- The bellow four assertations, they are called only by class, instance or query set
 --
 _G['I_AM_QUERY_SET'] = function (self)
-	if rawget(self, '__spectype') == nil 
-	and self.__spectype == 'QuerySet' 
-	and self.__typename == 'list' 
+	if isList(self)
+	and rawget(self, '__spectype') == nil and self.__spectype == 'QuerySet' 
 	and self.__tag == 'Bamboo.Model'
 	then return true
 	else return false
