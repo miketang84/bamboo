@@ -1,0 +1,28 @@
+
+<style>
+
+.paginator {}
+.paginator select {width: 60px; display: inline;background: #fff; border: 1px solid #aaa;}
+.paginator form {display: inline;} 
+.paginator input {width: 40px; border: 1px solid #aaa;}
+
+
+</style>
+
+
+
+<div class="paginator" npp="{{npp}}" pages="{{pages}}" >
+	<a class="paginator_head" class="paginator_item" href="/pagin/onepage/">首页</a>
+	<a class="paginator_prev" class="paginator_item" href="/pagin/onepage/">上一页</a>
+	<select class="paginator_select">
+		{% for i=1, pages do %}
+		<option value="{{i}}">{{i}}/{{pages}}</option>
+		{% end %}
+	</select>
+	<form method="post" class="paginator_form">
+		<input type="text" maxlength="4" size='4' />   
+	</form>
+
+	<a class="paginator_next" class="paginator_item" href="/pagin/onepage/">下一页</a>
+	<a class="paginator_tail" class="paginator_item" href="/pagin/onepage/">末页</a>
+</div>

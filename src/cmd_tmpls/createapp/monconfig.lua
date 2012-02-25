@@ -30,7 +30,7 @@ main = {
 settings = {	
 	['zeromq.threads'] = 1, 
 	['limits.content_length'] = 20971520, 
-	['upload.temp_store'] = '/tmp/mongrel2.upload.XXXXXX' 
+	['upload.temp_store'] = '/tmp/monserver.upload.XXXXXX' 
 }
 
 mimetypes = {}

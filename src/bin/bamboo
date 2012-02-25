@@ -366,9 +366,7 @@ COMMANDS = {
 		ctx = ([[
 project_name = "%s"
 host = "%s"
-bamboo_dir = "%s"
-monserver_dir = "%s"
-]]):format(appname, appname, bamboo_dir, monserver_dir) .. ctx
+]]):format(appname, appname) .. ctx
 		
 		local md5str = makemd5()
 		ctx = ctx:gsub('####', md5str)
