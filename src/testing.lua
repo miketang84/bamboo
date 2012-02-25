@@ -238,6 +238,9 @@ function browser(name, session_id, conn_id)
         self:send("GET", path)
         return self:expect(expect or { code = 200 })
     end
+    
+    -- alias
+    Browser.get = Browser.click
 
     function Browser:submit(path, form, expect, headers)
 		local form = form or {}
@@ -255,6 +258,8 @@ function browser(name, session_id, conn_id)
         return self:expect(expect)
     end
 
+    Browser.post = Browser.submit
+    
     function Browser:xhr(path, form, expect)
         local headers = {['x-requested-with'] = "XMLHttpRequest"}
         self:submit(path, form, headers)
