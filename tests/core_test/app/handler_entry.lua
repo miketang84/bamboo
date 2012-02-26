@@ -59,6 +59,12 @@ function test (web, req)
 	return web:page(View("test.html"){"locals"})
 end
 
+function i_am_query_set(web, req)
+	local query_set = MYUser:all()
+
+	return isQuerySet(query_set)
+end
+
 
 URLS = { '/',
     ['/'] = index,
@@ -66,6 +72,10 @@ URLS = { '/',
 	['/form_submit/'] = form_submit,
 	['/page/getInstance/'] = show,
 	['/page/getInstances/'] = plugin_paginator.jsons,
-	['/test/'] = test
+
+	-- below for auto test
+	['/test/'] = test,
+	['/test/i_am_query_set/'] = i_am_query_set,
+	
 }
 

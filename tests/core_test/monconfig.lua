@@ -1,6 +1,6 @@
-static_ajaxpaginator_test = { type="dir", base='sites/ajaxpaginator_test/', index_file='index.html', default_ctype='text/plain' }
+static_core_test = { type="dir", base='sites/core_test/', index_file='index.html', default_ctype='text/plain' }
 
-handler_ajaxpaginator_test = { type="handler", send_spec='tcp://127.0.0.1:10001',
+handler_core_test = { type="handler", send_spec='tcp://127.0.0.1:10001',
                 send_ident='ba06f707-8647-46b9-b7f7-e641d6419909',
                 recv_spec='tcp://127.0.0.1:10002', recv_ident=''}
 
@@ -11,16 +11,16 @@ main = {
     error_log="logs/error.log",
     chroot="./",
     pid_file="run/mongrel2.pid",
-    default_host="ajaxpaginator_test",
+    default_host="core_test",
     name="main",
     port=6767,
     hosts= { 
 		{   
-			name="ajaxpaginator_test",
+			name="core_test",
 			matching = "xxxxxx", 
 			routes={ 
-				['/'] = handler_ajaxpaginator_test,
-                ['/media/'] = static_ajaxpaginator_test
+				['/'] = handler_core_test,
+                ['/media/'] = static_core_test
 			} 
         },
     }

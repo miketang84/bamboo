@@ -1,5 +1,5 @@
-project_name = "ajaxpaginator_test"
-host = "ajaxpaginator_test"
+project_name = "core_test"
+host = "core_test"
 sender_id = 'c62c1bda-0816-2205-eef9-811c8e055fd1'
 io_threads = 1
 views = "views/"
