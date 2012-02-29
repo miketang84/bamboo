@@ -39,14 +39,9 @@ to create this config file. Good Luck.
 		os.exit()
 	end
 	
+	-- try to load settings.lua 
 	local setting_file = loadfile('settings.lua') or loadfile('../settings.lua')
-	if not setting_file then
-		print [[
-[Error] You should ensure the existance of settings.lua in current directory or above directory!
-]]
-
-		os.exit()
-	else
+	if setting_file then
 		setfenv(assert(setting_file), config)()
 	end
 	config.bamboo_dir = config.bamboo_dir or '/usr/local/share/lua/5.1/bamboo/'

@@ -23,6 +23,9 @@ context("Bamboo Core Functions Testing", function ()
 		context("Global Functions Defined in model.lua", function ()
 			test("isClass()", function ()
 				assert_equal(isClass(MYUser), true)
+				assert_equal(isClass({}), false)
+				local instance = MYUser:get{ id = 1}
+				assert_equal(isClass(instance), false)												
 			end)
 			test("isInstance()", function ()
 				local instance = MYUser:get{ id = 1}
