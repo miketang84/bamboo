@@ -28,5 +28,5 @@ install:
 	ln -sf ${SHAREDIR}/bamboo/bin/bamboo_handler /usr/local/bin/ 
 	# monserver dir
 	mkdir -p ${MONDIR}/logs ${MONDIR}/run ${MONDIR}/sites ${MONDIR}/tmp ${MONDIR}/sites/apptest 
-	
+	chown -R ${USER}:${USER} ${MONDIR}
 	
