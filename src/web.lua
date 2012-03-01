@@ -110,7 +110,7 @@ local Web = Object:extend {
             headers['set-cookie'] = self.req.headers['set-cookie']
         end
 
-        headers['server'] = 'Bamboo on Mongrel2'
+        headers['server'] = 'Bamboo on Monserver'
         local ctype = headers['content-type']
 
         if ctype == nil then
