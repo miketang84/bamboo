@@ -1672,7 +1672,7 @@ Model = Object:extend {
     -- self can be instance or query set
     fakeDel = function (self)
 		-- if self is query set
-		if I_AM_QUERY_SET(self) then
+		if isQuerySet(self) then
 			for _, v in ipairs(self) do
 				fakedelFromRedis(v)
 				v = nil
@@ -1688,7 +1688,7 @@ Model = Object:extend {
     -- self can be instance or query set
     trueDel = function (self)
 		-- if self is query set
-		if I_AM_QUERY_SET(self) then
+		if isQuerySet(self) then
 			for _, v in ipairs(self) do
 				delFromRedis(v)
 				v = nil
