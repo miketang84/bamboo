@@ -5,5 +5,4 @@ io_threads = 1
 views = "views/"
 config_file = 'config.lua'
 WHICH_DB = 15
-
 debug_level = 1

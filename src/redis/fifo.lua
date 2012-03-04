@@ -8,15 +8,15 @@ local List = require 'lglib.list'
 local rdlist = require 'bamboo.redis.list'
 local db = BAMBOO_DB
 
-function save( key, length, tbl )
+function save (key, tbl, length)
 
 end
 
-function update( key, length, tbl )
+function update (key, tbl, length)
 
 end
 
-function push( key, length, val )
+function push (key, val, length)
 	local len = db:llen(key)
 	
 	if len < length then

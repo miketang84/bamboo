@@ -5,7 +5,7 @@ handler_ajaxpaginator_test = { type="handler", send_spec='tcp://127.0.0.1:10001'
                 recv_spec='tcp://127.0.0.1:10002', recv_ident=''}
 
 main = {
-    bind_addr = "127.0.0.1",
+    bind_addr = "0.0.0.0",
     uuid="505417b8-1de4-454f-98b6-07eb9225cca1",
     access_log="logs/access.log",
     error_log="logs/error.log",

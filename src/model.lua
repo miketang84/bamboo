@@ -3,6 +3,7 @@ module(..., package.seeall)
 local db = BAMBOO_DB
 
 local List = require 'lglib.list'
+local rdstring = require 'bamboo.redis.string'
 local rdlist = require 'bamboo.redis.list'
 local rdset = require 'bamboo.redis.set'
 local rdzset = require 'bamboo.redis.zset'
@@ -13,6 +14,86 @@ local rdhash = require 'bamboo.redis.hash'
 local getModelByName  = bamboo.getModelByName 
 local dcollector= 'DELETED:COLLECTOR'
 
+-----------------------------------------------------------------
+local rdactions = {
+	['string'] = {},
+	['list'] = {},
+	['set'] = {},
+	['zset'] = {},
+	['hash'] = {},
+	['MANY'] = {},
+	['FIFO'] = {},
+	['ZFIFO'] = {},
+}
+
+rdactions['string'].save = rdstring.save
+rdactions['string'].update = rdstring.update
+rdactions['string'].retrieve = rdstring.retrieve
+rdactions['string'].remove = rdstring.remove
+rdactions['string'].add = rdstring.add
+rdactions['string'].has = rdstring.has
+rdactions['string'].num = rdstring.num
+
+rdactions['list'].save = rdlist.save
+rdactions['list'].update = rdlist.update
+rdactions['list'].retrieve = rdlist.retrieve
+rdactions['list'].remove = rdlist.remove
+rdactions['list'].add = rdlist.add
+rdactions['list'].has = rdlist.has
+rdactions['list'].num = rdlist.num
+
+rdactions['set'].save = rdset.save
+rdactions['set'].update = rdset.update
+rdactions['set'].retrieve = rdset.retrieve
+rdactions['set'].remove = rdset.remove
+rdactions['set'].add = rdset.add
+rdactions['set'].has = rdset.has
+rdactions['set'].num = rdset.num
+
+rdactions['zset'].save = rdzset.save
+rdactions['zset'].update = rdzset.update
+rdactions['zset'].retrieve = rdzset.retrieve
+rdactions['zset'].remove = rdzset.remove
+rdactions['zset'].add = rdzset.add
+rdactions['zset'].has = rdzset.has
+rdactions['zset'].num = rdzset.num
+
+rdactions['hash'].save = rdhash.save
+rdactions['hash'].update = rdhash.update
+rdactions['hash'].retrieve = rdhash.retrieve
+rdactions['hash'].remove = rdhash.remove
+rdactions['hash'].add = rdhash.add
+rdactions['hash'].has = rdhash.has
+rdactions['hash'].num = rdhash.num
+
+rdactions['FIFO'].save = rdfifo.save
+rdactions['FIFO'].update = rdfifo.update
+rdactions['FIFO'].retrieve = rdfifo.retrieve
+rdactions['FIFO'].remove = rdfifo.remove
+rdactions['FIFO'].add = rdfifo.push
+rdactions['FIFO'].has = rdfifo.has
+rdactions['FIFO'].num = rdfifo.len
+
+rdactions['ZFIFO'].save = rdzfifo.save
+rdactions['ZFIFO'].update = rdzfifo.update
+rdactions['ZFIFO'].retrieve = rdzfifo.retrieve
+rdactions['ZFIFO'].remove = rdzfifo.remove
+rdactions['ZFIFO'].add = rdzfifo.push
+rdactions['ZFIFO'].has = rdzfifo.has
+rdactions['ZFIFO'].num = rdzfifo.num
+
+
+
+rdactions['MANY'] = rdactions['zset']
+
+local getStoreModule = function (store_type)
+	local store_module = rdactions[store_type]
+	assert( store_module, "[Error] store type must be one of 'string', 'list', 'set', 'zset' or 'hash'.")
+	return store_module
+end
+
+
+-----------------------------------------------------------------
 
 local function getCounterName(self)
 	return self.__name + ':__counter'
@@ -75,6 +156,15 @@ local function getDynamicFieldIndex(self)
 	return getClassName(self) + ':dynamic_field:__index'
 end
 
+local function makeModelKeyList(self, ids)
+	local key_list = List()
+	for _, v in ipairs(ids) do
+		key_list:append(getNameIdPattern2(self, v))
+	end
+	return key_list
+end
+
+
 -- in model global index cache (backend is zset),
 -- check the existance of some member by its id (score)
 --
@@ -102,6 +192,7 @@ local function checkUnfixed(fld, item)
 		assert(link_model_str)
 		assert(linked_id)
 		link_model = getModelByName(link_model_str)
+		assert(link_model)
 	else 
 		link_model = getModelByName(foreign)
 		assert(link_model, ("[Error] The foreign part (%s) of this field is not a valid model."):format(foreign))
@@ -111,15 +202,11 @@ local function checkUnfixed(fld, item)
 	return link_model, linked_id
 end
 
-------------------------------------------------------------
--- this function can only be called by Model
--- @param model_key:
---
-local getFromRedis = function (self, model_key)
-	-- here, the data table contain ordinary field, ONE foreign key, but not MANY foreign key
-	-- all fields are strings 
-	local data = db:hgetall(model_key)
-	if not isValidInstance(data) then print("[Warning] Can't get object by", model_key); return nil end
+
+local makeObject = function (self, data)
+	-- if data is invalid, return nil
+	if not isValidInstance(data) then print("[Warning] Can't get object."); return nil end
+	
 	-- make id type is number
 	data.id = tonumber(data.id) or data.id
 	
@@ -150,6 +237,72 @@ local getFromRedis = function (self, model_key)
 	local obj = self()
 	table.update(obj, data)
 	return obj
+
+end
+
+
+------------------------------------------------------------
+-- this function can only be called by Model
+-- @param model_key:
+--
+local getFromRedis = function (self, model_key)
+	-- here, the data table contain ordinary field, ONE foreign key, but not MANY foreign key
+	-- all fields are strings 
+	local data = db:hgetall(model_key)
+	return makeObject(self, data)
+
+end 
+
+-- 
+local QuerySet
+
+local getFromRedisPipeline = function (self, ids)
+	-- here, the data table contain ordinary field, ONE foreign key, but not MANY foreign key
+	
+	local key_list = makeModelKeyList(self, ids)
+	
+	-- all fields are strings
+	local data_list = db:pipeline(function (p) 
+		for _, v in ipairs(key_list) do
+			p:hgetall(v)
+		end
+	end)
+
+	local objs = QuerySet()
+	local obj
+	for _, v in ipairs(data_list) do
+		obj = makeObject(self, v)
+		if obj then objs:append(obj) end
+	end
+
+	return objs
+end 
+
+-- for use in "User:id" as each item key
+local getFromRedisPipeline2 = function (pattern_list)
+	-- 'list' store model and id info
+	local list = List()
+	for i, v in ipairs(pattern_list) do
+		local model, id = checkUnfixed(key_list)
+		list:append({model, id})
+	end
+	
+	-- all fields are strings
+	local data_list = db:pipeline(function (p) 
+		for _, v in ipairs(pattern_list) do
+			p:hgetall(v)
+		end
+	end)
+
+	local objs = QuerySet()
+	local obj
+	for i, v in ipairs(list) do
+		-- v[1] is model
+		obj = makeObject(v[1], data_list[i])
+		if obj then objs:append(obj) end
+	end
+
+	return objs
 end 
 
 --------------------------------------------------------------
@@ -214,9 +367,10 @@ local restoreFakeDeletedInstance = function (self, id)
 	local model_key = getNameIdPattern2(self)
 	local index_key = getIndexKey(self)
 	
+	local instance = getFromRedis(self, model_key)
+	if not instance then return nil end
 	-- rename the key self
 	db:rename('DELETED:' + model_key, model_key)
-	local instance = getFromRedis(self, model_key)
 	local fields = self.__fields
 	-- in redis, delete the associated foreign key-value store
 	for k, v in pairs(instance) do
@@ -236,6 +390,21 @@ local restoreFakeDeletedInstance = function (self, id)
 end
 
 
+local retrieveObjectsByForeignType = function (foreign, list)
+	local obj_list
+	
+	if foreign == 'ANYSTRING' then
+		-- return string list directly
+		return QuerySet(list)
+	elseif foreign == 'UNFIXED' then
+		return getFromRedisPipeline2(list)
+	else
+		-- foreign field stores "id, id, id" list
+		local model = getModelByName(foreign)
+		return getFromRedisPipeline(model, list)
+	end
+	
+end
 
 --------------------------------------------------------------------------------
 -- The bellow four assertations, they are called only by class, instance or query set
@@ -542,7 +711,7 @@ end
 local QuerySetMeta = {__spectype='QuerySet'}
 local Model
 
-local function QuerySet(list)
+QuerySet = function (list)
 	local list = list or List()
 	-- create a query set	
 	-- add it to fit the check of isClass function
@@ -738,50 +907,17 @@ Model = Object:extend {
 	-- 
 	all = function (self, is_rev)
 		I_AM_CLASS(self)
-		local all_instances = QuerySet()
-		
-		local index_key = getIndexKey(self)
 		local all_ids = self:allIds(is_rev)
-		local getById = self.getById 
-		
-		local obj, data
-		local pipe_replies = db:pipeline(function (p)
-			for _, id in ipairs(all_ids) do
-				getById(self, id)
-		--		local obj = getById(self, id)
-		--		if isValidInstance(obj) then
-		--			all_instances:append(obj)
-		--		end
-			end
-		end)
-		ptable(pipe_replies)
-
-		for _, v in ipairs(pipe_replies) do
-			if isValidInstance(v) then
-				all_instances:append(v)
-			end
-		end
-			
-		return all_instances
+		return getFromRedisPipeline(self, all_ids)
 	end;
 
 	-- slice instance object list, support negative index (-1)
 	-- 
 	slice = function (self, start, stop, is_rev)
-		-- !slice method won't be open to query set
+		-- !slice method won't be open to query set, because List has slice method too.
 		I_AM_CLASS(self)
 		local ids = self:sliceIds(start, stop, is_rev)
-		local objs = QuerySet()
-		local getById = self.getById 
-
-		for _, id in ipairs(ids) do
-			local obj = getById(self, id)
-			if isValidInstance(obj) then
-				objs:append(obj)
-			end
-		end
-		
-		return objs
+		return getFromRedisPipeline(self, ids)
 	end;
 	
 	-- this is a magic function
@@ -1000,7 +1136,6 @@ Model = Object:extend {
 		-- 'dir': direction
 		local s, e
 		local exiti = 0
-		local getById = self.getById 
 		if dir > 0 then
 			s = 1
 			e = #all_ids
@@ -1012,16 +1147,18 @@ Model = Object:extend {
 		end
 		
 		local logic_choice = (logic == 'and')
+		
+		local objs
+		if is_query_set then
+			objs = all_ids
+		else
+			objs = getFromRedisPipeline(self, all_ids)
+		end
+		
 		for i = s, e, dir do
 			local flag = logic_choice
 			
-			local obj
-			if is_query_set then
-				obj = all_ids[i]
-			else
-				local kk = all_ids[i]
-				obj = getById (self, kk)
-			end
+			local obj = objs[i]
 			assert(isValidInstance(obj), "[Error] object must not be empty.")
 			local fields = obj.__fields
 			assert(not isFalse(fields), "[Error] object's description table must not be blank.")
@@ -1118,20 +1255,11 @@ Model = Object:extend {
 		if not st or st == 'string' then
 			assert( type(val) == 'string' or type(val) == 'number',
 					"[Error] @setCustom - In the string mode of setCustom, val should be string or number.")
-			db:set(custom_key, val)
+			rdstring.save(custom_key, val)
 		else
 			-- checkType(val, 'table')
-			if st == 'list' then
-				rdlist.save(custom_key, val)
-			elseif st == 'set' then
-				rdset.save(custom_key, val)
-			elseif st == 'zset' then
-				rdzset.save(custom_key, val, scores)
-			elseif st == 'hash' then
-				rdhash.save(custom_key, val)
-			else
-				error("[Error] @setCustom - st must be one of 'string', 'list', 'set' or 'zset'")
-			end
+			local store_module = getStoreModule(st)
+			store_module.save(custom_key, val, scores)
 		end
 	end;
 
@@ -1152,19 +1280,8 @@ Model = Object:extend {
 		-- get the store type in redis
 		local store_type = db:type(custom_key)
 		if atype then assert(store_type == atype, '[Error] @getCustom - The specified type is not equal the type stored in db.') end
-		if store_type == 'string' then
-			return db:get(custom_key), store_type
-		elseif store_type == 'list' then
-			return rdlist.retrieve(custom_key), store_type
-		elseif store_type == 'set' then
-			return rdset.retrieve(custom_key), store_type
-		elseif store_type == 'zset' then
-			return rdzset.retrieve(custom_key), store_type
-		elseif store_type == 'hash' then
-			return rdhash.retrieve(custom_key), store_type
-		end
-
-		return nil
+		local store_module = getStoreModule(store_type)
+		return store_module.retrieve(custom_key), store_type
 	end;
 
 	delCustom = function (self, key)
@@ -1195,20 +1312,8 @@ Model = Object:extend {
 
 		assert(db:exists(custom_key), '[Error] @updateCustom - This custom key does not exist.')
 		local store_type = db:type(custom_key)
-		if store_type == 'string' then
-			db:set(custom_key, tostring(val))
-		else
-			-- checkType(val, 'table')
-			if store_type == 'list' then
-				rdlist.update(custom_key, val)
-			elseif store_type == 'set' then
-				rdset.update(custom_key, val)
-			elseif store_type == 'zset' then
-				rdzset.update(custom_key, val)
-			elseif store_type == 'hash' then
-				rdhash.update(custom_key, val)
-			end
-		end
+		local store_module = getStoreModule(store_type)
+		return store_module.update(custom_key, val)
 				 
 	end;
 
@@ -1219,17 +1324,8 @@ Model = Object:extend {
 
 		assert(db:exists(custom_key), '[Error] @removeCustomMember - This custom key does not exist.')
 		local store_type = db:type(custom_key)
-		if store_type == 'string' then
-			db:set(custom_key, '')
-		elseif store_type == 'list' then
-			rdlist.remove(custom_key, val)
-		elseif store_type == 'set' then
-			rdset.remove(custom_key, val)
-		elseif store_type == 'zset' then
-			rdzset.remove(custom_key, val)
-		elseif store_type == 'hash' then
-			rdhash.remove(custom_key, val)
-		end 
+		local store_module = getStoreModule(store_type)
+		return store_module.remove(custom_key, val)
 		
 	end;
 	
@@ -1240,17 +1336,8 @@ Model = Object:extend {
 
 		assert(db:exists(custom_key), '[Error] @addCustomMember - This custom key does not exist.')
 		local store_type = db:type(custom_key)
-		if store_type == 'string' then
-			db:set(custom_key, val)
-		elseif store_type == 'list' then
-			rdlist.append(custom_key, val)
-		elseif store_type == 'set' then
-			rdset.add(custom_key, val)
-		elseif store_type == 'zset' then
-			rdzset.add(custom_key, val, score)
-		elseif store_type == 'hash' then
-			rdhash.add(custom_key, val)
-		end
+		local store_module = getStoreModule(store_type)
+		return store_module.append(custom_key, val)
 		
 	end;
 	
@@ -1261,17 +1348,9 @@ Model = Object:extend {
 		
 		assert(db:exists(custom_key), '[Error] @hasCustomMember - This custom key does not exist.')
 		local store_type = db:type(custom_key)
-		if store_type == 'string' then
-			return db:get(custom_key) == mem
-		elseif store_type == 'list' then
-			return rdlist.has(custom_key, mem)
-		elseif store_type == 'set' then
-			return rdset.has(custom_key, mem)
-		elseif store_type == 'zset' then
-			return rdzset.has(custom_key, mem)
-		elseif store_type == 'hash' then
-			return rdhash.has(custom_key, mem)
-		end
+		local store_module = getStoreModule(store_type)
+		return store_module.has(custom_key, mem)
+
 	end;
 
 	numCustom = function (self, key)
@@ -1281,17 +1360,8 @@ Model = Object:extend {
 
 		if not db:exists(custom_key) then return 0 end
 		local store_type = db:type(custom_key)
-		if store_type == 'string' then
-			return 1
-		elseif store_type == 'list' then
-			return rdlist.len(custom_key)
-		elseif store_type == 'set' then
-			return rdset.num(custom_key)
-		elseif store_type == 'zset' then
-			return rdzset.num(custom_key)
-		elseif store_type == 'hash' then
-			return rdhash.num(custom_key)
-		end
+		local store_module = getStoreModule(store_type)
+		return store_module.num(custom_key)
 	end;
 	
 	-----------------------------------------------------------------
@@ -1368,16 +1438,11 @@ Model = Object:extend {
 			if isFalse(cache_data) then return List() end
 		end
 		
+		
 		local cachetype = db:get(cachetype_key)
 		if cachetype and cachetype == 'instance' then
 			-- if cached instance, return instance list
-			local cache_objects = List()
-			
-			for _, v in ipairs(cache_data) do
-				-- get instance object by its id
-				local obj = self:getById(v)
-				cache_objects:append(obj)
-			end
+			local cache_objects = getFromRedisPipeline(self, cache_data)
 			
 			return cache_objects
 		else
@@ -1778,27 +1843,12 @@ Model = Object:extend {
 			-- ONE foreign value can be get by 'get' series functions
 			self[field] = new_id
 
-		elseif fld.st == 'MANY' then
-
+		else
 			local key = getFieldPattern(self, field)
-			-- update the new value to db, so later we don't need to do save
-			rdzset.add(key, new_id)
-
-		elseif fld.st == 'FIFO' then
-			local length = fld.fifolen or 100
-			assert(length and type(length) == 'number' and length > 0 and length <= 10000, 
-				"[Error] In Fifo foreign, the 'fifolen' must be number greater than 0!")
-			local key = getFieldPattern(self, field)
-			rdfifo.push(key, length, new_id)
-
-		elseif fld.st == 'ZFIFO' then
-			local length = fld.fifolen or 100
-			assert(length and type(length) == 'number' and length > 0 and length <= 10000, 
-				"[Error] In Zfifo foreign, the 'fifolen' must be number greater than 0!")
-			local key = getFieldPattern(self, field)
+			local store_module = getStoreModule(fld.st)
+			store_module.add(key, new_id, fld.fifolen or 100)			
 			-- in zset, the newest member has the higher score
 			-- but use getForeign, we retrieve them from high to low, so newest is at left of result
-			rdzfifo.push(key, length, new_id)
 		end
 		
 		return self
@@ -1828,112 +1878,26 @@ Model = Object:extend {
 
 				local obj = link_model:getById (linked_id)
 				if not isValidInstance(obj) then
-					-- if get not, remove the empty foreign key
-					db:hdel(model_key, field)
-					self[field] = nil
 					print('[Warning] invalid ONE foreign id or object.')
 					return nil
 				else
 					return obj
 				end
 			end
-		elseif fld.st == 'MANY' then
+		else
 			if isFalse(self[field]) then return QuerySet() end
 			
 			local key = getFieldPattern(self, field)
-			local list = rdzset.retrieve(key)
-			if list:isEmpty() then return QuerySet() end
-			
-			list = list:slice(start, stop, is_rev)
-			if list:isEmpty() then return QuerySet() end
-			
-			if fld.foreign == 'ANYSTRING' then
-				-- return string list directly
-				return QuerySet(list)
-			else
-				local obj_list = QuerySet()
-				for _, v in ipairs(list) do
-					local link_model, linked_id = checkUnfixed(fld, v)
-
-					local obj = link_model:getById(linked_id)
-					
-					if not isValidInstance(obj) then
-						-- if find no, remove this empty foreign key, by member
-						rdzset.remove(key, v)
-						print('[Warning] invalid MANY foreign id or object.')
-					else
-						obj_list:append(obj)
-					end
-				end
-				
-				return obj_list
-			end
-			
-		elseif fld.st == 'FIFO' then
-			if isFalse(self[field]) then return QuerySet() end
 		
-			local key = getFieldPattern(self, field)
-			local list = rdfifo.retrieve(key)
-			
-			list = list:slice(start, stop, is_rev)
-			if isFalse(list) then return QuerySet() end
-	
-			if fld.foreign == 'ANYSTRING' then
-				-- 
-				return QuerySet(list)
-			else
-				local obj_list = QuerySet()
-				for _, v in ipairs(list) do
-					local link_model, linked_id = checkUnfixed(fld, v)
+			local store_module = getStoreModule(fld.st)
+			local list = store_module.retrieve(key)
 
-					local obj = link_model:getById(linked_id)
-					-- 
-					if not isValidInstance(obj) then
-						-- if find no, remove this empty foreign
-						rdfifo.remove(key, v)
-						print('[Warning] invalid FIFO foreign id or object.')						
-					else
-						obj_list:append(obj)
-					end
-				end
-				
-				return obj_list
-			end
-			
-		elseif fld.st == 'ZFIFO' then
-			if isFalse(self[field]) then return QuerySet() end
+			if list:isEmpty() then return QuerySet() end
+			list = list:slice(start, stop, is_rev)
+			if list:isEmpty() then return QuerySet() end
 		
-			local key = getFieldPattern(self, field)
-			-- due to FIFO, the new id is at left, old id is at right
-			-- 
-			local list = rdzfifo.retrieve(key)
-			
-			list = list:slice(start, stop, is_rev)
-			if isFalse(list) then return QuerySet() end
-	
-			if fld.foreign == 'ANYSTRING' then
-				--
-				return QuerySet(list)
-			else
-				local obj_list = QuerySet()
-				
-				for _, v in ipairs(list) do
-					local link_model, linked_id = checkUnfixed(fld, v)
-
-					local obj = link_model:getById(linked_id)
-					-- 
-					if not isValidInstance(obj) then
-						rdzfifo.remove(key, v)
-						print('[Warning] invalid ZFIFO foreign id or object.')
-					else
-						obj_list:append(obj)
-					end
-				end
-				
-				return obj_list
-			end
+			return retrieveObjectsByForeignType(fld.foreign, list)
 		end
-
 	end;
 
 	getForeignIds = function (self, field, start, stop, is_rev)
@@ -1949,44 +1913,17 @@ Model = Object:extend {
 
 			return self[field]
 
-		elseif fld.st == 'MANY' then
+		else
 			if isFalse(self[field]) then return List() end
-			
 			local key = getFieldPattern(self, field)
-			local list = rdzset.retrieve(key)
+			local store_module = getStoreModule(fld.st)
+			local list = store_module.retrieve(key)
 			if list:isEmpty() then return List() end
 			
 			list = list:slice(start, stop, is_rev)
 			if list:isEmpty() then return List() end
 			
 			return list
-			
-		elseif fld.st == 'FIFO' then
-			if isFalse(self[field]) then return List() end
-		
-			local key = getFieldPattern(self, field)
-			local list = rdfifo.retrieve(key)
-			if list:isEmpty() then return List() end
-	
-			list = list:slice(start, stop, is_rev)
-			if list:isEmpty() then return List() end
-	
-			return list
-			
-		elseif fld.st == 'ZFIFO' then
-			if isFalse(self[field]) then return List() end
-		
-			local key = getFieldPattern(self, field)
-			-- due to FIFO, the new id is at left, old id is at right
-			-- 
-			local list = rdzfifo.retrieve(key)
-			if list:isEmpty() then return List() end
-			
-			list = list:slice(start, stop, is_rev)
-			if list:isEmpty() then return List() end
-	
-			return list
-			
 		end
 
 	end;    
@@ -2029,20 +1966,10 @@ Model = Object:extend {
 				db:hdel(key, field)
 				self[field] = nil
 			end
-			
 		else
 			local key = getFieldPattern(self, field)
-			if fld.st == 'MANY' then
-				rdzset.remove(key, new_id)
-				
-			elseif fld.st == 'FIFO' then
-				rdfifo.remove(key, new_id)
-				
-			elseif fld.st == 'ZFIFO' then
-				-- here, new_id is the score of that element ready to be deleted?
-				-- XXX: new_id is score or member?
-				rdzfifo.remove(key, new_id)
-			end
+			local store_module = getStoreModule(fld.st)
+			store_module.remove(key, new_id)
 		end
 	
 		return self
@@ -2090,17 +2017,12 @@ Model = Object:extend {
 			end
 		end
 
-		local model_key = getFieldPattern(self, field)
 		if fld.st == "ONE" then
 			return self[field] == new_id
-		elseif fld.st == 'MANY' then
-			return rdzset.has(model_key, new_id)
-
-		elseif fld.st == 'FIFO' then
-			return rdfifo.has(model_key, new_id)
-
-		elseif fld.st == 'ZFIFO' then
-			return rdzfifo.has(model_key, new_id)
+		else
+			local key = getFieldPattern(self, field)
+			local store_module = getStoreModule(fld.st)
+			store_module.has(key, new_id)
 		end 
 	
 		return false
@@ -2123,17 +2045,8 @@ Model = Object:extend {
 			return 1
 		else
 			local key = getFieldPattern(self, field)
-
-			if fld.st == 'MANY' then
-				return rdzset.num(key)
-
-			elseif fld.st == 'FIFO' then
-				return rdfifo.len(key)
-
-			elseif fld.st == 'ZFIFO' then
-				return rdzfifo.num(key)
-
-			end
+			local store_module = getStoreModule(fld.st)
+			store_module.num(key)
 		end
 	end;
 

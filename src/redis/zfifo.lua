@@ -13,7 +13,7 @@ function update()
 end
 
 
-function push( key, length, val )
+function push( key, val, length )
 
 	local n = db:zcard(key)
 	if n < length then
