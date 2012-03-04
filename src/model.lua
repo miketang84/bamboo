@@ -675,7 +675,7 @@ Model = Object:extend {
 		-- check the existance in the index cache
 		if not checkExistanceById(self, id) then return nil end
 		-- and then check the existance in the key set
-		local key = self.__name + ':' + id
+		local key = getNameIdPattern2(self, id)
 		if not db:exists(key) then return nil end
 
 		return getFromRedis(self, key)
@@ -745,12 +745,23 @@ Model = Object:extend {
 		local getById = self.getById 
 		
 		local obj, data
-		for _, id in ipairs(all_ids) do
-			local obj = getById(self, id)
-			if isValidInstance(obj) then
-				all_instances:append(obj)
+		local pipe_replies = db:pipeline(function (p)
+			for _, id in ipairs(all_ids) do
+				getById(self, id)
+		--		local obj = getById(self, id)
+		--		if isValidInstance(obj) then
+		--			all_instances:append(obj)
+		--		end
+			end
+		end)
+		ptable(pipe_replies)
+
+		for _, v in ipairs(pipe_replies) do
+			if isValidInstance(v) then
+				all_instances:append(v)
 			end
 		end
+			
 		return all_instances
 	end;
 
