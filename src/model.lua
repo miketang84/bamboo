@@ -2181,7 +2181,7 @@ Model = Object:extend {
 			end
 
 			-- flatten to one rank table
-			local flat = {}
+			local flat = QuerySet()
 			for i, val in ipairs(result) do
 				for j, v in ipairs(val) do
 					table.insert(flat, v)
