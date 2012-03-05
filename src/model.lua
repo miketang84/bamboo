@@ -2145,7 +2145,7 @@ Model = Object:extend {
 			if af and bf then
 				if direction == 'asc' then
 					return af < bf
-				elseif direction == 'des' then
+				elseif direction == 'desc' then
 					return af > bf
 				else
 					return nil
@@ -2215,12 +2215,12 @@ Model = Object:extend {
 		local field_value, stop_id
 		local insert_position = 0
 		
-		if head > tail then order_type = 'des' end
+		if head > tail then order_type = 'desc' end
 		-- should always keep `a` and `b` have the same type
 		local sort_func = sort_func or function (a, b)
 			if order_type == 'asc' then
 				return a > b
-			elseif order_type == 'des' then
+			elseif order_type == 'desc' then
 				return a < b
 			end
 		end
