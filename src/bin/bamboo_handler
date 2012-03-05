@@ -6,7 +6,7 @@ package.path = '/usr/local/lib/lua/5.1/?.lua;/usr/local/lib/lua/5.1/?/init.lua;'
 require 'posix'
 require 'lglib'
 require 'bamboo'
-
+local util = require 'bamboo.util'
 ------------------------------------------------------------------------
 --- Global variables delarations: in top project code, we can see these variables
 -- two important global variables
@@ -36,48 +36,10 @@ local CONFIG_FILE = APP_DIR + "settings.lua"
 local PROCESS_DIR = posix.getcwd()
 -- the full directory of one application
 local PROJECT_DIR = PROCESS_DIR + '/' + APP_DIR
-local config = bamboo.config
 
-local function readSettings()
-	-- only support boot in app directory
-	local home = os.getenv("HOME")
-	local global_configfile = loadfile(home + '/.bambooconfig')
-	if global_configfile then
-		setfenv(assert(global_configfile), config)()
-	else
-		print [[
-[Error] You should make sure the existance of ~/.bambooconfig 
+-- read settings
+local config = util.readSettings(bamboo.config)
 
-You can use:
-	bamboo config -monserver_dir your_monserver_dir
-	bamboo config -bamboo_dir your_bamboo_dir
-
-to create this config file. Good Luck.
-]]
-		os.exit()
-	end
-	
-	local setting_file = loadfile('settings.lua') or loadfile('../settings.lua')
-	if not setting_file then
-		print [[
-[Error] You should ensure the existance of settings.lua in current directory or above directory!
-]]
-
-		os.exit()
-	else
-		setfenv(assert(setting_file), config)()
-	end
-	config.bamboo_dir = config.bamboo_dir or '/usr/local/share/lua/5.1/bamboo/'
-
-	-- check whether have a global production setting
-	local production = loadfile('/etc/bamboo_production')
-	if production then
-		config.PRODUCTION = true
-	end
-
-end
-
-readSettings()
 
 -- add the project's direcotry to the lua searching path, to simplify the calling relation
 package.path = package.path + (";%s/?.lua;%s/?/init.lua;"):format(PROJECT_DIR, PROJECT_DIR)
