@@ -2174,7 +2174,7 @@ Model = Object:extend {
 			-- sort each part
 			local result = {}
 			byfield = field2
-			direction = dir2
+			direction = dir2 or 'asc'
 			sort_func = sort_func2 or sort_func
 			for i, val in ipairs(work_t) do
 				table.sort(val, sort_func)
