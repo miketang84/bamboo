@@ -74,7 +74,9 @@ local User = Model:extend {
 	end;
 	
 	login = function (self, params)
-		I_AM_CLASS(self)
+		I_AM_CLASS_OR_INSTANCE(self)
+		-- make instance can use this login
+		if isInstance(self) then params = self end
 		if not params['username'] or not params['password'] then return nil end
 		local authed, user = self:authenticate(params)
 		if not authed then return nil end
