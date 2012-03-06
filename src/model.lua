@@ -405,7 +405,7 @@ if bamboo.config.fulltext_index_support then require 'mmseg' end
 -- @param instance the object to be full text indexes
 local makeFulltextIndexes = function (instance)
 	
-	local ftindex_fields = rawget(instance, '__use_fulltext_index')
+	local ftindex_fields = rawget(instance, '__fulltext_index_fields')
 	if isFalse(ftindex_fields) then return false end
 
 	local words
@@ -428,30 +428,32 @@ local makeFulltextIndexes = function (instance)
 	return true	
 end
 
-local searchOnFulltextIndexes = function (search_tags, length)
+local searchOnFulltextIndexes = function (ask_str, length)
+	local search_tags = mmseg.segment(ask_str)
 	local length = length or 10
 	local contained_tags = List()
 	for _, tag in ipairs(search_tags) do
-		if db:sismember('_fulltext_words', tag) then
+		if string.utf8len(tag) >= 2 and db:sismember('_fulltext_words', tag) then
 			contained_tags:append(tag)
 		end
 	end
 	if #contained_tags == 0 then return List() end
 	
 	local rlist = List()
-	local _tmp_ftkey = "__tmp_ftkey"
+	local _tmp_key = "__tmp_ftkey"
 	if #contained_tags == 1 then
-		db:sinterstore(__tmp_ftkey, '_FT:' + contained_tags[1])
+		db:sinterstore(_tmp_key, '_FT:' + contained_tags[1])
 	else
-		local str = ''	
+		local _args = {}
 		for _, tag in ipairs(contained_tags) do
-			str = str + '_FT:' + tag + ' '
+			table.insert(_args, '_FT:' + tag)
 		end
-		db:sinterstore(__tmp_ftkey, str)
+		-- XXX, some afraid
+		db:sinterstore(_tmp_key, unpack(_args))
 	end
 	
 	-- sort and retrieve
-	local model_keys =  db:sort('__tmp_ftkey', {limit={0, length}, sort="desc"})
+	local model_keys =  db:sort(_tmp_key, {limit={0, length}, sort="desc"})
 	-- return objects
 	return getFromRedisPipeline2(model_keys)
 end
@@ -466,6 +468,17 @@ local clearIndexesOnDeletion = function (instance)
 	end)
 	-- clear the reverse fulltext key
 	db:del('_RFT:' + model_key)
+end
+
+-- can be called by instance and class
+local useFulltextIndex = function (self)
+	local model = self
+	if isInstance(self) then model = getModelByName(self:classname()) end
+	if bamboo.config.fulltext_index_support and rawget(model, '__use_fulltext_index') then
+		return true
+	else
+		return false
+	end
 end
 
 --------------------------------------------------------------------------------
@@ -1782,7 +1795,7 @@ Model = Object:extend {
 		db:hmset(model_key, unpack(store_kv))
 		
 		-- make fulltext indexes
-		if bamboo.config.fulltext_index_support and rawget(self, '__use_fulltext_index') then
+		if useFulltextIndex(self) then
 			makeFulltextIndexes(self)
 		end
 		
@@ -1826,7 +1839,7 @@ Model = Object:extend {
 			for _, v in ipairs(self) do
 				fakedelFromRedis(v)
 				-- clear fulltext indexes
-				if bamboo.config.fulltext_index_support and rawget(v, '__use_fulltext_index') then
+				if useFulltextIndex(v) then
 					clearIndexesOnDeletion(v)
 				end
 				v = nil
@@ -1834,7 +1847,7 @@ Model = Object:extend {
 		else
 			fakedelFromRedis(self)
 			-- clear fulltext indexes
-			if bamboo.config.fulltext_index_support and rawget(self, '__use_fulltext_index') then
+			if useFulltextIndex(self) then
 				clearIndexesOnDeletion(self)
 			end
 		end
@@ -1850,7 +1863,7 @@ Model = Object:extend {
 			for _, v in ipairs(self) do
 				delFromRedis(v)
 				-- clear fulltext indexes
-				if bamboo.config.fulltext_index_support and rawget(v, '__use_fulltext_index') then
+				if useFulltextIndex(v) then
 					clearIndexesOnDeletion(v)
 				end
 				v = nil
@@ -1858,7 +1871,7 @@ Model = Object:extend {
 		else
 			delFromRedis(self)
 			-- clear fulltext indexes
-			if bamboo.config.fulltext_index_support and rawget(self, '__use_fulltext_index') then
+			if useFulltextIndex(self) then
 				clearIndexesOnDeletion(self)
 			end
 		end
@@ -2363,6 +2376,13 @@ Model = Object:extend {
 		return ids
 	end;
 	
+	-- for fulltext index API
+	fulltextSearch = function (self, ask_str)
+		assert(self.__name == 'Model')
+				
+		
+	end;
+
 }
 
 

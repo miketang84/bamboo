@@ -26,7 +26,7 @@ function reportError(conn, request, err, state)
     local erroutput = ""
     local target = err:match("%[%w* *\"(%S+)\"%]:")
     local errorlinenum = tonumber(string.match(err, ":(%d+):"))
-    if target and errorlinenum then
+    if target and errorlinenum and request.viewcode[target] then
     	local elines = string.split(request.viewcode[target], '\n')
     	local errorline = elines[errorlinenum]
     	if errorline then
