@@ -1747,10 +1747,11 @@ Model = Object:extend {
 			db:zadd(index_key, self.id, self[indexfd])				
 		end
 
-		
+		local store_kv = {}
 		--- save an hash object
 		-- 'id' are essential in an object instance
-		db:hset(model_key, 'id', self.id)
+		table.insert(store_kv, 'id')
+		table.insert(store_kv, tostring(self.id))		
 
 		-- if parameters exist, update it
 		if params and type(params) == 'table' then
@@ -1772,10 +1773,13 @@ Model = Object:extend {
 			if field then
 				if not field['foreign'] or ( field['foreign'] and field['st'] == 'ONE') then
 					-- save
-					db:hset(model_key, k, tostring(v))
+					table.insert(store_kv, k)
+					table.insert(store_kv, tostring(v))		
 				end
 			end
 		end
+		-- save to database
+		db:hmset(model_key, unpack(store_kv))
 		
 		-- make fulltext indexes
 		if bamboo.config.fulltext_index_support and rawget(self, '__use_fulltext_index') then
