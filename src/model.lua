@@ -948,6 +948,8 @@ Model = Object:extend {
 			-- normalize the 'and' and 'or' logic
 			
 			if query_args[1] then
+				assert(query_arg[1] == 'or' or query_args[1] == 'and', 
+					"[Error] The logic should be 'and' or 'or', rather than: " .. tostring(query_args[1]))
 				if query_args[1] == 'or' then
 					logic = 'or'
 				end
@@ -1018,7 +1020,7 @@ Model = Object:extend {
 			if is_query_table then
 				for k, v in pairs(query_args) do
 					-- to redundant query condition, once meet, jump immediately
-					if not fields[k] then flag=false; break end
+					assert(fields[k], "[Error] there is invalid field in query args: " .. k)
 
 					if type(v) == 'function' then
 						flag = v(obj[k])
