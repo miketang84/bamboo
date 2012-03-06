@@ -331,6 +331,25 @@ registerModel = function (model)
 			setmetatable(fdt, {__index = FieldType[fdt.widget_type or 'text']})
 			fdt:init()
 		end
+		
+		-- check if ask field index
+		model['__index_fields'] = {}
+		for key, field_dt in pairs(model.__fields) do
+			if field_dt.index == true then
+				model['__use_index'] = true
+				table.insert(model.__index_fields, key)
+			end			
+		end
+		
+		-- check if ask fulltext index
+		model['__fulltext_index_fields'] = {}
+		for key, field_dt in pairs(model.__fields) do
+			if field_dt.fulltext_index == true then
+				model['__use_fulltext_index'] = true
+				table.insert(model.__fulltext_index_fields, key)
+			end			
+		end
+		
 
 		-- decorators
 		if not isFalse(model.__decorators) then

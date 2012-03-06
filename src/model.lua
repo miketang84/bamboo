@@ -183,21 +183,14 @@ end
 -- if normal case, get the model string and return item directly
 -- if UNFIXED case, split the UNFIXED model:id and return  
 -- this function doesn't suite ANYSTRING case
-local function checkUnfixed(fld, item)
-	local foreign = fld.foreign
+local function seperateModelAndId(item)
 	local link_model, linked_id
-	if foreign == 'UNFIXED' then
-		local link_model_str
-		link_model_str, linked_id = item:match('^(%w+):(%d+)$')
-		assert(link_model_str)
-		assert(linked_id)
-		link_model = getModelByName(link_model_str)
-		assert(link_model)
-	else 
-		link_model = getModelByName(foreign)
-		assert(link_model, ("[Error] The foreign part (%s) of this field is not a valid model."):format(foreign))
-		linked_id = item
-	end
+	local link_model_str
+	link_model_str, linked_id = item:match('^(%w+):(%d+)$')
+	assert(link_model_str)
+	assert(linked_id)
+	link_model = getModelByName(link_model_str)
+	assert(link_model)
 
 	return link_model, linked_id
 end
@@ -281,10 +274,10 @@ end
 -- for use in "User:id" as each item key
 local getFromRedisPipeline2 = function (pattern_list)
 	-- 'list' store model and id info
-	local list = List()
-	for i, v in ipairs(pattern_list) do
-		local model, id = checkUnfixed(key_list)
-		list:append({model, id})
+	local model_list = List()
+	for _, v in ipairs(pattern_list) do
+		local model, id = seperateModelAndId(v)
+		model_list:append(model)
 	end
 	
 	-- all fields are strings
@@ -296,9 +289,8 @@ local getFromRedisPipeline2 = function (pattern_list)
 
 	local objs = QuerySet()
 	local obj
-	for i, v in ipairs(list) do
-		-- v[1] is model
-		obj = makeObject(v[1], data_list[i])
+	for i, model in ipairs(model_list) do
+		obj = makeObject(model, data_list[i])
 		if obj then objs:append(obj) end
 	end
 
@@ -404,6 +396,76 @@ local retrieveObjectsByForeignType = function (foreign, list)
 		return getFromRedisPipeline(model, list)
 	end
 	
+end
+
+
+--------------------------------------------------------------------------------
+if bamboo.config.fulltext_index_support then require 'mmseg' end
+-- Full Text Search utilities
+-- @param instance the object to be full text indexes
+local makeFulltextIndexes = function (instance)
+	
+	local ftindex_fields = rawget(instance, '__use_fulltext_index')
+	if isFalse(ftindex_fields) then return false end
+
+	local words
+	for _, v in ipairs(ftindex_fields) do
+		-- parse the fulltext field value
+		words = mmseg.segment(instance[v])
+		for _, word in ipairs(words) do
+			-- only index word length larger than 1
+			if string.utf8len(word) >= 2 then
+				-- add this word to global word set
+				db:sadd('_fulltext_words', word)
+				-- add reverse fulltext index such as '_RFT:model:id', type is set, item is 'word'
+				db:sadd('_RFT:' + getNameIdPattern(instance), word)
+				-- add fulltext index such as '_FT:word', type is set, item is 'model:id'
+				db:sadd('_FT:' + word, getNameIdPattern(instance))
+			end
+		end
+	end
+	
+	return true	
+end
+
+local searchOnFulltextIndexes = function (search_tags, length)
+	local length = length or 10
+	local contained_tags = List()
+	for _, tag in ipairs(search_tags) do
+		if db:sismember('_fulltext_words', tag) then
+			contained_tags:append(tag)
+		end
+	end
+	if #contained_tags == 0 then return List() end
+	
+	local rlist = List()
+	local _tmp_ftkey = "__tmp_ftkey"
+	if #contained_tags == 1 then
+		db:sinterstore(__tmp_ftkey, '_FT:' + contained_tags[1])
+	else
+		local str = ''	
+		for _, tag in ipairs(contained_tags) do
+			str = str + '_FT:' + tag + ' '
+		end
+		db:sinterstore(__tmp_ftkey, str)
+	end
+	
+	-- sort and retrieve
+	local model_keys =  db:sort('__tmp_ftkey', {limit={0, length}, sort="desc"})
+	-- return objects
+	return getFromRedisPipeline2(model_keys)
+end
+
+local clearIndexesOnDeletion = function (instance)
+	local model_key = getNameIdPattern(instance)
+	local words = db:smembers('_RFT:' + model_key)
+	db:pipeline(function (p)
+		for _, word in ipairs(words) do
+			p:srem('_FT:' + word, model_key)
+		end
+	end)
+	-- clear the reverse fulltext key
+	db:del('_RFT:' + model_key)
 end
 
 --------------------------------------------------------------------------------
@@ -1715,6 +1777,11 @@ Model = Object:extend {
 			end
 		end
 		
+		-- make fulltext indexes
+		if bamboo.config.fulltext_index_support and rawget(self, '__use_fulltext_index') then
+			makeFulltextIndexes(self)
+		end
+		
 		return self
     end;
     
@@ -1734,6 +1801,9 @@ Model = Object:extend {
 		-- apply to lua object
 		self[field] = new_value
 		
+		-- if fulltext index
+		if fld.fulltext_index then makeFulltextIndexes(self) end
+		
 		return self
     end;
     
@@ -1751,10 +1821,18 @@ Model = Object:extend {
 		if isQuerySet(self) then
 			for _, v in ipairs(self) do
 				fakedelFromRedis(v)
+				-- clear fulltext indexes
+				if bamboo.config.fulltext_index_support and rawget(v, '__use_fulltext_index') then
+					clearIndexesOnDeletion(v)
+				end
 				v = nil
 			end
 		else
 			fakedelFromRedis(self)
+			-- clear fulltext indexes
+			if bamboo.config.fulltext_index_support and rawget(self, '__use_fulltext_index') then
+				clearIndexesOnDeletion(self)
+			end
 		end
 		
 		self = nil
@@ -1767,10 +1845,18 @@ Model = Object:extend {
 		if isQuerySet(self) then
 			for _, v in ipairs(self) do
 				delFromRedis(v)
+				-- clear fulltext indexes
+				if bamboo.config.fulltext_index_support and rawget(v, '__use_fulltext_index') then
+					clearIndexesOnDeletion(v)
+				end
 				v = nil
 			end
 		else
 			delFromRedis(self)
+			-- clear fulltext indexes
+			if bamboo.config.fulltext_index_support and rawget(self, '__use_fulltext_index') then
+				clearIndexesOnDeletion(self)
+			end
 		end
 		
 		self = nil
@@ -1873,9 +1959,15 @@ Model = Object:extend {
 				-- return string directly
 				return self[field]
 			else
-				-- the true foreign case
-				local link_model, linked_id = checkUnfixed(fld, self[field])
-
+				local link_model, linked_id
+				if fld.foreign == 'UNFIXED' then
+					link_model, linked_id = seperateModelAndId(self[field])
+				else
+					-- normal case
+					link_model = getModelByName(fld.foreign)
+					linked_id = self[field]
+				end	
+				
 				local obj = link_model:getById (linked_id)
 				if not isValidInstance(obj) then
 					print('[Warning] invalid ONE foreign id or object.')

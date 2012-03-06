@@ -74,6 +74,7 @@ local User = Model:extend {
 	end;
 	
 	login = function (self, params)
+		-- here, maybe should allow instance to login
 		I_AM_CLASS(self)
 		if not params['username'] or not params['password'] then return nil end
 		local authed, user = self:authenticate(params)
