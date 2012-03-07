@@ -1,5 +1,7 @@
 module(..., package.seeall)
 
+local tinsert = table.insert
+
 local db = BAMBOO_DB
 
 local List = require 'lglib.list'
@@ -566,29 +568,34 @@ end
 -- Query Function Set
 -- for convienent, import them into _G directly
 ------------------------------------------------------------------------
+local closure_collector = {}
 
 _G['eq'] = function ( cmp_obj )
-	return function (v)
+	local t = function (v)
 		if v == cmp_obj then
 			return true
 		else
 			return false
 		end
 	end
+	closure_collector[t] = {'eq', cmp_obj}
+	return t
 end
 
 _G['uneq'] = function ( cmp_obj )
-	return function (v)
+	local t = function (v)
 		if v ~= cmp_obj then
 			return true
 		else
 			return false
 		end
 	end
+	closure_collector[t] = {'uneq', cmp_obj}
+	return t
 end
 
 _G['lt'] = function (limitation)
-	return function (v)
+	local t = function (v)
 		local nv = tonumber(v)
 		if nv and nv < tonumber(limitation) then
 			return true
@@ -596,10 +603,12 @@ _G['lt'] = function (limitation)
 			return false
 		end
 	end
+	closure_collector[t] = {'lt', limitation}
+	return t
 end
 
 _G['gt'] = function (limitation)
-	return function (v)
+	local t = function (v)
 		local nv = tonumber(v)
 		if nv and nv > tonumber(limitation) then
 			return true
@@ -607,11 +616,13 @@ _G['gt'] = function (limitation)
 			return false
 		end
 	end
+	closure_collector[t] = {'gt', limitation}
+	return t
 end
 
 
 _G['le'] = function (limitation)
-	return function (v)
+	local t = function (v)
 		local nv = tonumber(v)	
 		if nv and nv <= tonumber(limitation) then
 			return true
@@ -619,10 +630,12 @@ _G['le'] = function (limitation)
 			return false
 		end
 	end
+	closure_collector[t] = {'le', limitation}
+	return t
 end
 
 _G['ge'] = function (limitation)
-	return function (v)
+	local t = function (v)
 		local nv = tonumber(v)	
 		if nv and nv >= tonumber(limitation) then
 			return true
@@ -630,10 +643,12 @@ _G['ge'] = function (limitation)
 			return false
 		end
 	end
+	closure_collector[t] = {'ge', limitation}
+	return t
 end
 
 _G['bt'] = function (small, big)
-	return function (v)
+	local t = function (v)
 		local nv = tonumber(v)
 		if nv and nv > small and nv < big then
 			return true
@@ -641,10 +656,12 @@ _G['bt'] = function (small, big)
 			return false
 		end
 	end
+	closure_collector[t] = {'bt', small, big}
+	return t
 end
 
 _G['be'] = function (small, big)
-	return function (v)
+	local t = function (v)
 		local nv = tonumber(v)
 		if nv and nv >= small and nv <= big then
 			return true
@@ -652,10 +669,12 @@ _G['be'] = function (small, big)
 			return false
 		end
 	end
+	closure_collector[t] = {'be', small, big}
+	return t
 end
 
 _G['outside'] = function (small, big)
-	return function (v)
+	local t = function (v)
 		local nv = tonumber(v)
 		if nv and nv < small and nv > big then
 			return true
@@ -663,10 +682,12 @@ _G['outside'] = function (small, big)
 			return false
 		end
 	end
+	closure_collector[t] = {'outside', small, big}
+	return t
 end
 
 _G['contains'] = function (substr)
-	return function (v)
+	local t = function (v)
 		v = tostring(v)
 		if v:contains(substr) then 
 			return true
@@ -674,10 +695,12 @@ _G['contains'] = function (substr)
 			return false
 		end
 	end
+	closure_collector[t] = {'contains', substr}
+	return t
 end
 
 _G['uncontains'] = function (substr)
-	return function (v)
+	local t = function (v)
 		v = tostring(v)
 		if not v:contains(substr) then 
 			return true
@@ -685,11 +708,13 @@ _G['uncontains'] = function (substr)
 			return false
 		end
 	end
+	closure_collector[t] = {'uncontains', substr}
+	return t
 end
 
 
 _G['startsWith'] = function (substr)
-	return function (v)
+	local t = function (v)
 		v = tostring(v)
 		if v:startsWith(substr) then 
 			return true
@@ -697,10 +722,12 @@ _G['startsWith'] = function (substr)
 			return false
 		end
 	end
+	closure_collector[t] = {'startsWith', substr}
+	return t
 end
 
 _G['unstartsWith'] = function (substr)
-	return function (v)
+	local t = function (v)
 		v = tostring(v)
 		if not v:startsWith(substr) then 
 			return true
@@ -708,11 +735,13 @@ _G['unstartsWith'] = function (substr)
 			return false
 		end
 	end
+	closure_collector[t] = {'unstartsWith', substr}
+	return t
 end
 
 
 _G['endsWith'] = function (substr)
-	return function (v)
+	local t = function (v)
 		v = tostring(v)
 		if v:endsWith(substr) then 
 			return true
@@ -720,10 +749,12 @@ _G['endsWith'] = function (substr)
 			return false
 		end
 	end
+	closure_collector[t] = {'endsWith', substr}
+	return t
 end
 
 _G['unendsWith'] = function (substr)
-	return function (v)
+	local t = function (v)
 		v = tostring(v)
 		if not v:endsWith(substr) then 
 			return true
@@ -731,11 +762,13 @@ _G['unendsWith'] = function (substr)
 			return false
 		end
 	end
+	closure_collector[t] = {'unendsWith', substr}
+	return t
 end
 
 _G['inset'] = function (...)
 	local args = {...}
-	return function (v)
+	local t = function (v)
 		v = tostring(v)
 		for _, val in ipairs(args) do
 			-- once meet one, ok
@@ -746,12 +779,13 @@ _G['inset'] = function (...)
 		
 		return false
 	end
-
+	closure_collector[t] = {'inset', ...}
+	return t
 end
 
 _G['uninset'] = function (...)
 	local args = {...}
-	return function (v)
+	local t = function (v)
 		v = tostring(v)
 		for _, val in ipairs(args) do
 			-- once meet one, false
@@ -762,9 +796,71 @@ _G['uninset'] = function (...)
 		
 		return true
 	end
-
+	closure_collector[t] = {'uninset', ...}
+	return t
 end
 
+-------------------------------------------------------------------
+--
+local manager_key = "_index_manager"
+
+
+local compressQueryArgs = function (query_args, extra)
+	local out = {}
+	if query_args[1] == 'or' then tinsert(out, 'or')
+	else tinsert(out, 'and')
+	end
+	query_args[1] = nil
+	tinsert(out, '|')
+	
+	for k, v in pairs(query_args) do
+		tinsert(out, k)
+		if type(v) == 'string' then
+			tinsert(out, v)			
+		else
+			local queryt_iden = closure_collector[v]
+			for _, item in ipairs(queryt_iden) do
+				tinsert(out, item)		
+			end
+		end
+		tinsert(out, '|')		
+	end
+	-- push extra params
+	for _, v in ipairs(extra) do
+		tinsert(out, v)
+	end
+	
+	-- restore the first element, avoiding side effect
+	query_args[1] = out[1]	
+	-- clear the closure_collector
+	closure_collector = {}
+	-- use a delemeter to seperate obviously
+	return table.concat(out, ' ^ ')
+end
+
+local addIndexToManager = function (self, query_str_iden, obj_list)
+	-- add to index manager
+	rdzset.add(manager_key, query_str_iden)
+	local score = db:zrange(key, -1, -1, 'withscores')[1][2] or 1
+	local item_key = ('_RULE:%s:%s'):format(self.__name, score)
+	-- generate the index item, use list
+	db:rpush(item_key, unpack(obj_list))
+	-- set expiration to each index item
+	db:expire(item_key, bamboo.config.expiration or bamboo.CACHE_LIFE)
+	
+end
+
+local getIndexFromManager = function (self, query_str_iden)
+	local score = db:zscore(manager_key, query_str_iden)
+	if not score then return nil end
+	-- add to index manager
+	local item_key = ('_RULE:%s:%s'):format(self.__name, score)
+	if not db:exists(item_key) then return nil end
+	-- update expiration
+	db:expire(item_key, bamboo.config.expiration or bamboo.CACHE_LIFE)
+	-- return a list
+	return db:lrange(item_key, 0, -1)
+end
 
 
 ------------------------------------------------------------------------
@@ -1128,8 +1224,8 @@ Model = Object:extend {
 	-- @note: this function can be called by class object and query set
 	filter = function (self, query_args, is_rev, starti, length, dir)
 		I_AM_CLASS_OR_QUERY_SET(self)
+		assert(type(query_args) == 'table' or type(query_args) == 'function', '[Error] the query_args passed to filter must be table or function.')
 		local is_query_table = (type(query_args) == 'table')
-		
 		local is_query_set = false
 		if isList(self) then is_query_set = true end
 		local logic = 'and'
@@ -1137,16 +1233,31 @@ Model = Object:extend {
 		-- normalize the direction value
 		local dir = dir or 1
 		assert( dir == 1 or dir == -1, '[Error] dir must be 1 or -1.')
+		local query_str_iden
+		if bamboo.config.index_support and rawget(self, '__use_index') and rawget(self, '__name') then
+			-- make query identification string
+			query_str_iden = compressQueryArgs(query_args, { is_rev, starti, length, dir })
+		end
 		
 		if is_query_table then
+			-- check index
+			-- XXX: Only support class now, don't support query set, maybe query set doesn't need this feature
+			local id_list
+			if bamboo.config.index_support and rawget(self, '__use_index') and rawget(self, '__name') then
+				id_list = getIndexFromManager(self, query_args)
+				-- if have this list, return objects directly
+				if id_list then
+					return getFromRedisPipeline(self, all_ids)
+				end
+				-- else go ahead
+			end		
 
 			if query_args and query_args['id'] then
 				-- remove 'id' query argument
 				print("[Warning] Filter doesn't support search by id.")
 				query_args['id'] = nil 
-				
 			end
-			
+
 			-- if query table is empty, return slice instances
 			if isFalse(query_args) then 
 				local stop = starti + length - 1
@@ -1279,6 +1390,15 @@ Model = Object:extend {
 		-- when length search is negative, need to reverse once 
 		if dir == -1 then
 			query_set:reverse()
+		end
+		
+		if bamboo.config.index_support and rawget(self, '__use_index') and rawget(self, '__name') then
+			local id_list = {}
+			for _, v in ipairs(query_set) do
+				tinsert(id_list, v.id)
+			end
+			-- add to index
+			addIndexToManager(self, query_str_iden, id_list)
 		end
 		
 		return query_set, endpoint
