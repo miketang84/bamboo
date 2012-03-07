@@ -167,6 +167,24 @@ local function makeModelKeyList(self, ids)
 end
 
 
+-- can be called by instance and class
+local isUsingFulltextIndex = function (self)
+	local model = self
+	if isInstance(self) then model = getModelByName(self:classname()) end
+	if bamboo.config.fulltext_index_support and rawget(model, '__use_fulltext_index') then
+		return true
+	else
+		return false
+	end
+end
+
+local isUsingRuleIndex = function (self)
+	if bamboo.config.index_support and rawget(self, '__use_index') and rawget(self, '__name') then
+		return true
+	end
+	return false
+end
+
 -- in model global index cache (backend is zset),
 -- check the existance of some member by its id (score)
 --
@@ -320,6 +338,15 @@ local delFromRedis = function (self, id)
 	db:del(model_key)
 	-- delete the index in the global model index zset
 	db:zremrangebyscore(index_key, self.id, self.id)
+	
+	-- clear fulltext index
+	if isUsingFulltextIndex(self) then
+		clearIndexesOnDeletion(self)
+	end
+	if isUsingRuleIndex(self) then
+		updateIndexByRules(self, 'del')
+	end
+				
 	-- release the lua object
 	self = nil
 end
@@ -349,6 +376,14 @@ local fakedelFromRedis = function (self, id)
 	-- add to deleted collector
 	rdzset.add(dcollector,  model_key)
 	
+	-- clear fulltext index
+	if isUsingFulltextIndex(self) then
+		clearIndexesOnDeletion(self)
+	end
+	if isUsingRuleIndex(self) then
+		updateIndexByRules(self, 'del')
+	end
+
 	-- release the lua object
 	self = nil
 end
@@ -472,16 +507,6 @@ local clearIndexesOnDeletion = function (instance)
 	db:del('_RFT:' + model_key)
 end
 
--- can be called by instance and class
-local useFulltextIndex = function (self)
-	local model = self
-	if isInstance(self) then model = getModelByName(self:classname()) end
-	if bamboo.config.fulltext_index_support and rawget(model, '__use_fulltext_index') then
-		return true
-	else
-		return false
-	end
-end
 
 --------------------------------------------------------------------------------
 -- The bellow four assertations, they are called only by class, instance or query set
@@ -815,7 +840,6 @@ end
 
 -------------------------------------------------------------------
 --
-local manager_key = "_index_manager"
 
 
 local compressQueryArgs = function (query_args, extra)
@@ -838,6 +862,9 @@ local compressQueryArgs = function (query_args, extra)
 		end
 		tinsert(out, '|')		
 	end
+	
+	tinsert(out, '^')		
+
 	-- push extra params
 	for _, v in ipairs(extra) do
 		tinsert(out, v)
@@ -848,13 +875,120 @@ local compressQueryArgs = function (query_args, extra)
 	-- clear the closure_collector
 	closure_collector = {}
 	-- use a delemeter to seperate obviously
-	return table.concat(out, ' ^ ')
+	return table.concat(out, '   ')
+end
+
+local extraQueryArgs = function (qstr)
+	local endpoint = qstr:find('^') or -1
+	qstr = qstr:sub(1, endpoint)
+	local _qqstr = qstr:splittrim('|')
+	local logic = _qqstr[1]
+	local query_args = {logic}
+	for i=2, #_qqstr do
+		local str = _qqstr[i]
+		local kt = str:splittrim('    ')
+		-- kt[1] is 'key', [2] is 'closure', [3] .. are closure's parameters
+		local key = kt[1]
+		local closure = kt[2]
+		if #kt > 2 then
+			local _args = {}
+			for j=3, #kt do
+				tinsert(_args, kt[j])
+			end
+			-- compute closure now
+			query_args[key] = _G[closure](unpack(_args))
+		else
+			query_args[key] = closure
+		end
+	end
+	
+	return query_args	
+end
+
+local canInstanceFitQueryRule = function (self, qstr)
+	local query_args = extraQueryArgs(qstr)
+	
+	local logic_choice = (query_args[1] == 'and')
+	query_args[1] = nil
+	local flag = logic_choice
+			
+	local fields = self.__fields
+	assert(not isFalse(fields), "[Error] instance's description table must not be blank.")
+			
+	for k, v in pairs(query_args) do
+		if not fields[k] then return false end
+
+		if type(v) == 'function' then
+			flag = v(self[k])
+		else
+			flag = (self[k] == v)
+		end
+					---------------------------------------------------------------
+					-- logic_choice,       flag,      action,          append?
+					---------------------------------------------------------------
+					-- true (and)          true       next field       --
+					-- true (and)          false      break            no
+					-- false (or)          true       break            yes
+					-- false (or)          false      next field       --
+					---------------------------------------------------------------
+		if logic_choice ~= flag then break end
+	end
+
+	return flag
+end
+
+local addInstanceToIndexOnRule = function (self, qstr)
+	local manager_key = "_index_manager:" .. self.__name
+	local flag = canInstanceFitQueryRule(self, qstr)
+	if flag then
+		local score = db:zscore(manager_key, qstr)
+		local item_key = ('_RULE:%s:%s'):format(self.__name, score)
+		db:rpush(item_key, self.id)	
+		db:expire(item_key, bamboo.config.expiration or bamboo.CACHE_LIFE)
+	end
+end
+
+local updateInstanceToIndexOnRule = function (self, qstr)
+	local manager_key = "_index_manager:" .. self.__name
+	local flag = canInstanceFitQueryRule(self, qstr)
+	local score = db:zscore(manager_key, qstr)
+	local item_key = ('_RULE:%s:%s'):format(self.__name, score)
+	db:lrem(item_key, 0, self.id)
+	if flag then
+		db:rpush(item_key, self.id)	
+	end
+	db:expire(item_key, bamboo.config.expiration or bamboo.CACHE_LIFE)
+end
+
+local delInstanceToIndexOnRule = function (self, qstr)
+	local manager_key = "_index_manager:" .. self.__name
+	local flag = canInstanceFitQueryRule(self, qstr)
+	local score = db:zscore(manager_key, qstr)
+	local item_key = ('_RULE:%s:%s'):format(self.__name, score)
+	db:lrem(item_key, 0, self.id)
+	db:expire(item_key, bamboo.config.expiration or bamboo.CACHE_LIFE)
+end
+
+local INDEX_ACTIONS = {
+	['save'] = addInstanceToIndexOnRule,
+	['update'] = updateInstanceToIndexOnRule,
+	['del'] = delInstanceToIndexOnRule
+}
+
+local updateIndexByRules = function (self, action)
+	local manager_key = "_index_manager:" .. self.__name
+	local qstr_list = db:zrange(manager_key, 0, -1)
+	local action_func = INDEX_ACTIONS[action]
+	for _, qstr in ipairs(qstr_list) do
+		action_func(self, qstr)
+	end
 end
 
 local addIndexToManager = function (self, query_str_iden, obj_list)
+	local manager_key = "_index_manager:" .. self.__name
 	-- add to index manager
 	rdzset.add(manager_key, query_str_iden)
-	local score = db:zrange(key, -1, -1, 'withscores')[1][2] or 1
+	local score = db:zscore(manager_key, query_str_iden)
 	local item_key = ('_RULE:%s:%s'):format(self.__name, score)
 	-- generate the index item, use list
 	db:rpush(item_key, unpack(obj_list))
@@ -864,6 +998,7 @@ local addIndexToManager = function (self, query_str_iden, obj_list)
 end
 
 local getIndexFromManager = function (self, query_str_iden)
+	local manager_key = "_index_manager:" .. self.__name
 	local score = db:zscore(manager_key, query_str_iden)
 	if not score then return nil end
 	-- add to index manager
@@ -1247,7 +1382,8 @@ Model = Object:extend {
 		local dir = dir or 1
 		assert( dir == 1 or dir == -1, '[Error] dir must be 1 or -1.')
 		local query_str_iden
-		if bamboo.config.index_support and rawget(self, '__use_index') and rawget(self, '__name') then
+		local is_using_rule_index = isUsingRuleIndex(self)
+		if is_using_rule_index then
 			-- make query identification string
 			query_str_iden = compressQueryArgs(query_args, { is_rev, starti, length, dir })
 		end
@@ -1256,7 +1392,7 @@ Model = Object:extend {
 			-- check index
 			-- XXX: Only support class now, don't support query set, maybe query set doesn't need this feature
 			local id_list
-			if bamboo.config.index_support and rawget(self, '__use_index') and rawget(self, '__name') then
+			if is_using_rule_index then
 				id_list = getIndexFromManager(self, query_args)
 				-- if have this list, return objects directly
 				if id_list then
@@ -1405,7 +1541,7 @@ Model = Object:extend {
 			query_set:reverse()
 		end
 		
-		if bamboo.config.index_support and rawget(self, '__use_index') and rawget(self, '__name') then
+		if is_using_rule_index then
 			local id_list = {}
 			for _, v in ipairs(query_set) do
 				tinsert(id_list, v.id)
@@ -1915,9 +2051,13 @@ Model = Object:extend {
 		db:hmset(model_key, unpack(store_kv))
 		
 		-- make fulltext indexes
-		if useFulltextIndex(self) then
+		if isUsingFulltextIndex(self) then
 			makeFulltextIndexes(self)
 		end
+		if isUsingRuleIndex(self) then
+			updateIndexByRules(self, 'save')
+		end
+
 		
 		return self
     end;
@@ -1939,7 +2079,12 @@ Model = Object:extend {
 		self[field] = new_value
 		
 		-- if fulltext index
-		if fld.fulltext_index then makeFulltextIndexes(self) end
+		if fld.fulltext_index and isUsingFulltextIndex(self) then
+			makeFulltextIndexes(self)
+		end
+		if isUsingRuleIndex(self) then
+			updateIndexByRules(self, 'update')
+		end
 		
 		return self
     end;
@@ -1959,7 +2104,7 @@ Model = Object:extend {
 			for _, v in ipairs(self) do
 				fakedelFromRedis(v)
 				-- clear fulltext indexes
-				if useFulltextIndex(v) then
+				if isUsingFulltextIndex(v) then
 					clearIndexesOnDeletion(v)
 				end
 				v = nil
@@ -1967,7 +2112,7 @@ Model = Object:extend {
 		else
 			fakedelFromRedis(self)
 			-- clear fulltext indexes
-			if useFulltextIndex(self) then
+			if isUsingFulltextIndex(self) then
 				clearIndexesOnDeletion(self)
 			end
 		end
@@ -1983,7 +2128,7 @@ Model = Object:extend {
 			for _, v in ipairs(self) do
 				delFromRedis(v)
 				-- clear fulltext indexes
-				if useFulltextIndex(v) then
+				if isUsingFulltextIndex(v) then
 					clearIndexesOnDeletion(v)
 				end
 				v = nil
@@ -1991,7 +2136,7 @@ Model = Object:extend {
 		else
 			delFromRedis(self)
 			-- clear fulltext indexes
-			if useFulltextIndex(self) then
+			if isUsingFulltextIndex(self) then
 				clearIndexesOnDeletion(self)
 			end
 		end
