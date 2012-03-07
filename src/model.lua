@@ -270,8 +270,6 @@ end
 local QuerySet
 
 local getFromRedisPipeline = function (self, ids)
-	-- here, the data table contain ordinary field, ONE foreign key, but not MANY foreign key
-	
 	local key_list = makeModelKeyList(self, ids)
 	
 	-- all fields are strings
@@ -289,6 +287,20 @@ local getFromRedisPipeline = function (self, ids)
 	end
 
 	return objs
+end 
+
+-- 
+local getPartialFromRedisPipeline = function (self, ids, fields)
+	local key_list = makeModelKeyList(self, ids)
+	
+	-- all fields are strings
+	local data_list = db:pipeline(function (p) 
+		for _, v in ipairs(key_list) do
+			p:hmget(v, unpack(fields))
+		end
+	end)
+
+	return data_list
 end 
 
 -- for use in "User:id" as each item key
@@ -1279,13 +1291,33 @@ Model = Object:extend {
 	--
 	get = function (self, query_args, is_rev)
 		I_AM_CLASS_OR_QUERY_SET(self)
+		assert(type(query_args) == 'table' or type(query_args) == 'function', '[Error] the query_args passed to filter must be table or function.')
 		local is_query_table = (type(query_args) == 'table')
 		local is_query_set = false
 		if isList(self) then is_query_set = true end
 		local logic = 'and'
 		local id = nil
 
+		local query_str_iden
+		local is_using_rule_index = isUsingRuleIndex(self)
+		if is_using_rule_index then
+			-- make query identification string
+			query_str_iden = compressQueryArgs(query_args, { is_rev })
+		end
+
 		if is_query_table then
+			-- check index
+			-- XXX: Only support class now, don't support query set, maybe query set doesn't need this feature
+			local id_list
+			if is_using_rule_index then
+				id_list = getIndexFromManager(self, query_args)
+				-- if have this list, return objects directly
+				if id_list then
+					return self:getById(id_list[1])
+				end
+				-- else go ahead
+			end		
+
 			-- get the id if exist
 			if query_args and query_args['id'] then
 				id = query_args.id
@@ -1363,7 +1395,7 @@ Model = Object:extend {
 				if is_query_table then
 					for k, v in pairs(query_args) do
 						-- to redundant query condition, once meet, jump immediately
-						if not fields[k] then flag=false; break end
+						if not obj[k] then flag=false; break end
 
 						if type(v) == 'function' then
 							flag = v(obj[k])
@@ -1408,7 +1440,7 @@ Model = Object:extend {
 		assert(type(query_args) == 'table' or type(query_args) == 'function', '[Error] the query_args passed to filter must be table or function.')
 		local is_query_table = (type(query_args) == 'table')
 		local is_query_set = false
-		if isList(self) then is_query_set = true end
+		if isQuerySet(self) then is_query_set = true end
 		local logic = 'and'
 		
 		-- normalize the direction value
@@ -1429,7 +1461,7 @@ Model = Object:extend {
 				id_list = getIndexFromManager(self, query_args)
 				-- if have this list, return objects directly
 				if id_list then
-					return getFromRedisPipeline(self, all_ids)
+					return getFromRedisPipeline(self, id_list)
 				end
 				-- else go ahead
 			end		
@@ -1448,21 +1480,14 @@ Model = Object:extend {
 			end
 
 			-- normalize the 'and' and 'or' logic
-			
 			if query_args[1] then
 				if query_args[1] == 'or' then
 					logic = 'or'
 				end
 				query_args[1] = nil
 			end
-		else
-		-- query_arg is function
-			checkType(query_args, 'function')
 		end
 		
-		-- create a query set
-		local query_set = QuerySet()
-			
 		local all_ids
 		if is_query_set then
 			-- if self is query set, we think of all_ids as object list, rather than id string list
@@ -1474,7 +1499,7 @@ Model = Object:extend {
 		
 		if starti then
 			checkType(starti, 'number')
-			assert( starti >= 1, '[Error] starti must be greater than 1.')
+			assert( starti >= 1, '[Error] starti must be greater or equal than 1.')
 			
 			if dir == 1 then
 				-- get the part of starti to end of the list
@@ -1486,6 +1511,8 @@ Model = Object:extend {
 		-- nothing in id list, return empty table
 		if #all_ids == 0 then return List(), 1 end
 		
+		-- create a query set
+		local query_set = QuerySet()
 		-- 's': start
 		-- 'e': end
 		-- 'dir': direction
@@ -1500,61 +1527,72 @@ Model = Object:extend {
 			e = 1
 			dir = -1
 		end
-		
 		local logic_choice = (logic == 'and')
-		
-		local objs
-		if is_query_set then
-			objs = all_ids
-		else
-			objs = getFromRedisPipeline(self, all_ids)
+
+		local walkcheck = function (objs)
+			for i = s, e, dir do
+				local flag = logic_choice
+				local obj = objs[i]
+				
+				if is_query_table then
+					for k, v in pairs(query_args) do
+						-- to redundant query condition, once meet, jump immediately
+						if not obj[k] then flag=false; break end
+
+						if type(v) == 'function' then
+							flag = v(obj[k])
+						else
+							flag = (obj[k] == v)
+						end
+						---------------------------------------------------------------
+						-- logic_choice,       flag,      action,          append?
+						---------------------------------------------------------------
+						-- true (and)          true       next field       --
+						-- true (and)          false      break            no
+						-- false (or)          true       break            yes
+						-- false (or)          false      next field       --
+						---------------------------------------------------------------
+						if logic_choice ~= flag then break end
+					end
+				else
+					-- call this query args function
+					flag = query_args(obj)
+				end
+				
+				-- if walk to this line, means find one 
+				if flag then
+					query_set:append(obj)
+					if length then 
+						checkType(length, 'number')
+						if length > 0 and #query_set >= length then
+							-- if find enough
+							exiti = i
+							break
+						end
+					end
+				end
+			end
 		end
 		
-		for i = s, e, dir do
-			local flag = logic_choice
-			
-			local obj = objs[i]
-			assert(isValidInstance(obj), "[Error] object must not be empty.")
-			local fields = obj.__fields
-			assert(not isFalse(fields), "[Error] object's description table must not be blank.")
-			
+		if is_query_set then
+			local objs = all_ids
+			walkcheck(objs)			
+		else
+			local qfs = {'id'}
 			if is_query_table then
-				for k, v in pairs(query_args) do
-					-- to redundant query condition, once meet, jump immediately
-					if not fields[k] then flag=false; break end
-
-					if type(v) == 'function' then
-						flag = v(obj[k])
-					else
-						flag = (obj[k] == v)
-					end
-					---------------------------------------------------------------
-					-- logic_choice,       flag,      action,          append?
-					---------------------------------------------------------------
-					-- true (and)          true       next field       --
-					-- true (and)          false      break            no
-					-- false (or)          true       break            yes
-					-- false (or)          false      next field       --
-					---------------------------------------------------------------
-					if logic_choice ~= flag then break end
+				for k, _ in pairs(query_args) do
+					tinsert(qfs, k)
 				end
 			else
-				-- call this query args function
-				flag = query_args(obj)
-			end
-			
-			-- if walk to this line, means find one 
-			if flag then
-				query_set:append(obj)
-				if length then 
-					checkType(length, 'number')
-					if length > 0 and #query_set >= length then
-						-- if find enough
-						exiti = i
-						break
-					end
+				-- use precollected fields
+				for _, k in ipairs(self.__index_fields) do
+					tinsert(qfs, k)
 				end
 			end
+			table.sort(qfs)
+				
+			local objs = getPartialFromRedisPipeline(self, all_ids, qfs)
+			walkcheck(objs)			
 		end
 			
 		-- calculate the search end position when return 
@@ -1574,13 +1612,16 @@ Model = Object:extend {
 			query_set:reverse()
 		end
 		
-		if is_using_rule_index then
+		if not is_query_set and #query_set > 0 then
 			local id_list = {}
 			for _, v in ipairs(query_set) do
 				tinsert(id_list, v.id)
 			end
+			query_set = getFromRedisPipeline(self, id_list)
 			-- add to index
-			addIndexToManager(self, query_str_iden, id_list)
+			if is_using_rule_index then
+				addIndexToManager(self, query_str_iden, id_list)
+			end
 		end
 		
 		return query_set, endpoint
