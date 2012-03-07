@@ -844,25 +844,40 @@ end
 
 local compressQueryArgs = function (query_args, extra)
 	local out = {}
-	if query_args[1] == 'or' then tinsert(out, 'or')
-	else tinsert(out, 'and')
-	end
-	query_args[1] = nil
-	tinsert(out, '|')
+	local qtype = type(query_args)
+	if qtype == 'table' then
 	
-	for k, v in pairs(query_args) do
-		tinsert(out, k)
-		if type(v) == 'string' then
-			tinsert(out, v)			
-		else
-			local queryt_iden = closure_collector[v]
-			for _, item in ipairs(queryt_iden) do
-				tinsert(out, item)		
-			end
+		if query_args[1] == 'or' then tinsert(out, 'or')
+		else tinsert(out, 'and')
 		end
-		tinsert(out, '|')		
-	end
+		query_args[1] = nil
+		tinsert(out, '|')
 	
+		local queryfs = {}
+		for kf in pairs(query_args) do
+			tinsert(queryfs, kf)
+		end
+		table.sort(queryfs)
+	
+		for _, k in ipairs(queryfs) do
+			v = query_args[k]
+			tinsert(out, k)
+			if type(v) == 'string' then
+				tinsert(out, v)			
+			else
+				local queryt_iden = closure_collector[v]
+				for _, item in ipairs(queryt_iden) do
+					tinsert(out, item)		
+				end
+			end
+			tinsert(out, '|')		
+		end
+	elseif qtype == 'function' then
+		tinsert(out, 'function')
+		tinsert(out, '|')	
+		tinsert(out, string.dump(query_args))
+	end
+
 	tinsert(out, '^')		
 
 	-- push extra params
@@ -872,6 +887,8 @@ local compressQueryArgs = function (query_args, extra)
 	
 	-- restore the first element, avoiding side effect
 	query_args[1] = out[1]	
+	
+
 	-- clear the closure_collector
 	closure_collector = {}
 	-- use a delemeter to seperate obviously
@@ -879,26 +896,39 @@ local compressQueryArgs = function (query_args, extra)
 end
 
 local extraQueryArgs = function (qstr)
-	local endpoint = qstr:find('^') or -1
-	qstr = qstr:sub(1, endpoint)
-	local _qqstr = qstr:splittrim('|')
-	local logic = _qqstr[1]
-	local query_args = {logic}
-	for i=2, #_qqstr do
-		local str = _qqstr[i]
-		local kt = str:splittrim('    ')
-		-- kt[1] is 'key', [2] is 'closure', [3] .. are closure's parameters
-		local key = kt[1]
-		local closure = kt[2]
-		if #kt > 2 then
-			local _args = {}
-			for j=3, #kt do
-				tinsert(_args, kt[j])
+	local query_args
+	
+	if qstr:startsWith('function') then
+		local startpoint = qstr:find('|') or 1
+		local endpoint = qstr:rfind('^') or 0
+		
+		qstr = qstr:sub(startpoint + 1, endpoint - 1):trim()
+		-- now qstr is the function binary string
+		query_args = loadstring(qstr)
+
+	else
+	
+		local endpoint = qstr:find('^') or 0
+		qstr = qstr:sub(1, endpoint - 1)
+		local _qqstr = qstr:splittrim('|')
+		local logic = _qqstr[1]
+		query_args = {logic}
+		for i=2, #_qqstr do
+			local str = _qqstr[i]
+			local kt = str:splittrim('    ')
+			-- kt[1] is 'key', [2] is 'closure', [3] .. are closure's parameters
+			local key = kt[1]
+			local closure = kt[2]
+			if #kt > 2 then
+				local _args = {}
+				for j=3, #kt do
+					tinsert(_args, kt[j])
+				end
+				-- compute closure now
+				query_args[key] = _G[closure](unpack(_args))
+			else
+				query_args[key] = closure
 			end
-			-- compute closure now
-			query_args[key] = _G[closure](unpack(_args))
-		else
-			query_args[key] = closure
 		end
 	end
 	
@@ -907,22 +937,24 @@ end
 
 local canInstanceFitQueryRule = function (self, qstr)
 	local query_args = extraQueryArgs(qstr)
-	
-	local logic_choice = (query_args[1] == 'and')
-	query_args[1] = nil
-	local flag = logic_choice
+	if type(query_args) == 'function' then
+		return query_args(self)
+	else
+		local logic_choice = (query_args[1] == 'and')
+		query_args[1] = nil
+		local flag = logic_choice
 			
-	local fields = self.__fields
-	assert(not isFalse(fields), "[Error] instance's description table must not be blank.")
+		local fields = self.__fields
+		assert(not isFalse(fields), "[Error] instance's description table must not be blank.")
 			
-	for k, v in pairs(query_args) do
-		if not fields[k] then return false end
+		for k, v in pairs(query_args) do
+			if not fields[k] then return false end
 
-		if type(v) == 'function' then
-			flag = v(self[k])
-		else
-			flag = (self[k] == v)
-		end
+			if type(v) == 'function' then
+				flag = v(self[k])
+			else
+				flag = (self[k] == v)
+			end
 					---------------------------------------------------------------
 					-- logic_choice,       flag,      action,          append?
 					---------------------------------------------------------------
@@ -931,7 +963,8 @@ local canInstanceFitQueryRule = function (self, qstr)
 					-- false (or)          true       break            yes
 					-- false (or)          false      next field       --
 					---------------------------------------------------------------
-		if logic_choice ~= flag then break end
+			if logic_choice ~= flag then break end
+		end
 	end
 
 	return flag
