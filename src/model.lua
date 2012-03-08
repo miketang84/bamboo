@@ -1507,8 +1507,6 @@ Model = Object:extend {
 			end
 		end
 
-		ptable(query_set)
-		print(isQuerySet(query_set))
 		return query_set
 	end;
     
