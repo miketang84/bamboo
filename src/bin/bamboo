@@ -6,6 +6,7 @@ require 'bamboo'
 require 'redis'
 
 local util = require 'bamboo.util'
+local readSettings = util.readSettings
 local env = {}
 BAMBOO_DB = nil
 SCRIPT_PIDS = {}
@@ -19,7 +20,7 @@ end)
 
 ------------------------------------------------------------------------------
 -- load configuration
-local config = util.readSettings()
+local config = readSettings()
 
 ------------------------------------------------------------------------------
 --

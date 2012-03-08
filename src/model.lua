@@ -1323,9 +1323,9 @@ Model = Object:extend {
 	filter = function (self, query_args, is_rev, starti, length, dir)
 		I_AM_CLASS_OR_QUERY_SET(self)
 		assert(type(query_args) == 'table' or type(query_args) == 'function', '[Error] the query_args passed to filter must be table or function.')
-		if starti then assert(type(starti) == 'number', '[Error] @filter - starti must be number.')
-		if length then assert(type(length) == 'number', '[Error] @filter - length must be number.')
-		if dir then assert(type(dir) == 'number', '[Error] @filter - dir must be number.')				
+		if starti then assert(type(starti) == 'number', '[Error] @filter - starti must be number.') end
+		if length then assert(type(length) == 'number', '[Error] @filter - length must be number.') end
+		if dir then assert(type(dir) == 'number', '[Error] @filter - dir must be number.') end
 		
 		local is_query_table = (type(query_args) == 'table')
 		local is_query_set = false
@@ -1505,9 +1505,9 @@ Model = Object:extend {
 			end
 		end
 
-		
+		ptable(query_set)
+		print(isQuerySet(query_set))
 		return query_set
-		
 	end;
     
 	
@@ -1705,6 +1705,7 @@ Model = Object:extend {
 		db:expire(cachetype_key, bamboo.config.cache_life or bamboo.CACHE_LIFE)
 		
 	end;
+
 	
 	getCache = function (self, key, start, stop, is_rev)
 		I_AM_CLASS(self)
@@ -2127,6 +2128,7 @@ Model = Object:extend {
 		end
 		db:del(dcollector)
 	end;
+
 	-----------------------------------------------------------------------------------
 	-- Foreign API
 	-----------------------------------------------------------------------------------
@@ -2444,7 +2446,7 @@ Model = Object:extend {
 
 			self = flat
 		end
-	
+		
 		return self		
 	end;
 	
@@ -2598,14 +2600,12 @@ Model = Object:extend {
 	end;
 	
 	-- for fulltext index API
-	fulltextSearch = function (self, ask_str)
+	fulltextSearch = function (self, ask_str, length)
 		assert(self.__name == 'Model')
-				
-		
+		return searchOnFulltextIndexes(ask_str, length)
 	end;
 
 }
-
 
 
 return Model
