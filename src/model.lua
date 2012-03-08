@@ -527,6 +527,20 @@ local clearIndexesOnDeletion = function (instance)
 end
 
 
+local doslice = function (list_a, starti, length, dir)
+	if starti then
+		if dir == 1 then
+			return list_a:slice(starti, length and (starti + length - 1) or -1) 
+		else
+			return list_a:slice(length and (starti - length + 1) or 1, starti) 
+		end
+	else
+		return list_a
+	end
+end
+
+
+
 --------------------------------------------------------------------------------
 -- The bellow four assertations, they are called only by class, instance or query set
 --
@@ -1345,13 +1359,7 @@ Model = Object:extend {
 			if is_using_rule_index then
 				id_list = getIndexFromManager(self, query_args)
 				-- now id_list is a list containing all id of instances fit to this query_args rule, so need to slice
-				if starti then
-					if dir == 1 then
-						id_list = id_list:slice(starti, length and (starti + length - 1) or -1) 
-					else
-						id_list = id_list:slice(length and (starti - length + 1) or 1, starti) 
-					end
-				end
+				id_list = doslice(id_list, starti, length, dir)
 
 				-- if have this list, return objects directly
 				if id_list then
@@ -1404,34 +1412,39 @@ Model = Object:extend {
 				local flag = logic_choice
 				local obj = objs[i]
 				
-				if is_query_table then
-					for k, v in pairs(query_args) do
-						-- to redundant query condition, once meet, jump immediately
-						if not obj[k] then flag=false; break end
+				-- check the object's legalery, only act on valid object
+				if isValidInstance(obj) then
+					if is_query_table then
+						for k, v in pairs(query_args) do
+							-- to redundant query condition, once meet, jump immediately
+							if not obj[k] then flag=false; break end
 
-						if type(v) == 'function' then
-							flag = v(obj[k])
-						else
-							flag = (obj[k] == v)
+							if type(v) == 'function' then
+								flag = v(obj[k])
+							else
+								flag = (obj[k] == v)
+							end
+							---------------------------------------------------------------
+							-- logic_choice,       flag,      action,          append?
+							---------------------------------------------------------------
+							-- true (and)          true       next field       --
+							-- true (and)          false      break            no
+							-- false (or)          true       break            yes
+							-- false (or)          false      next field       --
+							---------------------------------------------------------------
+							if logic_choice ~= flag then break end
 						end
-						---------------------------------------------------------------
-						-- logic_choice,       flag,      action,          append?
-						---------------------------------------------------------------
-						-- true (and)          true       next field       --
-						-- true (and)          false      break            no
-						-- false (or)          true       break            yes
-						-- false (or)          false      next field       --
-						---------------------------------------------------------------
-						if logic_choice ~= flag then break end
+					else
+						-- call this query args function
+						flag = query_args(obj)
+					end
+					
+					-- if walk to this line, means find one 
+					if flag then
+						tinsert(query_set, obj)
 					end
 				else
-					-- call this query args function
-					flag = query_args(obj)
-				end
-				
-				-- if walk to this line, means find one 
-				if flag then
-					tinsert(query_set, obj)
+					print(('[Warning] object %s is invalid when filter.'):format(obj.id or 'nil'))
 				end
 			end
 		end
@@ -1471,13 +1484,7 @@ Model = Object:extend {
 		
 		-- here, _t_query_set is the all instance fit to query_args now
 		local _t_query_set = query_set
-		if starti then
-			if dir == 1 then
-				query_set = _t_query_set:slice(starti, length and (starti + length - 1) or -1) 
-			else
-				query_set = _t_query_set:slice(length and (starti - length + 1) or 1, starti) 
-			end
-		end
+		query_set = doslice(_t_query_set, starti, length, dir)
 
 		-- if self is query set, its' element is always integrated
 		-- if call by class
