@@ -1323,7 +1323,7 @@ Model = Object:extend {
 		local is_using_rule_index = isUsingRuleIndex(self)
 		if is_using_rule_index then
 			-- make query identification string
-			query_str_iden = compressQueryArgs(query_args, { is_rev, starti, length, dir })
+			query_str_iden = compressQueryArgs(query_args)
 		end
 		
 		if is_query_table then
@@ -1332,6 +1332,15 @@ Model = Object:extend {
 			local id_list
 			if is_using_rule_index then
 				id_list = getIndexFromManager(self, query_args)
+				-- now id_list is a list containing all id of instances fit to this query_args rule, so need to slice
+				if starti then
+					if dir == 1 then
+						id_list = id_list:slice(starti, length and (starti + length - 1) or -1) 
+					else
+						id_list = id_list:slice(length and (starti - length + 1) or 1, starti) 
+					end
+				end
+
 				-- if have this list, return objects directly
 				if id_list then
 					return getFromRedisPipeline(self, id_list)
@@ -1371,6 +1380,7 @@ Model = Object:extend {
 		end
 		-- nothing in id list, return empty table
 		if #all_ids == 0 then return List() end
+
 		
 		-- create a query set
 		local query_set = QuerySet()
