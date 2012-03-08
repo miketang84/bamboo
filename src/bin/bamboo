@@ -280,19 +280,35 @@ COMMANDS = {
     end,
 
     stop = function (settings)
-		local fd = io.popen('ps eaux|grep $(pwd)', 'r')
+		local fd = io.popen('ps eaux|grep lua|grep $(pwd)', 'r')
 		local output = fd:read("*a")
 		fd:close()
-		--print(output)
+		-- print(output)
 
-		local pattern = "^.-[%d:]+%s+lua%s+/usr/local/bin/bamboo[%s_]+(%w+)"
+		local cmd_output = output:split('\n')
+		local pattern0 = "(%d+).+lua /usr/local/bin/bamboo start"
+		local pattern1 = "(%d+).+lua /usr/local/bin/bamboo_handler"
 		local flag = true
 		local findit = false
-		for pid, cmd in output:gmatch(pattern) do
-			-- print(pid, cmd)
-			if cmd == "start" or cmd == 'handler' then
-				findit = true
-				local ret = os.execute(('sudo kill -9 %s'):format(pid))
+		local pid
+		for _, part in ipairs(cmd_output) do
+			pid = part:match(pattern0)
+			print('===>>>>', pid)
+			findit = true
+			if pid then
+				local ret = os.execute(('kill -9 %s'):format(pid))
+				if ret ~= 0 and flag == true then 
+					flag = false
+				end
+			end
+		end
+		
+		for _, part in ipairs(cmd_output) do
+			pid = part:match(pattern1)
+			print('===>>>>', pid)
+			findit = true
+			if pid then
+				local ret = os.execute(('kill -9 %s'):format(pid))
 				if ret ~= 0 and flag == true then 
 					flag = false
 				end
