@@ -150,7 +150,7 @@ local Upload = Model:extend {
 		local file_objs = List()
 		-- file data are stored as arraies in params
 		for i, v in ipairs(params) do
-			local name, path = savefile { req = req, file_obj = v, dest_dir = dest_dir, prefix = prefix, postfix = postfix, rename_func }
+			local name, path = savefile { req = req, file_obj = v, dest_dir = dest_dir, prefix = prefix, postfix = postfix, rename_func = rename_func }
 			if not path or not name then return nil end
 			-- create file instance
 			local file_instance = self { name = name, path = path }

@@ -1383,6 +1383,8 @@ Model = Object:extend {
 
 			-- normalize the 'and' and 'or' logic
 			if query_args[1] then
+				assert(query_arg[1] == 'or' or query_args[1] == 'and', 
+					"[Error] The logic should be 'and' or 'or', rather than: " .. tostring(query_args[1]))
 				if query_args[1] == 'or' then
 					logic = 'or'
 				end
@@ -2401,7 +2403,7 @@ Model = Object:extend {
 			if af and bf then
 				if direction == 'asc' then
 					return af < bf
-				elseif direction == 'des' then
+				elseif direction == 'desc' then
 					return af > bf
 				else
 					return nil
@@ -2430,6 +2432,7 @@ Model = Object:extend {
 			-- sort each part
 			local result = {}
 			byfield = field2
+			direction = dir2 or 'asc'
 			sort_func = sort_func2 or sort_func
 			for i, val in ipairs(work_t) do
 				table.sort(val, sort_func)
@@ -2437,7 +2440,7 @@ Model = Object:extend {
 			end
 
 			-- flatten to one rank table
-			local flat = {}
+			local flat = QuerySet()
 			for i, val in ipairs(result) do
 				for j, v in ipairs(val) do
 					table.insert(flat, v)
@@ -2471,12 +2474,12 @@ Model = Object:extend {
 		local field_value, stop_id
 		local insert_position = 0
 		
-		if head > tail then order_type = 'des' end
+		if head > tail then order_type = 'desc' end
 		-- should always keep `a` and `b` have the same type
 		local sort_func = sort_func or function (a, b)
 			if order_type == 'asc' then
 				return a > b
-			elseif order_type == 'des' then
+			elseif order_type == 'desc' then
 				return a < b
 			end
 		end
