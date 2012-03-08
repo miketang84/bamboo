@@ -17,6 +17,7 @@ local util = require 'bamboo.util'
 config = {}
 -- for global rendering usage
 context = {}
+userdata = {}
 -- for cache life time
 CACHE_LIFE = 1800
 -- global URLS definition

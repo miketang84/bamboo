@@ -917,6 +917,8 @@ local extraQueryArgs = function (qstr)
 		qstr = qstr:sub(startpoint + 1, endpoint - 1):trim()
 		-- now qstr is the function binary string
 		query_args = loadstring(qstr)
+		-- set function environment, to solve the problem of upvalues can't find
+		setfenv(assert(query_args, '[Error] @extraQueryArgs - function code error when extract.'), setmetatable(bamboo.userdata, {__index=_G}))
 
 	else
 	
@@ -1322,6 +1324,16 @@ Model = Object:extend {
 		local query_str_iden
 		local is_using_rule_index = isUsingRuleIndex(self)
 		if is_using_rule_index then
+			if type(query_args) == 'function' then
+				for i=1, math.huge do
+			    	local name, v = debug.getupvalue(query_args, i)
+			    	if not name then break end
+					-- record upvalue to bamboo.userdata, for later use when extract
+			        bamboo.userdata[name] = v
+			        -- print(name, v)
+				end
+			                                   
+			end
 			-- make query identification string
 			query_str_iden = compressQueryArgs(query_args)
 		end

@@ -334,6 +334,7 @@ local function run(conn, config)
 						req['ajax'] = true
 					end
 					req.viewcode = {}
+					req.userdata = {}
 
 					print(("req %s: %s"):format(config.route, req.conn_id), os.date(), req.path, req.method, req.session_id)
 					
