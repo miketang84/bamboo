@@ -285,7 +285,7 @@ COMMANDS = {
 		fd:close()
 		--print(output)
 
-		local pattern = "%s*(%d+)%s+[%w/]+%s+[%w%+]+%s+[%d:]+%s+lua%s+/usr/local/bin/bamboo[%s_]+(%w+)"
+		local pattern = "^.-[%d:]+%s+lua%s+/usr/local/bin/bamboo[%s_]+(%w+)"
 		local flag = true
 		local findit = false
 		for pid, cmd in output:gmatch(pattern) do
