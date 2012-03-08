@@ -1350,23 +1350,21 @@ Model = Object:extend {
 			end
 			-- make query identification string
 			query_str_iden = compressQueryArgs(query_args)
+
+			-- check index
+			-- XXX: Only support class now, don't support query set, maybe query set doesn't need this feature
+			local id_list = getIndexFromManager(self, query_str_iden)
+			-- now id_list is a list containing all id of instances fit to this query_args rule, so need to slice
+			id_list = doslice(id_list, starti, length, dir)
+
+			-- if have this list, return objects directly
+			if id_list then
+				return getFromRedisPipeline(self, id_list)
+			end
+			-- else go ahead
 		end
 		
 		if is_query_table then
-			-- check index
-			-- XXX: Only support class now, don't support query set, maybe query set doesn't need this feature
-			local id_list
-			if is_using_rule_index then
-				id_list = getIndexFromManager(self, query_args)
-				-- now id_list is a list containing all id of instances fit to this query_args rule, so need to slice
-				id_list = doslice(id_list, starti, length, dir)
-
-				-- if have this list, return objects directly
-				if id_list then
-					return getFromRedisPipeline(self, id_list)
-				end
-				-- else go ahead
-			end		
 
 			if query_args and query_args['id'] then
 				-- remove 'id' query argument
