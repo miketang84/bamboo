@@ -280,7 +280,7 @@ COMMANDS = {
     end,
 
     stop = function (settings)
-		local fd = io.popen('ps ex|grep $(pwd)', 'r')
+		local fd = io.popen('ps eaux|grep $(pwd)', 'r')
 		local output = fd:read("*a")
 		fd:close()
 		--print(output)
