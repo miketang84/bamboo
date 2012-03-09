@@ -120,8 +120,8 @@ local getFromRedis = function (self, model_key)
 	-- all fields are strings 
 	local data = db:hgetall(model_key)
 	if not isValidInstance(data) then print("[Warning] Can't get object by", model_key); return nil end
-	-- make id type is number
-	data.id = tonumber(data.id) or data.id
+	-- XXX: keep id as string for convienent, because http and database are all string
+	-- data.id = tonumber(data.id) or data.id
 	
 	local fields = self.__fields
 	for k, fld in pairs(fields) do
