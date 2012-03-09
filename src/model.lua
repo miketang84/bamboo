@@ -1296,15 +1296,16 @@ Model = Object:extend {
 	-- return the first instance found by query set
 	--
 	get = function (self, query_args, find_rev)
-		local obj = self:filter(query_args, find_rev)[1]
+		-- XXX: may cause effective problem
+		-- every time 'get' will cause the all objects' retrieving
+		local obj = self:filter(query_args, nil, nil, find_rev)[1]
 		return obj
 	end;
 
 	--- fitler some instances belong to this model
 	-- @param query_args: query arguments in a table
-	-- @param find_rev: 'rev' or other value, means start to search from begining or from end
-	-- @param start: specify which index to start search, note: this is the position after filtering 
-	-- @param length: specify how many elements to find
+	-- @param start: specify which index to start slice, note: this is the position after filtering 
+	-- @param stop: specify the end of slice
 	-- @param is_rev: specify the direction of the search result, 'rev'
 	-- @return: query_set, an object list (query set)
 	-- @note: this function can be called by class object and query set
