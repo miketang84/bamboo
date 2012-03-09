@@ -632,6 +632,7 @@ end
 -- for convienent, import them into _G directly
 ------------------------------------------------------------------------
 local closure_collector = {}
+local upvalue_collector = {}
 
 _G['eq'] = function ( cmp_obj )
 	local t = function (v)
@@ -865,6 +866,20 @@ end
 
 -------------------------------------------------------------------
 --
+local collectRuleFunctionUpvalues = function (query_args)
+	local upvalues = upvalue_collector
+	for i=1, math.huge do
+		local name, v = debug.getupvalue(query_args, i)
+		if not name then break end
+		-- because we could not collect the upvalues whose type is 'table', report error and abort here
+		assert(type(v) ~= 'table' and type(v) ~= 'function', 
+			"[Error] @collectRuleFunctionUpvalues of filter - bamboo has no ability to collect the function upvalue whose type is 'table' or 'function'.")
+
+		-- record upvalue to bamboo.userdata, for later use when extract
+		upvalues[#upvalues + 1] = { name, tostring(v), type(v) }
+		-- print(name, v)
+	end
+end
 
 
 local compressQueryArgs = function (query_args)
@@ -897,20 +912,28 @@ local compressQueryArgs = function (query_args)
 			end
 			tinsert(out, '|')		
 		end
+		-- clear the closure_collector
+		closure_collector = {}
 	elseif qtype == 'function' then
 		tinsert(out, 'function')
 		tinsert(out, '|')	
 		tinsert(out, string.dump(query_args))
 		tinsert(out, '|')			
+		for _, pair in ipairs(upvalue_collector) do
+			tinsert(out, pair[1])	-- key
+			tinsert(out, pair[2])	-- value
+			tinsert(out, pair[3])	-- value type			
+		end
+
+		-- clear the upvalue_collector
+		upvalue_collector = {}
 	end
 
 	-- restore the first element, avoiding side effect
 	query_args[1] = out[1]	
 
-	-- clear the closure_collector
-	closure_collector = {}
 	-- use a delemeter to seperate obviously
-	return table.concat(out, '   ')
+	return table.concat(out, ' ')
 end
 
 local extraQueryArgs = function (qstr)
@@ -918,14 +941,36 @@ local extraQueryArgs = function (qstr)
 	
 	if qstr:startsWith('function') then
 		local startpoint = qstr:find('|') or 1
-		local endpoint = -1
+		local endpoint = qstr:rfind('|') or -1
 		
-		qstr = qstr:sub(startpoint + 1, endpoint - 1):trim()
-		-- now qstr is the function binary string
-		query_args = loadstring(qstr)
-		-- set function environment, to solve the problem of upvalues can't find
-		setfenv(assert(query_args, '[Error] @extraQueryArgs - function code error when extract.'), setmetatable(bamboo.userdata, {__index=_G}))
-
+		fpart = qstr:sub(startpoint + 1, endpoint - 1):trim()
+		apart = qstr:sub(endpoint + 1, -1):trim()
+		-- now fpart is the function binary string
+		query_args = loadstring(fpart)
+		-- now query_args is query function
+		
+		if not isFalse(apart) then
+			-- item 1 is key, item 2 is value, item 3 is value type, item 4 is key .... 
+			local flat_upvalues = apart:split(' ')
+			for i=1, #flat_upvalues / 3 do
+				local vtype = flat_upvalues[3*i]
+				local key = flat_upvalues[3*i - 2]
+				local value = flat_upvalues[3*i - 1]
+				if vtype == 'string' then
+					-- nothing to do
+				elseif vtype == 'number' then
+					value = tonumber(value)
+				elseif vtype == 'boolean' then
+					value = loadstring('return ' .. value)()
+				elseif vtype == 'nil' then
+					value = nil
+				end
+				-- set upvalues
+				debug.setupvalue(query_args, i, value)
+			end
+		end
+		-- XXX: not work. set function environment, to solve the problem of upvalues can't find
+		-- setfenv(assert(query_args, '[Error] @extraQueryArgs - function code error when extract.'), setmetatable(bamboo.userdata, {__index=_G}))
 	else
 	
 		local endpoint = -1
@@ -1058,10 +1103,14 @@ end
 local getIndexFromManager = function (self, query_str_iden)
 	local manager_key = "_index_manager:" .. self.__name
 	local score = db:zscore(manager_key, query_str_iden)
-	if not score then return nil end
+	if not score then return List() end
 	-- add to index manager
 	local item_key = ('_RULE:%s:%s'):format(self.__name, score)
-	if not db:exists(item_key) then return nil end
+	if not db:exists(item_key) then 
+		-- clear the cache in the index manager
+		db:zrem(manager_key, query_str_iden)
+		return List()
+	end
 	-- update expiration
 	db:expire(item_key, bamboo.config.expiration or bamboo.CACHE_LIFE)
 	-- return a list
@@ -1299,7 +1348,7 @@ Model = Object:extend {
 	get = function (self, query_args, find_rev)
 		-- XXX: may cause effective problem
 		-- every time 'get' will cause the all objects' retrieving
-		local obj = self:filter(query_args, nil, nil, find_rev)[1]
+		local obj = self:filter(query_args, nil, nil, find_rev, 'get')[1]
 		return obj
 	end;
 
@@ -1310,7 +1359,7 @@ Model = Object:extend {
 	-- @param is_rev: specify the direction of the search result, 'rev'
 	-- @return: query_set, an object list (query set)
 	-- @note: this function can be called by class object and query set
-	filter = function (self, query_args, start, stop, is_rev)
+	filter = function (self, query_args, start, stop, is_rev, is_get)
 		I_AM_CLASS_OR_QUERY_SET(self)
 		assert(type(query_args) == 'table' or type(query_args) == 'function', '[Error] the query_args passed to filter must be table or function.')
 		if start then assert(type(start) == 'number', '[Error] @filter - start must be number.') end
@@ -1326,13 +1375,7 @@ Model = Object:extend {
 		local is_using_rule_index = isUsingRuleIndex(self)
 		if is_using_rule_index then
 			if type(query_args) == 'function' then
-				for i=1, math.huge do
-			    	local name, v = debug.getupvalue(query_args, i)
-			    	if not name then break end
-					-- record upvalue to bamboo.userdata, for later use when extract
-			        bamboo.userdata[name] = v
-			        -- print(name, v)
-				end
+				local upvalues = collectRuleFunctionUpvalues(query_args)
 			                                   
 			end
 			-- make query identification string
@@ -1341,12 +1384,18 @@ Model = Object:extend {
 			-- check index
 			-- XXX: Only support class now, don't support query set, maybe query set doesn't need this feature
 			local id_list = getIndexFromManager(self, query_str_iden)
-			-- now id_list is a list containing all id of instances fit to this query_args rule, so need to slice
-			id_list = id_list:slice(start, stop, is_rev)
-
-			-- if have this list, return objects directly
-			if not id_list:isEmpty() then
-				return getFromRedisPipeline(self, id_list)
+			if #id_list > 0 then
+				if is_get == 'get' then
+					id_list = (is_rev == 'rev') and List{id_list[#id_list]} or List{id_list[1]}
+				else	
+					-- now id_list is a list containing all id of instances fit to this query_args rule, so need to slice
+					id_list = id_list:slice(start, stop, is_rev)
+				end
+				
+				-- if have this list, return objects directly
+				if #id_list > 0 then
+					return getFromRedisPipeline(self, id_list)
+				end
 			end
 			-- else go ahead
 		end
@@ -1455,12 +1504,19 @@ Model = Object:extend {
 		
 		-- here, _t_query_set is the all instance fit to query_args now
 		local _t_query_set = query_set
-		query_set = _t_query_set:slice(start, stop, is_rev)
+		if #query_set == 0 then return query_set end
+		
+		if is_get == 'get' then
+			query_set = (is_rev == 'rev') and List {_t_query_set[#_t_query_set]} or List {_t_query_set[1]}
+		else	
+			-- now id_list is a list containing all id of instances fit to this query_args rule, so need to slice
+			query_set = _t_query_set:slice(start, stop, is_rev)
+		end
 
 		-- if self is query set, its' element is always integrated
 		-- if call by class
 		if not is_query_set and #_t_query_set > 0 then
-			-- retrieve ids
+			-- retrieve all objects' id
 			local id_list = {}
 			for _, v in ipairs(_t_query_set) do
 				tinsert(id_list, v.id)
@@ -1472,6 +1528,11 @@ Model = Object:extend {
 			
 			-- if partially got previously, need to get the integrated objects now
 			if partially_got then
+				id_list = {}
+				-- retrieve needed objects' id
+				for _, v in ipairs(query_set) do
+					tinsert(id_list, v.id)
+				end
 				query_set = getFromRedisPipeline(self, id_list)
 			end
 		end
