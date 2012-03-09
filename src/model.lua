@@ -215,13 +215,11 @@ local function seperateModelAndId(item)
 	return link_model, linked_id
 end
 
-
 local makeObject = function (self, data)
 	-- if data is invalid, return nil
-	if not isValidInstance(data) then print("[Warning] Can't get object."); return nil end
-	
-	-- make id type is number
-	data.id = tonumber(data.id) or data.id
+	if not isValidInstance(data) then print("[Warning] @makeObject - Object is invalid."); return nil end
+	-- XXX: keep id as string for convienent, because http and database are all string
+	-- data.id = tonumber(data.id) or data.id
 	
 	local fields = self.__fields
 	for k, fld in pairs(fields) do
