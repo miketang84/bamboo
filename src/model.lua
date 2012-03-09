@@ -299,12 +299,17 @@ local getPartialFromRedisPipeline = function (self, ids, fields)
 			p:hmget(v, unpack(fields))
 		end
 	end)
+	-- every item is data_list now is the values according to 'fields'
 
 	local objs = {}
 	local obj
 	for _, v in ipairs(data_list) do
-		obj = makeObject(self, v)
-		if obj then tinsert(objs, obj) end
+		local item = {}
+		for i, key in ipairs(fields) do
+			-- v[i] is the value of ith key
+			item[key] = v[i]
+		end
+		if not isFalse(obj) then tinsert(objs, item) end
 	end
 
 	return objs
@@ -484,9 +489,9 @@ local makeFulltextIndexes = function (instance)
 	return true	
 end
 
-local searchOnFulltextIndexes = function (ask_str, length)
+local searchOnFulltextIndexes = function (ask_str, n)
 	local search_tags = mmseg.segment(ask_str)
-	local length = length or 10
+	local n = n or 10
 	local contained_tags = List()
 	for _, tag in ipairs(search_tags) do
 		if string.utf8len(tag) >= 2 and db:sismember('_fulltext_words', tag) then
@@ -509,7 +514,7 @@ local searchOnFulltextIndexes = function (ask_str, length)
 	end
 	
 	-- sort and retrieve
-	local model_keys =  db:sort(_tmp_key, {limit={0, length}, sort="desc"})
+	local model_keys =  db:sort(_tmp_key, {limit={0, n}, sort="desc"})
 	-- return objects
 	return getFromRedisPipeline2(model_keys)
 end
@@ -525,20 +530,6 @@ local clearIndexesOnDeletion = function (instance)
 	-- clear the reverse fulltext key
 	db:del('_RFT:' + model_key)
 end
-
-
-local doslice = function (list_a, starti, length, dir)
-	if starti then
-		if dir == 1 then
-			return list_a:slice(starti, length and (starti + length - 1) or -1) 
-		else
-			return list_a:slice(length and (starti - length + 1) or 1, starti) 
-		end
-	else
-		return list_a
-	end
-end
-
 
 
 --------------------------------------------------------------------------------
@@ -965,39 +956,42 @@ local extraQueryArgs = function (qstr)
 	return query_args	
 end
 
-local canInstanceFitQueryRule = function (self, qstr)
-	local query_args = extraQueryArgs(qstr)
-	if type(query_args) == 'function' then
-		return query_args(self)
-	else
-		local logic_choice = (query_args[1] == 'and')
-		query_args[1] = nil
-		local flag = logic_choice
-			
-		local fields = self.__fields
-		assert(not isFalse(fields), "[Error] instance's description table must not be blank.")
-			
+
+local checkLogicRelation = function (obj, query_args, logic_choice)
+	local flag = logic_choice
+	if type(query_args) == 'table' then
 		for k, v in pairs(query_args) do
-			if not fields[k] then return false end
+			-- to redundant query condition, once meet, jump immediately
+			if not obj[k] then flag=false; break end
 
 			if type(v) == 'function' then
-				flag = v(self[k])
+				flag = v(obj[k])
 			else
-				flag = (self[k] == v)
+				flag = (obj[k] == v)
 			end
-					---------------------------------------------------------------
-					-- logic_choice,       flag,      action,          append?
-					---------------------------------------------------------------
-					-- true (and)          true       next field       --
-					-- true (and)          false      break            no
-					-- false (or)          true       break            yes
-					-- false (or)          false      next field       --
-					---------------------------------------------------------------
+			---------------------------------------------------------------
+			-- logic_choice,       flag,      action,          append?
+			---------------------------------------------------------------
+			-- true (and)          true       next field       --
+			-- true (and)          false      break            no
+			-- false (or)          true       break            yes
+			-- false (or)          false      next field       --
+			---------------------------------------------------------------
 			if logic_choice ~= flag then break end
 		end
+	else
+		-- call this query args function
+		flag = query_args(obj)
 	end
-
+	
 	return flag
+end
+
+local canInstanceFitQueryRule = function (self, qstr)
+	local query_args = extraQueryArgs(qstr)
+	local logic_choice = true
+	if type(query_args) == 'table' then logic_choice = (query_args[1] == 'and') end
+	return checkLogicRelation(self, query_args, logic_choice)
 end
 
 local addInstanceToIndexOnRule = function (self, qstr)
@@ -1070,7 +1064,7 @@ local getIndexFromManager = function (self, query_str_iden)
 	-- update expiration
 	db:expire(item_key, bamboo.config.expiration or bamboo.CACHE_LIFE)
 	-- return a list
-	return db:lrange(item_key, 0, -1)
+	return List(db:lrange(item_key, 0, -1))
 end
 
 
@@ -1231,11 +1225,11 @@ Model = Object:extend {
 	
 	-- return a list containing all ids of all instances belong to this Model
 	--
-	allIds = function (self, is_rev)
+	allIds = function (self, find_rev)
 		I_AM_CLASS(self)
 		local index_key = getIndexKey(self)
 		local all_ids 
-		if is_rev == 'rev' then
+		if find_rev == 'rev' then
 			all_ids = db:zrevrange(index_key, 0, -1, 'withscores')
 		else
 			all_ids = db:zrange(index_key, 0, -1, 'withscores')
@@ -1255,14 +1249,8 @@ Model = Object:extend {
 		I_AM_CLASS(self)
 		checkType(start, stop, 'number', 'number')
 		local index_key = getIndexKey(self)
-		if start > 0 then start = start - 1 end
-		if stop > 0 then stop = stop - 1 end
-		local all_ids
-		if is_rev == 'rev' then
-			all_ids = db:zrevrange(index_key, start, stop, 'withscores')
-		else
-			all_ids = db:zrange(index_key, start, stop, 'withscores')
-		end
+		local all_ids = List(db:zrange(index_key, 0, -1, 'withscores'))
+		all_ids = all_ids:slice(start, stop, is_rev)
 		local ids = List()
 		for _, v in ipairs(all_ids) do
 			-- v[1] is the 'index value', v[2] is the 'id'
@@ -1274,9 +1262,9 @@ Model = Object:extend {
 	
 	-- return all instance objects belong to this Model
 	-- 
-	all = function (self, is_rev)
+	all = function (self, find_rev)
 		I_AM_CLASS(self)
-		local all_ids = self:allIds(is_rev)
+		local all_ids = self:allIds(find_rev)
 		return getFromRedisPipeline(self, all_ids)
 	end;
 
@@ -1307,34 +1295,31 @@ Model = Object:extend {
 	
 	-- return the first instance found by query set
 	--
-	get = function (self, query_args, is_rev)
-		local obj = self:filter(query_args, is_rev)[1]
+	get = function (self, query_args, find_rev)
+		local obj = self:filter(query_args, find_rev)[1]
 		return obj
 	end;
 
 	--- fitler some instances belong to this model
 	-- @param query_args: query arguments in a table
-	-- @param is_rev: 'rev' or other value, means start to search from begining or from end
-	-- @param starti: specify which index to start search, note: this is the position after filtering 
+	-- @param find_rev: 'rev' or other value, means start to search from begining or from end
+	-- @param start: specify which index to start search, note: this is the position after filtering 
 	-- @param length: specify how many elements to find
-	-- @param dir: specify the direction of the search action, 1 means positive, -1 means negative
+	-- @param is_rev: specify the direction of the search result, 'rev'
 	-- @return: query_set, an object list (query set)
 	-- @note: this function can be called by class object and query set
-	filter = function (self, query_args, is_rev, starti, length, dir)
+	filter = function (self, query_args, start, stop, is_rev)
 		I_AM_CLASS_OR_QUERY_SET(self)
 		assert(type(query_args) == 'table' or type(query_args) == 'function', '[Error] the query_args passed to filter must be table or function.')
-		if starti then assert(type(starti) == 'number', '[Error] @filter - starti must be number.') end
-		if length then assert(type(length) == 'number', '[Error] @filter - length must be number.') end
-		if dir then assert(type(dir) == 'number', '[Error] @filter - dir must be number.') end
+		if start then assert(type(start) == 'number', '[Error] @filter - start must be number.') end
+		if stop then assert(type(stop) == 'number', '[Error] @filter - stop must be number.') end
+		if is_rev then assert(type(is_rev) == 'number', '[Error] @filter - is_rev must be number.') end
 		
-		local is_query_table = (type(query_args) == 'table')
 		local is_query_set = false
 		if isQuerySet(self) then is_query_set = true end
+		local is_query_table = (type(query_args) == 'table')
 		local logic = 'and'
 		
-		-- normalize the direction value
-		local dir = dir or 1
-		assert( dir == 1 or dir == -1, '[Error] dir must be 1 or -1.')
 		local query_str_iden
 		local is_using_rule_index = isUsingRuleIndex(self)
 		if is_using_rule_index then
@@ -1355,10 +1340,10 @@ Model = Object:extend {
 			-- XXX: Only support class now, don't support query set, maybe query set doesn't need this feature
 			local id_list = getIndexFromManager(self, query_str_iden)
 			-- now id_list is a list containing all id of instances fit to this query_args rule, so need to slice
-			id_list = doslice(id_list, starti, length, dir)
+			id_list = id_list:slice(start, stop, is_rev)
 
 			-- if have this list, return objects directly
-			if id_list then
+			if not id_list:isEmpty() then
 				return getFromRedisPipeline(self, id_list)
 			end
 			-- else go ahead
@@ -1374,9 +1359,10 @@ Model = Object:extend {
 
 			-- if query table is empty, return slice instances
 			if isFalse(query_args) then 
-				local stop = starti + length - 1
+				local start = start or 1
+				local stop = stop or -1
 				local nums = self:numbers()
-				return self:slice(starti, stop, is_rev)
+				return self:slice(start, stop, is_rev)
 			end
 
 			-- normalize the 'and' and 'or' logic
@@ -1393,10 +1379,10 @@ Model = Object:extend {
 		local all_ids
 		if is_query_set then
 			-- if self is query set, we think of all_ids as object list, rather than id string list
-			all_ids = (is_rev == 'rev') and self:reverse() or self
+			all_ids = self
 		else
 			-- all_ids is id string list
-			all_ids = self:allIds(is_rev)
+			all_ids = self:allIds()
 		end
 		-- nothing in id list, return empty table
 		if #all_ids == 0 then return List() end
@@ -1407,37 +1393,13 @@ Model = Object:extend {
 		local logic_choice = (logic == 'and')
 		local partially_got = false
 
+		-- walkcheck can process full object and partial object
 		local walkcheck = function (objs)
 			for i = 1, #all_ids do
-				local flag = logic_choice
 				local obj = objs[i]
-				
 				-- check the object's legalery, only act on valid object
 				if isValidInstance(obj) then
-					if is_query_table then
-						for k, v in pairs(query_args) do
-							-- to redundant query condition, once meet, jump immediately
-							if not obj[k] then flag=false; break end
-
-							if type(v) == 'function' then
-								flag = v(obj[k])
-							else
-								flag = (obj[k] == v)
-							end
-							---------------------------------------------------------------
-							-- logic_choice,       flag,      action,          append?
-							---------------------------------------------------------------
-							-- true (and)          true       next field       --
-							-- true (and)          false      break            no
-							-- false (or)          true       break            yes
-							-- false (or)          false      next field       --
-							---------------------------------------------------------------
-							if logic_choice ~= flag then break end
-						end
-					else
-						-- call this query args function
-						flag = query_args(obj)
-					end
+					local flag = checkLogicRelation(obj, query_args, logic_choice)
 					
 					-- if walk to this line, means find one 
 					if flag then
@@ -1454,6 +1416,7 @@ Model = Object:extend {
 			-- objs are already integrated instances
 			walkcheck(objs)			
 		else
+			-- make partially get value containing 'id' default
 			local qfs = {'id'}
 			if is_query_table then
 				for k, _ in pairs(query_args) do
@@ -1475,7 +1438,7 @@ Model = Object:extend {
 				-- collect nothing, use 'hgetall' to retrieve, partially_got is false
 				objs = getFromRedisPipeline(self, all_ids)
 			else
-				-- use hmget to retrieve
+				-- use hmget to retrieve, now the objs are partial objects
 				objs = getPartialFromRedisPipeline(self, all_ids, qfs)
 				partially_got = true
 			end
@@ -1484,7 +1447,7 @@ Model = Object:extend {
 		
 		-- here, _t_query_set is the all instance fit to query_args now
 		local _t_query_set = query_set
-		query_set = doslice(_t_query_set, starti, length, dir)
+		query_set = _t_query_set:slice(start, stop, is_rev)
 
 		-- if self is query set, its' element is always integrated
 		-- if call by class
@@ -2599,9 +2562,9 @@ Model = Object:extend {
 	end;
 	
 	-- for fulltext index API
-	fulltextSearch = function (self, ask_str, length)
+	fulltextSearch = function (self, ask_str, n)
 		assert(self.__name == 'Model')
-		return searchOnFulltextIndexes(ask_str, length)
+		return searchOnFulltextIndexes(ask_str, n)
 	end;
 
 }
