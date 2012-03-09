@@ -66,15 +66,23 @@ _G['DEBUG'] = function (...)
 			local arg = select (i, ...)
 			if type(arg) == 'table' then
 				if level >= 2 then
-					fptable(arg)
+				    print(table.tree(arg))
 				else
-					ptable(arg)
+					for k, v in pairs(arg) do
+						print(k, v)
+					end
 				end
 			else
 				print(arg)
 			end
 		end
 	end
+	
+	local info = debug.getinfo(2, "nS")
+	print('')
+	print('...............................................')
+	print(('DEBUG @%s,  @%s,  @%s'):format(tostring(info.short_src), tostring(info.linedefined), tostring(info.name)))
+	print('-----------------------------------------------')	
 	
 	local debug_level = bamboo.config.debug_level
 	if not isFalse(debug_level) then
@@ -85,7 +93,7 @@ _G['DEBUG'] = function (...)
 			printout(debug_level, ...)
 		end
 	end
-		
+	print('^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^')
 end	
 
 

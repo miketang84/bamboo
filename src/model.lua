@@ -269,6 +269,7 @@ local QuerySet
 
 local getFromRedisPipeline = function (self, ids)
 	local key_list = makeModelKeyList(self, ids)
+	--DEBUG(key_list)
 	
 	-- all fields are strings
 	local data_list = db:pipeline(function (p) 
@@ -290,6 +291,7 @@ end
 -- 
 local getPartialFromRedisPipeline = function (self, ids, fields)
 	local key_list = makeModelKeyList(self, ids)
+	-- DEBUG('key_list', key_list, 'fields', fields)
 	
 	-- all fields are strings
 	local data_list = db:pipeline(function (p) 
@@ -298,6 +300,7 @@ local getPartialFromRedisPipeline = function (self, ids, fields)
 		end
 	end)
 	-- every item is data_list now is the values according to 'fields'
+	--DEBUG('data_list', data_list)
 
 	local objs = {}
 	local obj
@@ -307,7 +310,7 @@ local getPartialFromRedisPipeline = function (self, ids, fields)
 			-- v[i] is the value of ith key
 			item[key] = v[i]
 		end
-		if not isFalse(obj) then tinsert(objs, item) end
+		if not isFalse(item) then tinsert(objs, item) end
 	end
 
 	return objs
@@ -1312,7 +1315,7 @@ Model = Object:extend {
 		assert(type(query_args) == 'table' or type(query_args) == 'function', '[Error] the query_args passed to filter must be table or function.')
 		if start then assert(type(start) == 'number', '[Error] @filter - start must be number.') end
 		if stop then assert(type(stop) == 'number', '[Error] @filter - stop must be number.') end
-		if is_rev then assert(type(is_rev) == 'number', '[Error] @filter - is_rev must be number.') end
+		if is_rev then assert(type(is_rev) == 'string', '[Error] @filter - is_rev must be string.') end
 		
 		local is_query_set = false
 		if isQuerySet(self) then is_query_set = true end
@@ -1396,6 +1399,7 @@ Model = Object:extend {
 		local walkcheck = function (objs)
 			for i = 1, #all_ids do
 				local obj = objs[i]
+				--DEBUG(obj)
 				-- check the object's legalery, only act on valid object
 				if isValidInstance(obj) then
 					local flag = checkLogicRelation(obj, query_args, logic_choice)
@@ -1410,6 +1414,7 @@ Model = Object:extend {
 			end
 		end
 		
+		--DEBUG('all_ids', all_ids)
 		if is_query_set then
 			local objs = all_ids
 			-- objs are already integrated instances
@@ -1426,17 +1431,21 @@ Model = Object:extend {
 				-- if model has set '__use_rule_index' manually, collect all fields to index
 				-- if not set '__use_rule_index' manually, collect fields with 'index=true' in their field description table
 				-- if not set '__use_rule_index' manually, and not set 'index=true' in any field, collect NOTHING
+				DEBUG('__rule_index_fields', self.__rule_index_fields)
 				for _, k in ipairs(self.__rule_index_fields) do
 					tinsert(qfs, k)
 				end
 			end
 			table.sort(qfs)
 			local objs
+			--DEBUG(qfs)
 			-- == 1, means only have 'id', collect nothing on fields 
 			if #qfs == 1 then
+				DEBUG('Enter full pipeline branch')
 				-- collect nothing, use 'hgetall' to retrieve, partially_got is false
 				objs = getFromRedisPipeline(self, all_ids)
 			else
+				DEBUG('Enter partial pipeline branch')
 				-- use hmget to retrieve, now the objs are partial objects
 				objs = getPartialFromRedisPipeline(self, all_ids, qfs)
 				partially_got = true
