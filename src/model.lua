@@ -1228,11 +1228,10 @@ Model = Object:extend {
 	--
     getIdByIndex = function (self, name)
 		I_AM_CLASS(self)
-		checkType(name, 'string')
-		
+
 		local index_key = getIndexKey(self)
 		-- id is the score of that index value
-		local idstr = db:zscore(index_key, name)
+		local idstr = db:zscore(index_key, tostring(name))
 		return tonumber(idstr)
     end;
     
