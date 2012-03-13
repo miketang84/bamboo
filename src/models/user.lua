@@ -4,6 +4,7 @@ module(..., package.seeall)
 local Model = require 'bamboo.model'
 local Session = require 'bamboo.session'
 local md5 = require 'md5'
+local socket = require 'socket'
 
 
 local User = Model:extend {
@@ -14,13 +15,14 @@ local User = Model:extend {
 	__fields = {
 		['username'] = { required=true, unique=true },
 		['password'] = { required=true },
+		['salt'] = {},
 		['email'] = { required=true },
 		['nickname'] = {},
 		['forwhat'] = {},
 		['is_manager'] = {},
 		['is_active'] = {},	
-		['created_date'] = {},
-		['lastlogin_date'] = {},
+		['created_date'] = {type="number"},
+		['lastlogin_date'] = {type="number"},
 		['is_logined'] = {},
 		
 		['perms'] = { foreign="Permission", st="MANY" },
@@ -37,8 +39,10 @@ local User = Model:extend {
 		self.forwhat = t.forwhat
 		self.is_manager = t.is_manager
 		self.is_active = t.is_active
-		self.created_date = os.time()
+		self.created_date = socket.gettime()
 
+		math.randomseed(os.time())
+		self.salt = tostring(math.random(1, 1000000))
 		-- if t.encrypt and type(t.encrypt) == 'function' then
 		-- 	self.password = t.encrypt(t.password or '')
 		-- else
@@ -46,7 +50,7 @@ local User = Model:extend {
 		-- end
 		
 		if self.encrypt and type(self.encrypt) == 'function' then
-			self.password = self.encrypt(t.password or '')
+			self.password = self.encrypt((t.password or '') .. self.salt)
 		end
 
 		return self
@@ -62,7 +66,7 @@ local User = Model:extend {
 		-- if md5.sumhexa(params.password):lower() ~= user.password then
 		-- if params.password:lower() ~= user.password then
 		if self.encrypt and type(self.encrypt) == 'function' then
-			if self.encrypt(params.password):lower() ~= user.password then
+			if self.encrypt(params.password .. (user.salt or '')):lower() ~= user.password then
 				return false
 			end
 		else
