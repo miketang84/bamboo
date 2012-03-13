@@ -80,9 +80,9 @@ _G['DEBUG'] = function (...)
 	
 	local info = debug.getinfo(2, "nS")
 	print('')
-	print('...............................................')
-	print(('DEBUG @%s,  @%s,  @%s'):format(tostring(info.short_src), tostring(info.linedefined), tostring(info.name)))
 	print('-----------------------------------------------')	
+	print(('DEBUG @%s,  @%s,  @%s'):format(tostring(info.short_src), tostring(info.linedefined), tostring(info.name)))
+	print('...............................................')
 	
 	local debug_level = bamboo.config.debug_level
 	if not isFalse(debug_level) then
