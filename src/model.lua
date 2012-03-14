@@ -1239,8 +1239,8 @@ Model = Object:extend {
 	-- 
     getIndexById = function (self, id)
 		I_AM_CLASS(self)
-		checkType(tonumber(id), 'number')
-		
+		if type(tonumber(id)) ~= 'number' then return nil end		
+
 		local flag, name = checkExistanceById(self, id)
 		if isFalse(flag) or isFalse(name) then return nil end
 
@@ -1251,14 +1251,15 @@ Model = Object:extend {
 	--
 	getById = function (self, id)
 		I_AM_CLASS(self)
-		checkType(tonumber(id), 'number')
+		DEBUG(id)
+		if type(tonumber(id)) ~= 'number' then return nil end
 		
 		-- check the existance in the index cache
 		if not checkExistanceById(self, id) then return nil end
 		-- and then check the existance in the key set
 		local key = getNameIdPattern2(self, id)
 		if not db:exists(key) then return nil end
-
+		DEBUG(key)
 		return getFromRedis(self, key)
 	end;
 	
@@ -1979,8 +1980,8 @@ Model = Object:extend {
 
 		local index_key = getIndexKey(self)
 		if not is_existed then
-			-- increse counter 
-			db:incr(getCounterName(self))
+			-- initial __counter as 1 
+			db:set(getCounterName(self), self.id)
 		else
 			-- if exist, update the index cache
 			-- delete the old one
@@ -2411,6 +2412,18 @@ Model = Object:extend {
 		end
 	end;
 
+	-- check this class/object has a foreign key
+	-- @param field:  field of that foreign model
+	hasForeignKey = function (self, field)
+		I_AM_CLASS_OR_INSTANCE(self)
+		checkType(field, 'string')
+		local fld = self.__fields[field]
+		if fld and fld.foreign then return true
+		else return false
+		end
+		
+	end;
+
 	--- return the class name of an instance
 	classname = function (self)
 		return getClassName(self)
@@ -2633,6 +2646,14 @@ Model = Object:extend {
 	fulltextSearch = function (self, ask_str, n)
 		assert(self.__name == 'Model')
 		return searchOnFulltextIndexes(ask_str, n)
+	end;
+
+	getFDT = function (self, field)
+		I_AM_CLASS_OR_INSTANCE(self)
+		checkType(field, 'string')
+		
+		return self.__fields[field]
+		
 	end;
 
 }
