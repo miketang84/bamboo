@@ -59,24 +59,34 @@ local VIEW_ACTIONS = {
         local name = deserialize(code)
         local tmpl_dir = findTemplDir(name)
         local base_page = io.loadFile(tmpl_dir, name)
-        local new_page = base_page
-        for block in new_page:gmatch("({%[[%s_%w%.%-\'\"]+%]})") do
-            -- remove the outer tags
-            local block_content = block:sub(3, -3):trim()
-            
-            local this_part = this_page:match('{%[%s*======*%s*' + block_content +
+        local starti = 1
+        local oi, oj = 1, 0
+        local i, j = 1, 0
+        local block, matched, block_content
+       	local part
+       	local parts = {}
+        while true do
+        	oi, oj, block = base_page:find("({%[[%s_%w%.%-\'\"]+%]})", oj + 1)
+        	if oi == nil then break end
+            block_content = block:sub(3, -3):trim()
+            while true do
+            	i, j, matched = this_page:find("(%b{})", j + 1)
+--            	DEBUG('-----', i, j, matched)
+            	
+            	if i == nil then break end
+            	part = matched:match('{%[%s*======*%s*' + block_content +
             '%s*======*%s+(.-)%s*%]}')
-
-            if this_part then
-
-                this_part = this_part:gsub('%%', '%%%%')
-                new_page = new_page:gsub('{%[ *' + block_content + ' *%]}', this_part)
-            else
-                new_page = new_page:gsub('{%[ *' + block_content + ' *%]}', "")
+				if part then
+					table.insert(parts, base_page:sub(starti, oi-1))
+					table.insert(parts, part)
+					starti = oj + 1
+					break
+				end
             end
         end
+        table.insert(parts, base_page:sub(starti, -1))
 
-        return new_page
+        return table.concat(parts)
     end,
 
     -- insert plugin

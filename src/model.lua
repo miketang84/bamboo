@@ -179,7 +179,7 @@ local isUsingFulltextIndex = function (self)
 end
 
 local isUsingRuleIndex = function (self)
-	if bamboo.config.index_support and rawget(self, '__use_rule_index') and rawget(self, '__name') then
+	if bamboo.config.index_support and self.__use_rule_index and self.__name then
 		return true
 	end
 	return false
@@ -940,16 +940,18 @@ end
 local extraQueryArgs = function (qstr)
 	local query_args
 	
+	--DEBUG(string.len(qstr))		
 	if qstr:startsWith('function') then
 		local startpoint = qstr:find('|') or 1
 		local endpoint = qstr:rfind('|') or -1
-		
-		fpart = qstr:sub(startpoint + 1, endpoint - 1):trim()
-		apart = qstr:sub(endpoint + 1, -1):trim()
+		--DEBUG(startpoint, endpoint)
+		fpart = qstr:sub(startpoint + 2, endpoint - 2) -- :trim()
+		apart = qstr:sub(endpoint + 2, -1) -- :trim()
+		--DEBUG(string.len(fpart), string.len(apart))		
 		-- now fpart is the function binary string
 		query_args = loadstring(fpart)
 		-- now query_args is query function
-		
+		--DEBUG(fpart, apart, query_args)
 		if not isFalse(apart) then
 			-- item 1 is key, item 2 is value, item 3 is value type, item 4 is key .... 
 			local flat_upvalues = apart:split(' ')
@@ -966,6 +968,7 @@ local extraQueryArgs = function (qstr)
 				elseif vtype == 'nil' then
 					value = nil
 				end
+				--DEBUG(vtype, key, value)
 				-- set upvalues
 				debug.setupvalue(query_args, i, value)
 			end
@@ -977,12 +980,14 @@ local extraQueryArgs = function (qstr)
 		local endpoint = -1
 		qstr = qstr:sub(1, endpoint - 1)
 		local _qqstr = qstr:splittrim('|')
+		--DEBUG(qstr, _qqstr)
 		-- logic == 'and' or 'or'
 		local logic = _qqstr[1]
 		query_args = {logic}
 		for i=2, #_qqstr do
 			local str = _qqstr[i]
-			local kt = str:splittrim('    ')
+			local kt = str:splittrim(' ')
+			--DEBUG(kt)
 			-- kt[1] is 'key', [2] is 'closure', [3] .. are closure's parameters
 			local key = kt[1]
 			local closure = kt[2]
@@ -991,6 +996,8 @@ local extraQueryArgs = function (qstr)
 				for j=3, #kt do
 					tinsert(_args, kt[j])
 				end
+				--DEBUG('_args', _args)
+				--DEBUG('_G[closure]', closure, _G[closure](unpack(_args)))				
 				-- compute closure now
 				query_args[key] = _G[closure](unpack(_args))
 			else
@@ -998,6 +1005,7 @@ local extraQueryArgs = function (qstr)
 				query_args[key] = closure
 			end
 		end
+		--DEBUG(query_args)
 	end
 	
 	return query_args	
@@ -1005,6 +1013,7 @@ end
 
 
 local checkLogicRelation = function (obj, query_args, logic_choice)
+	-- NOTE: query_args can't contain [1]
 	local flag = logic_choice
 	if type(query_args) == 'table' then
 		for k, v in pairs(query_args) do
@@ -1013,6 +1022,7 @@ local checkLogicRelation = function (obj, query_args, logic_choice)
 
 			if type(v) == 'function' then
 				flag = v(obj[k])
+				--DEBUG('table v', flag)
 			else
 				flag = (obj[k] == v)
 			end
@@ -1029,6 +1039,7 @@ local checkLogicRelation = function (obj, query_args, logic_choice)
 	else
 		-- call this query args function
 		flag = query_args(obj)
+		--DEBUG(flag)
 	end
 	
 	return flag
@@ -1036,41 +1047,65 @@ end
 
 local canInstanceFitQueryRule = function (self, qstr)
 	local query_args = extraQueryArgs(qstr)
+	--DEBUG(query_args)
 	local logic_choice = true
-	if type(query_args) == 'table' then logic_choice = (query_args[1] == 'and') end
+	if type(query_args) == 'table' then logic_choice = (query_args[1] == 'and'); query_args[1]=nil end
 	return checkLogicRelation(self, query_args, logic_choice)
 end
 
 local addInstanceToIndexOnRule = function (self, qstr)
 	local manager_key = "_index_manager:" .. self.__name
+	--DEBUG(self, qstr, manager_key)	
+	local score = db:zscore(manager_key, qstr)
+	local item_key = ('_RULE:%s:%s'):format(self.__name, score)
+	if not db:exists(item_key) then 
+		-- clear the cache in the index manager
+		db:zrem(manager_key, qstr)
+		return nil
+	end
+	
 	local flag = canInstanceFitQueryRule(self, qstr)
+	--DEBUG(flag)
 	if flag then
-		local score = db:zscore(manager_key, qstr)
-		local item_key = ('_RULE:%s:%s'):format(self.__name, score)
 		db:rpush(item_key, self.id)	
 		db:expire(item_key, bamboo.config.expiration or bamboo.CACHE_LIFE)
 	end
+	return flag
 end
 
 local updateInstanceToIndexOnRule = function (self, qstr)
 	local manager_key = "_index_manager:" .. self.__name
-	local flag = canInstanceFitQueryRule(self, qstr)
 	local score = db:zscore(manager_key, qstr)
 	local item_key = ('_RULE:%s:%s'):format(self.__name, score)
+	if not db:exists(item_key) then 
+		-- clear the cache in the index manager
+		db:zrem(manager_key, qstr)
+		return nil
+	end
+
+	local flag = canInstanceFitQueryRule(self, qstr)
 	db:lrem(item_key, 0, self.id)
 	if flag then
 		db:rpush(item_key, self.id)	
 	end
 	db:expire(item_key, bamboo.config.expiration or bamboo.CACHE_LIFE)
+	return flag
 end
 
 local delInstanceToIndexOnRule = function (self, qstr)
 	local manager_key = "_index_manager:" .. self.__name
-	local flag = canInstanceFitQueryRule(self, qstr)
 	local score = db:zscore(manager_key, qstr)
 	local item_key = ('_RULE:%s:%s'):format(self.__name, score)
+	if not db:exists(item_key) then 
+		-- clear the cache in the index manager
+		db:zrem(manager_key, qstr)
+		return nil
+	end
+
+	local flag = canInstanceFitQueryRule(self, qstr)
 	db:lrem(item_key, 0, self.id)
 	db:expire(item_key, bamboo.config.expiration or bamboo.CACHE_LIFE)
+	return flag
 end
 
 local INDEX_ACTIONS = {
@@ -1254,7 +1289,7 @@ Model = Object:extend {
 	--
 	getById = function (self, id)
 		I_AM_CLASS(self)
-		DEBUG(id)
+		--DEBUG(id)
 		if type(tonumber(id)) ~= 'number' then return nil end
 		
 		-- check the existance in the index cache
@@ -1262,7 +1297,7 @@ Model = Object:extend {
 		-- and then check the existance in the key set
 		local key = getNameIdPattern2(self, id)
 		if not db:exists(key) then return nil end
-		DEBUG(key)
+		--DEBUG(key)
 		return getFromRedis(self, key)
 	end;
 	
@@ -1483,7 +1518,7 @@ Model = Object:extend {
 				-- if model has set '__use_rule_index' manually, collect all fields to index
 				-- if not set '__use_rule_index' manually, collect fields with 'index=true' in their field description table
 				-- if not set '__use_rule_index' manually, and not set 'index=true' in any field, collect NOTHING
-				DEBUG('__rule_index_fields', self.__rule_index_fields)
+				--DEBUG('__rule_index_fields', self.__rule_index_fields)
 				for _, k in ipairs(self.__rule_index_fields) do
 					tinsert(qfs, k)
 				end
@@ -1493,11 +1528,11 @@ Model = Object:extend {
 			--DEBUG(qfs)
 			-- == 1, means only have 'id', collect nothing on fields 
 			if #qfs == 1 then
-				DEBUG('Enter full pipeline branch')
+				--DEBUG('Enter full pipeline branch')
 				-- collect nothing, use 'hgetall' to retrieve, partially_got is false
 				objs = getFromRedisPipeline(self, all_ids)
 			else
-				DEBUG('Enter partial pipeline branch')
+				--DEBUG('Enter partial pipeline branch')
 				-- use hmget to retrieve, now the objs are partial objects
 				objs = getPartialFromRedisPipeline(self, all_ids, qfs)
 				partially_got = true
@@ -2500,8 +2535,8 @@ Model = Object:extend {
 		I_AM_INSTANCE(self)
 		checkType(cache_key, field, 'string', 'string')
 		
-		DEBUG(cache_key)
-		DEBUG('entering addToCacheAndSortBy')
+		--DEBUG(cache_key)
+		--DEBUG('entering addToCacheAndSortBy')
 		local cache_saved_key = getCacheKey(self, cache_key)
 		if not db:exists(cache_saved_key) then 
 			print('[WARNING] The cache is missing or expired.')
@@ -2512,7 +2547,7 @@ Model = Object:extend {
 		local head = db:hget(getNameIdPattern2(self, cached_ids[1]), field)
 		local tail = db:hget(getNameIdPattern2(self, cached_ids[#cached_ids]), field)
 		assert(head and tail, "[Error] @addToCacheAndSortBy. the object referring to head or tail of cache list may be deleted, please check.")
-		DEBUG(head, tail)
+		--DEBUG(head, tail)
 		local order_type = 'asc'
 		local field_value, stop_id
 		local insert_position = 0
@@ -2527,7 +2562,7 @@ Model = Object:extend {
 			end
 		end
 		
-		DEBUG(order_type)
+		--DEBUG(order_type)
 		-- find the inserting position
 		-- FIXME: use 2-part searching method is better
 		for i, id in ipairs(cached_ids) do
@@ -2538,7 +2573,7 @@ Model = Object:extend {
 				break
 			end
 		end
-		DEBUG(insert_position)
+		--DEBUG(insert_position)
 
 		local new_score
 		if insert_position == 0 then 
@@ -2561,7 +2596,7 @@ Model = Object:extend {
 		
 		end
 		
-		DEBUG(new_score)
+		--DEBUG(new_score)
 		-- add new element to cache
 		db:zadd(cache_saved_key, new_score, self.id)
 			
