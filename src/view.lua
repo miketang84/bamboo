@@ -1,7 +1,6 @@
 module(..., package.seeall)
 local lgstring = require "lgstring"
 
-local PLUGIN_LIST = bamboo.PLUGIN_LIST
 
 local function getlocals(context)
 	local i = 1
@@ -101,9 +100,9 @@ local VIEW_ACTIONS = {
         if divider_loc then
 
             plugin_name = code:sub(1, divider_loc - 1)
-            param_str = code:sub(divider_loc + 1)
+            param_str = '{' .. code:sub(divider_loc + 1) .. '}'
 
-            local tlist = param_str:splittrim(',')
+            --[[ local tlist = param_str:splittrim(',')
             local has_variable = false
             for i, v in ipairs(tlist) do
                 local var, val = unpack(v:splittrim('='))
@@ -124,19 +123,22 @@ local VIEW_ACTIONS = {
 				end
                 
                 params[var] = val
-            end
+            end--]]
             
-            if has_variable then
+            return ("_result[#_result+1] = bamboo.PLUGIN_LIST['%s'](%s, getfenv())"):format(plugin_name, param_str)
+            
+--[[            if has_variable then
             	-- twice rendering
             	return ('_result[#_result+1] = ([==[ %s ]==]):format(View.compileView([=[$text]=])(getfenv()))'):gsub('$text', PLUGIN_LIST[plugin_name](params))
             else
             	return ('_result[#_result+1] = [==[%s]==]'):format(PLUGIN_LIST[plugin_name](params))
             end
+--]]
         else
             -- if divider_loc is nil, means this plugin has no arguents
             plugin_name = code
 
-            return ('_result[#_result+1] = [==[%s]==]'):format(PLUGIN_LIST[plugin_name]({}))
+            return ("_result[#_result+1] = bamboo.PLUGIN_LIST['%s']({}, getfenv())"):format(plugin_name)
 
         end
     end,

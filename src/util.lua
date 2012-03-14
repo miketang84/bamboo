@@ -75,6 +75,7 @@ _G['DEBUG'] = function (...)
 			else
 				print(arg)
 			end
+			print('')
 		end
 	end
 	
