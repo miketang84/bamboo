@@ -79,21 +79,21 @@ _G['DEBUG'] = function (...)
 	end
 	
 	local info = debug.getinfo(2, "nS")
-	print('')
-	print('-----------------------------------------------')	
-	print(('DEBUG @%s,  @%s,  @%s'):format(tostring(info.short_src), tostring(info.linedefined), tostring(info.name)))
-	print('...............................................')
-	
 	local debug_level = bamboo.config.debug_level
 	if not isFalse(debug_level) then
+		print('')
+		print('-----------------------------------------------')	
+		print(('DEBUG @%s,  @%s,  @%s'):format(tostring(info.short_src), tostring(info.linedefined), tostring(info.name)))
+		print('...............................................')
+	
 		local its_type = type(debug_level)
 		if its_type == 'boolean' then
 			printout(2, ...)
 		elseif its_type == 'number' then	
 			printout(debug_level, ...)
 		end
+		print('^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^')
 	end
-	print('^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^')
 end	
 
 
