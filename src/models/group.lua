@@ -1,5 +1,5 @@
 module(..., package.seeall)
-
+local socket = require 'socket'
 local Model = require 'bamboo.model'
 
 local Group 
@@ -9,13 +9,13 @@ Group = Model:extend {
 	__desc = 'Group is the basic tree like model';
 	__indexfd = "name";
 	__fields = {
-		['name'] 	= 	{ newfield=true },
-		['desc'] 	= 	{ newfield=true },
-		['created_date'] = { newfield=true },
+		['name'] 	= 	{},
+		['desc'] 	= 	{},
+		['created_date'] = {},
 		
-		['perms'] 	= 	{ foreign="Permission", st="MANY", newfield=true },
-		['owner'] 	= 	{ foreign="User", st="ONE", newfield=true },
-		['managers'] 	= 	{ foreign="User", st="MANY", newfield=true },
+		['perms'] 	= 	{ foreign="Permission", st="MANY" },
+		['owner'] 	= 	{ foreign="User", st="ONE" },
+		['managers'] 	= 	{ foreign="User", st="MANY" },
 	};
 	
 	init = function (self, t)
@@ -23,7 +23,7 @@ Group = Model:extend {
 		
 		self.name = t.name
 		self.desc = self.desc
-		self.created_date = os.time()
+		self.created_date = socket.gettime()
 		
 		
 		return self

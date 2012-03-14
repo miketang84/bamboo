@@ -18,12 +18,7 @@ local User = Model:extend {
 		['salt'] = {},
 		['email'] = { required=true },
 		['nickname'] = {},
-		['forwhat'] = {},
-		['is_manager'] = {},
-		['is_active'] = {},	
 		['created_date'] = {type="number"},
-		['lastlogin_date'] = {type="number"},
-		['is_logined'] = {},
 		
 		['perms'] = { foreign="Permission", st="MANY" },
 		['groups'] = { foreign="Group", st="MANY" },
@@ -36,9 +31,6 @@ local User = Model:extend {
 		self.username = t.username
 		self.email = t.email
 		self.nickname = t.nickname
-		self.forwhat = t.forwhat
-		self.is_manager = t.is_manager
-		self.is_active = t.is_active
 		self.created_date = socket.gettime()
 
 		math.randomseed(os.time())

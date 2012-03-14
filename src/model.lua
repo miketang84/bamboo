@@ -1148,7 +1148,7 @@ Model = Object:extend {
 	__name = 'Model';
 	__desc = 'Model is the base of all models.';
 	__fields = {};
-	__indexfd = "";
+	__indexfd = "id";
 
 	-- make every object creatation from here: every object has the 'id' and 'name' fields
 	init = function (self)
@@ -1418,7 +1418,7 @@ Model = Object:extend {
 
 			-- normalize the 'and' and 'or' logic
 			if query_args[1] then
-				assert(query_arg[1] == 'or' or query_args[1] == 'and', 
+				assert(query_args[1] == 'or' or query_args[1] == 'and', 
 					"[Error] The logic should be 'and' or 'or', rather than: " .. tostring(query_args[1]))
 				if query_args[1] == 'or' then
 					logic = 'or'
