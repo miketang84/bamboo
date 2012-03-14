@@ -914,6 +914,10 @@ local compressQueryArgs = function (query_args)
 		end
 		-- clear the closure_collector
 		closure_collector = {}
+		
+		-- restore the first element, avoiding side effect
+		query_args[1] = out[1]	
+
 	elseif qtype == 'function' then
 		tinsert(out, 'function')
 		tinsert(out, '|')	
@@ -928,9 +932,6 @@ local compressQueryArgs = function (query_args)
 		-- clear the upvalue_collector
 		upvalue_collector = {}
 	end
-
-	-- restore the first element, avoiding side effect
-	query_args[1] = out[1]	
 
 	-- use a delemeter to seperate obviously
 	return table.concat(out, ' ')
@@ -1147,7 +1148,9 @@ Model = Object:extend {
 	-- ATTEN: __name's value is not neccesary be equal strictly to the last word of __tag
 	__name = 'Model';
 	__desc = 'Model is the base of all models.';
-	__fields = {};
+	__fields = {
+		['timestamp'] = { type="number" },
+	};
 	__indexfd = "id";
 
 	-- make every object creatation from here: every object has the 'id' and 'name' fields
