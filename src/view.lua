@@ -74,8 +74,8 @@ local VIEW_ACTIONS = {
 --            	DEBUG('-----', i, j, matched)
             	
             	if i == nil then break end
-            	part = matched:match('{%[%s*======*%s*' + block_content +
-            '%s*======*%s+(.-)%s*%]}')
+            	part = matched:match('^{%[%s*======*%s*' + block_content +
+            '%s*======*%s+(.+)%s*%]}$')
 				if part then
 					table.insert(parts, base_page:sub(starti, oi-1))
 					table.insert(parts, part)
