@@ -1,7 +1,7 @@
 module(..., package.seeall)
+local socket = require 'socket'
 
 local tinsert = table.insert
-
 local db = BAMBOO_DB
 
 local List = require 'lglib.list'
@@ -1193,7 +1193,8 @@ Model = Object:extend {
 		-- get the latest instance counter
 		-- id type is number
 		self.id = self:getCounter() + 1
-
+		self.timestamp = socket.gettime()
+		
 		return self 
 	end;
     
