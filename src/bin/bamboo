@@ -450,7 +450,7 @@ host = "%s"
 
         local redis_db = Redis.connect(params)
         redis_db:select(which)
-
+        
         for k, v in pairs(env.DATA) do
             if type(v) ~= 'table' then
 				-- store the string
@@ -471,7 +471,9 @@ host = "%s"
 					-- maybe we should delete the same score item first
 					redis_db:zremrangebyscore(model_name + ':__index', num, num)
 					-- add it
-					redis_db:zadd(model_name + ':__index', num, v.name or num)
+					local indexfd
+					if env.Indexes and env.Indexes[model_name] and v[env.Indexes[model_name]] then indexfd = env.Indexes[model_name] end
+					redis_db:zadd(model_name + ':__index', num, indexfd and v[indexfd] or num)
 				end
             end
 
