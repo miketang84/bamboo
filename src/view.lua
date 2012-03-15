@@ -105,7 +105,7 @@ local VIEW_ACTIONS = {
             plugin_name = code
             param_str = "{}"
         end
-        assert(PLUGIN_LIST[plugin_name], ('[Error] plugin %s was not registered.'):format(plugin_name))
+        assert(bamboo.PLUGIN_LIST[plugin_name], ('[Error] plugin %s was not registered.'):format(plugin_name))
         return ("_result[#_result+1] = bamboo.PLUGIN_LIST['%s'](%s, getfenv())"):format(plugin_name, param_str)
 
     end,
@@ -196,7 +196,7 @@ local View = Object:extend {
 
         code[#code+1] = 'return table.concat(_result)'
         code = table.concat(code, '\n')
-        print('-----', code)
+        -- print('-----', code)
         -- recode each middle view code to request
         if type(name) == 'string' then
         	req.viewcode[name] = code
