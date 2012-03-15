@@ -947,7 +947,7 @@ Model = Object:extend {
 			-- normalize the 'and' and 'or' logic
 			
 			if query_args[1] then
-				assert(query_arg[1] == 'or' or query_args[1] == 'and', 
+				assert(query_args[1] == 'or' or query_args[1] == 'and', 
 					"[Error] The logic should be 'and' or 'or', rather than: " .. tostring(query_args[1]))
 				if query_args[1] == 'or' then
 					logic = 'or'
@@ -1012,7 +1012,7 @@ Model = Object:extend {
 				local kk = all_ids[i]
 				obj = getById (self, kk)
 			end
-			assert(isValidInstance(obj), "[Error] object must not be empty.")
+			if not isValidInstance(obj) then print("[Error] object must not be empty."); return query_set end
 			local fields = obj.__fields
 			assert(not isFalse(fields), "[Error] object's description table must not be blank.")
 			
