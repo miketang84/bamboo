@@ -1,7 +1,6 @@
 module(..., package.seeall)
 local lgstring = require "lgstring"
 
-local PLUGIN_LIST = bamboo.PLUGIN_LIST
 
 local function getlocals(context)
 	local i = 1
@@ -99,17 +98,16 @@ local VIEW_ACTIONS = {
         local params = {}
 
         if divider_loc then
-
             plugin_name = code:sub(1, divider_loc - 1)
-            assert(PLUGIN_LIST[plugin_name], ('[Error] plugin %s was not registered.'):format(plugin_name))
-            param_str = code:sub(divider_loc + 1)
-
+            param_str = '{' .. code:sub(divider_loc + 1) .. '}'
         else
-            -- if divider_loc is nil, means this plugin has no arguents
+            -- if divider_loc is nil, means this plugin has no arguments
             plugin_name = code
-            assert(PLUGIN_LIST[plugin_name], ('[Error] plugin %s was not registered.'):format(plugin_name))
-
+            param_str = "{}"
         end
+        assert(PLUGIN_LIST[plugin_name], ('[Error] plugin %s was not registered.'):format(plugin_name))
+        return ("_result[#_result+1] = bamboo.PLUGIN_LIST['%s'](%s, getfenv())"):format(plugin_name, param_str)
+
     end,
     
     ['{-'] = function (code)
