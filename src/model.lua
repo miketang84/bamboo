@@ -1223,13 +1223,13 @@ Model = Object:extend {
 		
 	end;
 	
-	addCustomMember = function (self, key, val, score)
+	addCustomMember = function (self, key, val, stype, score)
 		I_AM_CLASS_OR_INSTANCE(self)
 		checkType(key, 'string')
 		local custom_key = self:isClass() and getCustomKey(self, key) or getCustomIdKey(self, key)
 
-		if not db:exists(custom_key) then print('[Warning] @addCustomMember - This custom key does not exist.'); return nil end
-		local store_type = db:type(custom_key)
+		if not db:exists(custom_key) then print('[Warning] @addCustomMember - This custom key does not exist.'); end
+		local store_type = db:type(custom_key) ~= 'none' and db:type(custom_key) or stype
 		if store_type == 'string' then
 			db:set(custom_key, val)
 		elseif store_type == 'list' then
