@@ -1183,7 +1183,7 @@ Model = Object:extend {
 		checkType(key, 'string')
 		local custom_key = self:isClass() and getCustomKey(self, key) or getCustomIdKey(self, key)
 
-		assert(db:exists(custom_key), '[Error] @updateCustom - This custom key does not exist.')
+		if not db:exists(custom_key) then print('[Warning] @updateCustom - This custom key does not exist.'); return nil end
 		local store_type = db:type(custom_key)
 		if store_type == 'string' then
 			db:set(custom_key, tostring(val))
@@ -1207,7 +1207,7 @@ Model = Object:extend {
 		checkType(key, 'string')
 		local custom_key = self:isClass() and getCustomKey(self, key) or getCustomIdKey(self, key)
 
-		assert(db:exists(custom_key), '[Error] @removeCustomMember - This custom key does not exist.')
+		if not db:exists(custom_key) then print('[Warning] @removeCustomMember - This custom key does not exist.'); return nil end
 		local store_type = db:type(custom_key)
 		if store_type == 'string' then
 			db:set(custom_key, '')
@@ -1228,7 +1228,7 @@ Model = Object:extend {
 		checkType(key, 'string')
 		local custom_key = self:isClass() and getCustomKey(self, key) or getCustomIdKey(self, key)
 
-		assert(db:exists(custom_key), '[Error] @addCustomMember - This custom key does not exist.')
+		if not db:exists(custom_key) then print('[Warning] @addCustomMember - This custom key does not exist.'); return nil end
 		local store_type = db:type(custom_key)
 		if store_type == 'string' then
 			db:set(custom_key, val)
@@ -1249,7 +1249,7 @@ Model = Object:extend {
 		checkType(key, 'string')
 		local custom_key = self:isClass() and getCustomKey(self, key) or getCustomIdKey(self, key)
 		
-		assert(db:exists(custom_key), '[Error] @hasCustomMember - This custom key does not exist.')
+		if not db:exists(custom_key) then print('[Warning] @hasCustomMember - This custom key does not exist.'); return nil end
 		local store_type = db:type(custom_key)
 		if store_type == 'string' then
 			return db:get(custom_key) == mem
