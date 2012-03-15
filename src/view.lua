@@ -101,42 +101,13 @@ local VIEW_ACTIONS = {
         if divider_loc then
 
             plugin_name = code:sub(1, divider_loc - 1)
+            assert(PLUGIN_LIST[plugin_name], ('[Error] plugin %s was not registered.'):format(plugin_name))
             param_str = code:sub(divider_loc + 1)
 
-            local tlist = param_str:splittrim(',')
-            local has_variable = false
-            for i, v in ipairs(tlist) do
-                local var, val = unpack(v:splittrim('='))
-                assert( var ~= '' )
-                assert( val ~= '' )
-
-				-- now, we start treate val
-                if val:sub(1,1) == '"' and val:sub(-1,-1) == '"' or val:sub(1,1) == "'" and val:sub(-1,-1) == "'" then
-                	-- val is a string
-                	val = val:sub(2, -2)
-				elseif type(tonumber(val)) == 'number' then
-					-- val is number
-					val = tonumber(val)
-				else
-					-- val is variable
-					val = '{{' + val + '}}'
-					has_variable = true
-				end
-                
-                params[var] = val
-            end
-            
-            if has_variable then
-            	-- twice rendering
-            	return ('_result[#_result+1] = ([==[ %s ]==]):format(View.compileView([=[$text]=])(getfenv()))'):gsub('$text', PLUGIN_LIST[plugin_name](params))
-            else
-            	return ('_result[#_result+1] = [==[%s]==]'):format(PLUGIN_LIST[plugin_name](params))
-            end
         else
             -- if divider_loc is nil, means this plugin has no arguents
             plugin_name = code
-
-            return ('_result[#_result+1] = [==[%s]==]'):format(PLUGIN_LIST[plugin_name]({}))
+            assert(PLUGIN_LIST[plugin_name], ('[Error] plugin %s was not registered.'):format(plugin_name))
 
         end
     end,
@@ -227,7 +198,7 @@ local View = Object:extend {
 
         code[#code+1] = 'return table.concat(_result)'
         code = table.concat(code, '\n')
-        --print('-----', code)
+        print('-----', code)
         -- recode each middle view code to request
         if type(name) == 'string' then
         	req.viewcode[name] = code
