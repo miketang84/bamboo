@@ -1666,7 +1666,7 @@ Model = Object:extend {
 		checkType(key, 'string')
 		local custom_key = self:isClass() and getCustomKey(self, key) or getCustomIdKey(self, key)
 
-		assert(db:exists(custom_key), '[Error] @updateCustom - This custom key does not exist.')
+		if not db:exists(custom_key) then print('[Warning] @updateCustom - This custom key does not exist.'); return nil end
 		local store_type = db:type(custom_key)
 		local store_module = getStoreModule(store_type)
 		return store_module.update(custom_key, val)
@@ -1678,20 +1678,20 @@ Model = Object:extend {
 		checkType(key, 'string')
 		local custom_key = self:isClass() and getCustomKey(self, key) or getCustomIdKey(self, key)
 
-		assert(db:exists(custom_key), '[Error] @removeCustomMember - This custom key does not exist.')
+		if not db:exists(custom_key) then print('[Warning] @removeCustomMember - This custom key does not exist.'); return nil end
 		local store_type = db:type(custom_key)
 		local store_module = getStoreModule(store_type)
 		return store_module.remove(custom_key, val)
 		
 	end;
 	
-	addCustomMember = function (self, key, val, score)
+	addCustomMember = function (self, key, val, stype, score)
 		I_AM_CLASS_OR_INSTANCE(self)
 		checkType(key, 'string')
 		local custom_key = self:isClass() and getCustomKey(self, key) or getCustomIdKey(self, key)
-
-		assert(db:exists(custom_key), '[Error] @addCustomMember - This custom key does not exist.')
-		local store_type = db:type(custom_key)
+		
+		if not db:exists(custom_key) then print('[Warning] @addCustomMember - This custom key does not exist.'); end
+		local store_type = db:type(custom_key) ~= 'none' and db:type(custom_key) or stype
 		local store_module = getStoreModule(store_type)
 		return store_module.append(custom_key, val)
 		
@@ -1702,7 +1702,7 @@ Model = Object:extend {
 		checkType(key, 'string')
 		local custom_key = self:isClass() and getCustomKey(self, key) or getCustomIdKey(self, key)
 		
-		assert(db:exists(custom_key), '[Error] @hasCustomMember - This custom key does not exist.')
+		if not db:exists(custom_key) then print('[Warning] @hasCustomMember - This custom key does not exist.'); return nil end
 		local store_type = db:type(custom_key)
 		local store_module = getStoreModule(store_type)
 		return store_module.has(custom_key, mem)

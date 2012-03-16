@@ -450,6 +450,7 @@ host = "%s"
         local which = env.WHICH_DB or settings.which_db or 0
 
         local redis_db = Redis.connect(params)
+        if env.AUTH then redis_db:auth(env.AUTH) end
         redis_db:select(which)
         
         for k, v in pairs(env.DATA) do
