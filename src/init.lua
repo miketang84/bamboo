@@ -18,6 +18,8 @@ config = {}
 -- for global rendering usage
 context = {}
 userdata = {}
+compiled_views = {}
+compiled_views_locals = {}
 -- for cache life time
 CACHE_LIFE = 1800
 -- global URLS definition

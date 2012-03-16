@@ -413,7 +413,7 @@ local function start(config)
 	-- load sqlite3 configuration, update to config table
     m2.loadConfig(config)
 	-- make a connection as the pipe interact with mongrel2
-    local conn = assert(m2.connect(config), "Failed to connect to Mongrel2.")
+    local conn = assert(m2.connect(config), "Failed to connect to monserver.")
 
     -- boot main loop
     run(conn, config)

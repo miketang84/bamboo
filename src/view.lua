@@ -2,10 +2,10 @@ module(..., package.seeall)
 local lgstring = require "lgstring"
 
 
-local function getlocals(context)
+local function getlocals(context, depth)
 	local i = 1
 	while true do
-		local name, value = debug.getlocal(4, i)
+		local name, value = debug.getlocal(depth, i)
 		if not name then break end
 		context[name] = value
 		i = i + 1
@@ -122,8 +122,8 @@ local View = Object:extend {
     __name = 'View';
     ------------------------------------------------------------------------
     --
-    -- if ENV[PROD] is true, means it is in production mode, it will only be compiled once
-    -- else, it is in develop mode, it will be compiled every request coming in.
+    -- if config.PRODUCTION is true, means it is in production mode, it will only be compiled once every call View()
+    -- else, it is in develop mode, it will be compiled every request coming in, in compile stage and parameter fill stage.
     -- @param name:  the name of the template file
     -- @return:  a function, this function can receive a table to finish the rendering procedure
     ------------------------------------------------------------------------
@@ -132,9 +132,21 @@ local View = Object:extend {
         -- print('Template file dir:', tmpl_dir, name)
 
 		if bamboo.config.PRODUCTION then
+            -- if cached
+	        -- NOTE: here, 5 is an empiric value
+    	    bamboo.compiled_views_locals[name] = getlocals({}, 5)
+            
+            local view = bamboo.compiled_views[name]
+            if view and type(view) == 'function' then
+            	return view
+            end
+            -- load file
             local tmpf = io.loadFile(tmpl_dir, name)
             tmpf = self.preprocess(tmpf)
-            return self.compileView(tmpf, name)
+            view = self.compileView(tmpf, name)
+            -- add to cache
+            bamboo.compiled_views[name] = view
+            return view
         else
             return function (params)
                 local tmpf = io.loadFile(tmpl_dir, name)
@@ -211,13 +223,29 @@ local View = Object:extend {
 
         return function(context)
             assert(type(context) == 'table', "You must always pass in a table for context.")
-			if context[1] == 'locals' then  context[1] = nil; context = getlocals(context) end
+			-- collect locals
+			if context[1] == 'locals' then  
+				context[1] = nil
+				if bamboo.config.PRODUCTION then
+					local locals = bamboo.compiled_views_locals[name]
+					if locals then
+						for k, v in pairs(locals) do
+							if not context[k] then context[k] = v end
+						end
+					end
+				else
+					-- NOTE: here, 4 is empiric value
+					context = getlocals(context, 4)
+				end
+			end
+			
 			-- for global context rendering
 			for k, v in pairs(bamboo.context) do
 				if not context[k] then
 					context[k] = v
 				end
 			end
+			
 			setmetatable(context, {__index=_G})
 			setfenv(func, context)
 			return func()

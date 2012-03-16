@@ -280,11 +280,12 @@ COMMANDS = {
 
     test = function(settings)
         local target = settings.from or "tests"
-        if not config.PRODUCTION then
-            run_tests(target, settings.full ~= nil)
-        else
-            print "[Warning] Running in PRODUCTION mode, won't run tests."
-        end
+		run_tests(target, settings.full ~= nil)
+        
+        --if not config.PRODUCTION then
+        --else
+        --    print "[Warning] Running in PRODUCTION mode, won't run tests."
+        --end
     end,
     
     config = function (settings)
