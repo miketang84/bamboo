@@ -599,7 +599,6 @@ host = "%s"
 			for _, server in ipairs(_config.servers) do
 				assert(server and server.name, '[ERROR] server or server.name is nil.')
 				os.execute(('monserver %s %s'):format(config_file, server.name))
-				print('------------------------ Successful -------------------------')
 			end
 			print("OK.")
 		else
@@ -607,7 +606,6 @@ host = "%s"
 			for _, server in ipairs(_config.servers) do
 				if server and server.name == servername then
 					os.execute(('monserver %s %s'):format(config_file, server.name))
-					print('------------------------ Successful -------------------------')
 				end
 			end
 			print("OK.")
