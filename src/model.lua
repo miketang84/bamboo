@@ -2679,15 +2679,15 @@ Model = Object:extend {
 	
 	-- for fulltext index API
 	fulltextSearch = function (self, ask_str, n)
-		assert(self.__name == 'Model')
-		local tags = wordSegmentOnFtIndex(ask_str)
-		return searchOnFulltextIndexes(tags, n)
+		I_AM_CLASS(self)
+		local tags = wordSegmentOnFtIndex(self, ask_str)
+		return searchOnFulltextIndexes(self, tags, n)
 	end;
 
 	-- for fulltext index API
 	fulltextSearchByWord = function (self, word, n)
-		assert(self.__name == 'Model')
-		return searchOnFulltextIndexes({word}, n)
+		I_AM_CLASS(self)
+		return searchOnFulltextIndexes(self, {word}, n)
 	end;
 
 	getFDT = function (self, field)
