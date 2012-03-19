@@ -2203,6 +2203,7 @@ Model = Object:extend {
 	addForeign = function (self, field, obj)
 		I_AM_INSTANCE(self)
 		checkType(field, 'string')
+		assert(self:getCounter() >= self.id, '[Error] before doing addForeign, you must save this instance.')
 		assert(type(obj) == 'table' or type(obj) == 'string', '[Error] "obj" should be table or string.')
 		if type(obj) == 'table' then checkType(tonumber(obj.id), 'number') end
 		
