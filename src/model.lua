@@ -2,6 +2,8 @@ module(..., package.seeall)
 local socket = require 'socket'
 
 local tinsert = table.insert
+local format = string.format
+
 local db = BAMBOO_DB
 
 local List = require 'lglib.list'
@@ -366,7 +368,7 @@ local delFromRedis = function (self, id)
 	
 	-- clear fulltext index
 	if isUsingFulltextIndex(self) then
-		clearIndexesOnDeletion(self)
+		clearFtIndexesOnDeletion(self)
 	end
 	if isUsingRuleIndex(self) then
 		updateIndexByRules(self, 'del')
@@ -403,7 +405,7 @@ local fakedelFromRedis = function (self, id)
 	
 	-- clear fulltext index
 	if isUsingFulltextIndex(self) then
-		clearIndexesOnDeletion(self)
+		clearFtIndexesOnDeletion(self)
 	end
 	if isUsingRuleIndex(self) then
 		updateIndexByRules(self, 'del')
@@ -467,7 +469,7 @@ if bamboo.config.fulltext_index_support then require 'mmseg' end
 -- @param instance the object to be full text indexes
 local makeFulltextIndexes = function (instance)
 	
-	local ftindex_fields = rawget(instance, '__fulltext_index_fields')
+	local ftindex_fields = instance['__fulltext_index_fields']
 	if isFalse(ftindex_fields) then return false end
 
 	local words
@@ -478,11 +480,11 @@ local makeFulltextIndexes = function (instance)
 			-- only index word length larger than 1
 			if string.utf8len(word) >= 2 then
 				-- add this word to global word set
-				db:sadd('_fulltext_words', word)
+				db:sadd(format('_fulltext_words:%s', instance.__name), word)
 				-- add reverse fulltext index such as '_RFT:model:id', type is set, item is 'word'
-				db:sadd('_RFT:' + getNameIdPattern(instance), word)
+				db:sadd(format('_RFT:%s', getNameIdPattern(instance)), word)
 				-- add fulltext index such as '_FT:word', type is set, item is 'model:id'
-				db:sadd('_FT:' + word, getNameIdPattern(instance))
+				db:sadd(format('_FT:%s:%s', instance.__name, word), instance.id)
 			end
 		end
 	end
@@ -490,42 +492,52 @@ local makeFulltextIndexes = function (instance)
 	return true	
 end
 
-local searchOnFulltextIndexes = function (ask_str, n)
+local wordSegmentOnFtIndex = function (self, ask_str)
 	local search_tags = mmseg.segment(ask_str)
-	local n = n or 10
-	local contained_tags = List()
+	local tags = List()
 	for _, tag in ipairs(search_tags) do
-		if string.utf8len(tag) >= 2 and db:sismember('_fulltext_words', tag) then
-			contained_tags:append(tag)
+		if string.utf8len(tag) >= 2 and db:sismember(format('_fulltext_words:%s', self.__name), tag) then
+			tags:append(tag)
 		end
 	end
-	if #contained_tags == 0 then return List() end
+	return tags
+end
+
+
+local searchOnFulltextIndexes = function (self, tags, n)
+	if #tags == 0 then return List() end
 	
 	local rlist = List()
 	local _tmp_key = "__tmp_ftkey"
-	if #contained_tags == 1 then
-		db:sinterstore(_tmp_key, '_FT:' + contained_tags[1])
+	if #tags == 1 then
+		db:sinterstore(_tmp_key, format('_FT:%s:%s', self.__name, tags[1]))
 	else
 		local _args = {}
-		for _, tag in ipairs(contained_tags) do
-			table.insert(_args, '_FT:' + tag)
+		for _, tag in ipairs(tags) do
+			table.insert(_args, format('_FT:%s:%s', self.__name, tag))
 		end
 		-- XXX, some afraid
 		db:sinterstore(_tmp_key, unpack(_args))
 	end
 	
+	local limits
+	if n and type(n) == 'number' and n > 0 then
+		limits = {0, n}
+	else
+		limits = nil
+	end
 	-- sort and retrieve
-	local model_keys =  db:sort(_tmp_key, {limit={0, n}, sort="desc"})
+	local model_keys =  db:sort(_tmp_key, {limit=limits, sort="desc"})
 	-- return objects
 	return getFromRedisPipeline2(model_keys)
 end
 
-local clearIndexesOnDeletion = function (instance)
+local clearFtIndexesOnDeletion = function (self, instance)
 	local model_key = getNameIdPattern(instance)
 	local words = db:smembers('_RFT:' + model_key)
 	db:pipeline(function (p)
 		for _, word in ipairs(words) do
-			p:srem('_FT:' + word, model_key)
+			p:srem(format('_FT:%s:%s', self.__name, word), model_key)
 		end
 	end)
 	-- clear the reverse fulltext key
@@ -2129,18 +2141,10 @@ Model = Object:extend {
 		if isQuerySet(self) then
 			for _, v in ipairs(self) do
 				fakedelFromRedis(v)
-				-- clear fulltext indexes
-				if isUsingFulltextIndex(v) then
-					clearIndexesOnDeletion(v)
-				end
 				v = nil
 			end
 		else
 			fakedelFromRedis(self)
-			-- clear fulltext indexes
-			if isUsingFulltextIndex(self) then
-				clearIndexesOnDeletion(self)
-			end
 		end
 		
 		self = nil
@@ -2153,18 +2157,10 @@ Model = Object:extend {
 		if isQuerySet(self) then
 			for _, v in ipairs(self) do
 				delFromRedis(v)
-				-- clear fulltext indexes
-				if isUsingFulltextIndex(v) then
-					clearIndexesOnDeletion(v)
-				end
 				v = nil
 			end
 		else
 			delFromRedis(self)
-			-- clear fulltext indexes
-			if isUsingFulltextIndex(self) then
-				clearIndexesOnDeletion(self)
-			end
 		end
 		
 		self = nil
@@ -2684,7 +2680,14 @@ Model = Object:extend {
 	-- for fulltext index API
 	fulltextSearch = function (self, ask_str, n)
 		assert(self.__name == 'Model')
-		return searchOnFulltextIndexes(ask_str, n)
+		local tags = wordSegmentOnFtIndex(ask_str)
+		return searchOnFulltextIndexes(tags, n)
+	end;
+
+	-- for fulltext index API
+	fulltextSearchByWord = function (self, word, n)
+		assert(self.__name == 'Model')
+		return searchOnFulltextIndexes({word}, n)
 	end;
 
 	getFDT = function (self, field)
