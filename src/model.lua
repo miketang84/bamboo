@@ -527,9 +527,9 @@ local searchOnFulltextIndexes = function (self, tags, n)
 		limits = nil
 	end
 	-- sort and retrieve
-	local model_keys =  db:sort(_tmp_key, {limit=limits, sort="desc"})
+	local ids =  db:sort(_tmp_key, {limit=limits, sort="desc"})
 	-- return objects
-	return getFromRedisPipeline2(model_keys)
+	return getFromRedisPipeline(self, ids)
 end
 
 local clearFtIndexesOnDeletion = function (self, instance)
