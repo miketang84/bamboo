@@ -2444,7 +2444,7 @@ Model = Object:extend {
 		else
 			local key = getFieldPattern(self, field)
 			local store_module = getStoreModule(fld.st)
-			store_module.num(key)
+			return store_module.num(key)
 		end
 	end;
 
