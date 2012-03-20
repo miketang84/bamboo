@@ -2063,7 +2063,7 @@ Model = Object:extend {
 		-- if parameters exist, update it
 		if params and type(params) == 'table' then
 			for k, v in pairs(params) do
-				if k ~= 'id' and self[k] then
+				if k ~= 'id' and self.__fields[k] then
 					self[k] = v
 				end
 			end
