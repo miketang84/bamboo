@@ -1,7 +1,7 @@
 #!/usr/bin/env lua
 
 -- ATTEN: this file is not a module
-package.path = '/usr/local/lib/lua/5.1/?.lua;/usr/local/lib/lua/5.1/?/init.lua;' .. package.path
+package.path = './?.lua;./?/init.lua;./?/src/init.lua;/usr/local/lib/lua/5.1/?.lua;/usr/local/lib/lua/5.1/?/init.lua;' .. package.path
 
 require 'posix'
 require 'lglib'
