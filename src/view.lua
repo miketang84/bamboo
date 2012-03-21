@@ -161,7 +161,8 @@ local View = Object:extend {
 	-- preprocess course
 	preprocess = function(tmpl)
 
-		if tmpl:match('{:') then
+		-- restrict the {: :} at the head of template file, from the first char
+		if tmpl:match('^{:.-:}%s*\n') then
             -- if there is inherited tag in page, that tag must be put in the front of this file
             local block = tmpl:match("(%b{})")
             local headtwo = block:sub(1,2)
