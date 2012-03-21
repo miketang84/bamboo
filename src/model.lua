@@ -2024,6 +2024,7 @@ Model = Object:extend {
     save = function (self, params)
 		I_AM_INSTANCE(self)
         assert(self.id, "[Error] The main key 'id' field doesn't exist!")
+		assert(self:getCounter() + 1 >= tonumber(self.id), '[Error] @save - invalid id.')
         local indexfd = self.__indexfd
         assert(type(indexfd) == 'string' or type(indexfd) == 'nil', "[Error] the __indexfd should be string.")
         local model_key = getNameIdPattern(self)

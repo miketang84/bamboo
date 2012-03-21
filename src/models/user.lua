@@ -19,7 +19,7 @@ local User = Model:extend {
 		['email'] = { required=true },
 		['nickname'] = {},
 		['created_date'] = {type="number"},
-		
+
 		['perms'] = { foreign="Permission", st="MANY" },
 		['groups'] = { foreign="Group", st="MANY" },
 	};
@@ -35,30 +35,26 @@ local User = Model:extend {
 
 		math.randomseed(os.time())
 		self.salt = tostring(math.random(1, 1000000))
-		-- if t.encrypt and type(t.encrypt) == 'function' then
-		-- 	self.password = t.encrypt(t.password or '')
-		-- else
-		-- 	self.password = md5.sumhexa(t.password or '')
-		-- end
 		
 		if self.encrypt and type(self.encrypt) == 'function' then
-			self.password = self.encrypt((t.password or '') .. self.salt)
+			self.password = self:encrypt(t.password)
 		end
 
 		return self
 	end;
-	
-	encrypt = md5.sumhexa; 
-	
+
+	encrypt = function(self, password)
+		return md5.sumhexa(password .. (self.salt or '')):lower()
+	end;
+
 	authenticate = function (self, params)
 		I_AM_CLASS(self)
 
 		local user = self:getByIndex(params.username)
 		if not user then return false end
-		-- if md5.sumhexa(params.password):lower() ~= user.password then
-		-- if params.password:lower() ~= user.password then
+
 		if self.encrypt and type(self.encrypt) == 'function' then
-			if self.encrypt(params.password .. (user.salt or '')):lower() ~= user.password then
+			if user:encrypt(params.password) ~= user.password then
 				return false
 			end
 		else
@@ -68,7 +64,7 @@ local User = Model:extend {
 		end
 		return true, user
 	end;
-	
+
 	login = function (self, params)
 		I_AM_CLASS_OR_INSTANCE(self)
 		-- make instance can use this login
@@ -80,23 +76,23 @@ local User = Model:extend {
 		Session:setKey('user_id', self:classname() + ':' + user.id)
 		return user
 	end;
-	
+
 	logout = function (self)
 		-- I_AM_CLASS(self)
 		-- Class and instance can both call this function
 		return Session:delKey('user_id')
 	end;
-	
+
 	register = function (self, params)
 		I_AM_CLASS(self)
 		if not params['username'] or not params['password'] then return nil, 101, 'less parameters.' end
 
 		local user_id = self:getIdByIndex(params.username)
 		if user_id then return nil, 103, 'the same name user exists.' end
-		
+
 		local user = self(params)
 		user:save()
-		
+
 		return user
 	end;
 
