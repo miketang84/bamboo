@@ -254,12 +254,12 @@ local makeObject = function (self, data)
 end
 
 
-local clearFtIndexesOnDeletion = function (self, instance)
+local clearFtIndexesOnDeletion = function (instance)
 	local model_key = getNameIdPattern(instance)
 	local words = db:smembers('_RFT:' + model_key)
 	db:pipeline(function (p)
 		for _, word in ipairs(words) do
-			p:srem(format('_FT:%s:%s', self.__name, word), model_key)
+			p:srem(format('_FT:%s:%s', instance.__name, word), model_key)
 		end
 	end)
 	-- clear the reverse fulltext key
