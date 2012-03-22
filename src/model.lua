@@ -15,7 +15,7 @@ local rdfifo = require 'bamboo.redis.fifo'
 local rdzfifo = require 'bamboo.redis.zfifo'
 local rdhash = require 'bamboo.redis.hash'
 
-local getModelByName  = bamboo.getModelByName 
+local getModelByName  = bamboo.getModelByName
 local dcollector= 'DELETED:COLLECTOR'
 
 -----------------------------------------------------------------
@@ -254,6 +254,20 @@ local makeObject = function (self, data)
 end
 
 
+local clearFtIndexesOnDeletion = function (self, instance)
+	local model_key = getNameIdPattern(instance)
+	local words = db:smembers('_RFT:' + model_key)
+	db:pipeline(function (p)
+		for _, word in ipairs(words) do
+			p:srem(format('_FT:%s:%s', self.__name, word), model_key)
+		end
+	end)
+	-- clear the reverse fulltext key
+	db:del('_RFT:' + model_key)
+end
+
+
+
 ------------------------------------------------------------
 -- this function can only be called by Model
 -- @param model_key:
@@ -391,9 +405,11 @@ local fakedelFromRedis = function (self, id)
 		local fld = fields[k]
 		if fld and fld.foreign then
 			local key = model_key + ':' + k
-			db:rename(key, 'DELETED:' + key)
+			if db:exists(key) then
+				db:rename(key, 'DELETED:' + key)
+			end
 		end
-	end 
+	end
 
 	-- rename the key self
 	db:rename(model_key, 'DELETED:' + model_key)
@@ -401,7 +417,7 @@ local fakedelFromRedis = function (self, id)
 	-- when deleted, the instance's index cache was cleaned.
 	db:zremrangebyscore(index_key, self.id, self.id)
 	-- add to deleted collector
-	rdzset.add(dcollector,  model_key)
+	rdzset.add(dcollector, model_key)
 	
 	-- clear fulltext index
 	if isUsingFulltextIndex(self) then
@@ -420,20 +436,22 @@ end
 -- called by Some Model: self, not instance
 local restoreFakeDeletedInstance = function (self, id)
 	checkType(tonumber(id),  'number')
-	local model_key = getNameIdPattern2(self)
+	local model_key = getNameIdPattern2(self, id)
 	local index_key = getIndexKey(self)
-	
-	local instance = getFromRedis(self, model_key)
+
+	local instance = getFromRedis(self, 'DELETED:' + model_key)
 	if not instance then return nil end
 	-- rename the key self
 	db:rename('DELETED:' + model_key, model_key)
 	local fields = self.__fields
-	-- in redis, delete the associated foreign key-value store
+	-- in redis, restore the associated foreign key-value
 	for k, v in pairs(instance) do
 		local fld = fields[k]
 		if fld and fld.foreign then
 			local key = model_key + ':' + k
-			db:rename('DELETED:' + key, key)
+			if db:exists('DELETED:' + key) then
+				db:rename('DELETED:' + key, key)
+			end
 		end
 	end
 
@@ -441,7 +459,7 @@ local restoreFakeDeletedInstance = function (self, id)
 	db:zadd(index_key, instance.id, instance.id)
 	-- remove from deleted collector
 	db:zrem(dcollector, model_key)
-	
+
 	return instance
 end
 
@@ -531,19 +549,6 @@ local searchOnFulltextIndexes = function (self, tags, n)
 	-- return objects
 	return getFromRedisPipeline(self, ids)
 end
-
-local clearFtIndexesOnDeletion = function (self, instance)
-	local model_key = getNameIdPattern(instance)
-	local words = db:smembers('_RFT:' + model_key)
-	db:pipeline(function (p)
-		for _, word in ipairs(words) do
-			p:srem(format('_FT:%s:%s', self.__name, word), model_key)
-		end
-	end)
-	-- clear the reverse fulltext key
-	db:del('_RFT:' + model_key)
-end
-
 
 --------------------------------------------------------------------------------
 -- The bellow four assertations, they are called only by class, instance or query set
@@ -1020,13 +1025,13 @@ local extraQueryArgs = function (qstr)
 end
 
 
-local checkLogicRelation = function (obj, query_args, logic_choice)
+local checkLogicRelation = function (self, obj, query_args, logic_choice)
 	-- NOTE: query_args can't contain [1]
 	local flag = logic_choice
 	if type(query_args) == 'table' then
 		for k, v in pairs(query_args) do
 			-- to redundant query condition, once meet, jump immediately
-			if not obj[k] then flag=false; break end
+			if not self.__fields[k] then flag=false; break end
 
 			if type(v) == 'function' then
 				flag = v(obj[k])
@@ -1058,7 +1063,7 @@ local canInstanceFitQueryRule = function (self, qstr)
 	--DEBUG(query_args)
 	local logic_choice = true
 	if type(query_args) == 'table' then logic_choice = (query_args[1] == 'and'); query_args[1]=nil end
-	return checkLogicRelation(self, query_args, logic_choice)
+	return checkLogicRelation(self, self, query_args, logic_choice)
 end
 
 local addInstanceToIndexOnRule = function (self, qstr)
@@ -1498,7 +1503,7 @@ Model = Object:extend {
 				--DEBUG(obj)
 				-- check the object's legalery, only act on valid object
 				if isValidInstance(obj) then
-					local flag = checkLogicRelation(obj, query_args, logic_choice)
+					local flag = checkLogicRelation(self, obj, query_args, logic_choice)
 					
 					-- if walk to this line, means find one 
 					if flag then
