@@ -212,7 +212,7 @@ local View = Object:extend {
         -- print('-----', code)
         -- recode each middle view code to request
         if type(name) == 'string' then
-        	req.viewcode[name] = code
+        	bamboo.compiled_views_tmpls[name] = code
 		end
 
         -- compile the whole string code

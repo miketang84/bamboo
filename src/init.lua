@@ -18,6 +18,7 @@ config = {}
 -- for global rendering usage
 context = {}
 userdata = {}
+compiled_views_tmpls = {}
 compiled_views = {}
 compiled_views_locals = {}
 -- for cache life time

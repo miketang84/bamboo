@@ -887,9 +887,7 @@ local collectRuleFunctionUpvalues = function (query_args)
 		assert(type(v) ~= 'table' and type(v) ~= 'function', 
 			"[Error] @collectRuleFunctionUpvalues of filter - bamboo has no ability to collect the function upvalue whose type is 'table' or 'function'.")
 
-		-- record upvalue to bamboo.userdata, for later use when extract
 		upvalues[#upvalues + 1] = { name, tostring(v), type(v) }
-		-- print(name, v)
 	end
 end
 
@@ -985,8 +983,6 @@ local extraQueryArgs = function (qstr)
 				debug.setupvalue(query_args, i, value)
 			end
 		end
-		-- XXX: not work. set function environment, to solve the problem of upvalues can't find
-		-- setfenv(assert(query_args, '[Error] @extraQueryArgs - function code error when extract.'), setmetatable(bamboo.userdata, {__index=_G}))
 	else
 	
 		local endpoint = -1

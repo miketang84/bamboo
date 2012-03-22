@@ -333,7 +333,6 @@ local function run(conn, config)
 					if req.headers['x-requested-with'] == 'XMLHttpRequest' then
 						req['ajax'] = true
 					end
-					req.viewcode = {}
 					req.userdata = {}
 
 					print(("req %s: %s"):format(config.route, req.conn_id), os.date(), req.path, req.method, req.session_id)
