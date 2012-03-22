@@ -95,7 +95,6 @@ local VIEW_ACTIONS = {
         local divider_loc = code:find(' ')
         local plugin_name = nil
         local param_str = nil
-        local params = {}
 
         if divider_loc then
             plugin_name = code:sub(1, divider_loc - 1)
@@ -113,6 +112,28 @@ local VIEW_ACTIONS = {
     ['{-'] = function (code)
 		return ""
     end,
+    
+    ['{*'] = function (code)
+		local code = code:trim()
+        assert( code ~= '', 'Widget name must not be blank.')
+        local divider_loc = code:find(' ')
+        local widget_name = nil
+        local param_str = nil
+
+        if divider_loc then
+            widget_name = code:sub(1, divider_loc - 1)
+            param_str = '{' .. code:sub(divider_loc + 1) .. '}'
+        else
+            -- if divider_loc is nil, means this plugin has no arguments
+            widget_name = code
+            param_str = "{}"
+        end
+        assert(bamboo.WIDGETS[widget_name], ('[Error] widget %s was not implemented.'):format(widget_name))
+        return ("_result[#_result+1] = bamboo.WIDGETS['%s'](%s)"):format(widget_name, param_str)
+
+    end,
+    
+
 }
 
 

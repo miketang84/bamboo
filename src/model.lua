@@ -1276,6 +1276,15 @@ Model = Object:extend {
 	-- Class Functions. Called by class object.
 	--------------------------------------------------------------------
 
+    getRankByIndex = function (self, name)
+		I_AM_CLASS(self)
+
+		local index_key = getIndexKey(self)
+		-- id is the score of that index value
+		local rank = db:zrank(index_key, tostring(name))
+		return tonumber(rank)
+    end;
+
 	-- return id queried by index
 	--
     getIdByIndex = function (self, name)

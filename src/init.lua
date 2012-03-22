@@ -21,6 +21,10 @@ userdata = {}
 compiled_views_tmpls = {}
 compiled_views = {}
 compiled_views_locals = {}
+
+WIDGETS = {}
+require 'bamboo.widget'
+
 -- for cache life time
 CACHE_LIFE = 1800
 -- global URLS definition
