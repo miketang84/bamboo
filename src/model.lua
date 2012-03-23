@@ -2479,7 +2479,7 @@ Model = Object:extend {
 	-- do sort on query set by some field
 	sortBy = function (self, field, direction, sort_func, ...)
 		I_AM_QUERY_SET(self)
-		checkType(field, 'string')
+		-- checkType(field, 'string')
 		
 		local direction = direction or 'asc'
 		
