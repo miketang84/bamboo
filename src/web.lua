@@ -97,7 +97,7 @@ local Web = Object:extend {
 	end;
 	
 
-    pageNotFound = function (self, msg) return self:error(msg or 'Page Not Found', 404, 'Not Found') end;
+    notFound = function (self, msg) return self:error(msg or 'Not Found', 404, 'Not Found') end;
     unauthorized = function (self, msg) return self:error(msg or 'Unauthorized', 401, 'Unauthorized') end;
     forbidden = function (self, msg) return self:error(msg or 'Forbidden', 403, 'Forbidden') end;
     badRequest = function (self, msg) return self:error(msg or 'Bad Request', 400, 'Bad Request') end;
