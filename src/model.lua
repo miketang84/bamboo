@@ -1149,7 +1149,7 @@ local addIndexToManager = function (self, query_str_iden, obj_list)
 	
 end
 
-local getIndexFromManager = function (self, query_str_iden)
+local getIndexFromManager = function (self, query_str_iden, getnum)
 	local manager_key = "_index_manager:" .. self.__name
 	local score = db:zscore(manager_key, query_str_iden)
 	if not score then return List() end
@@ -1162,8 +1162,13 @@ local getIndexFromManager = function (self, query_str_iden)
 	end
 	-- update expiration
 	db:expire(item_key, bamboo.config.expiration or bamboo.CACHE_LIFE)
-	-- return a list
-	return List(db:lrange(item_key, 0, -1))
+	if not getnum then
+		-- return a list
+		return List(db:lrange(item_key, 0, -1))
+	else
+		-- return the number of this list
+		return db:llen(item_key)
+	end
 end
 
 
@@ -1601,6 +1606,12 @@ Model = Object:extend {
 		return query_set
 	end;
     
+    -- count the number of instance fit to some rule
+	count = function (self, query_args)
+		I_AM_CLASS(self)	
+		local query_str_iden = compressQueryArgs(query_args)
+		return getIndexFromManager(self, query_str_iden, 'getnum')
+	end;
 	
 	-------------------------------------------------------------------
 	-- CUSTOM API
