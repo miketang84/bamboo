@@ -2,7 +2,7 @@ module(..., package.seeall)
 
 
 
-local TEXT_TMPL = [[<input type="text" name="${name}" value="${value}" class="%${class}" /> ]]
+local TEXT_TMPL = [[<input type="text" name="${name}" value="${value}" class="${class}" /> ]]
 text = function (args)
 	local name = args.name or 'text'
 	local class = args.class or 'text'

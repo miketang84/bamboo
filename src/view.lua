@@ -42,11 +42,12 @@ local VIEW_ACTIONS = {
             _result[#_result+1] = _children[%s](getfenv())
         ]]):format(code, code, code, code)
     end,
+--[[
     -- escape tag, to make security
-    ['{<'] = function(code)
+    ['{*'] = function(code)
         return ('local http = require("lglib.http"); _result[#_result+1] = http.escapeHTML(%s)'):format(code)
     end,
-
+--]]
     ['{['] = function(code)
         -- nothing now
         return true
@@ -113,7 +114,7 @@ local VIEW_ACTIONS = {
 		return ""
     end,
     
-    ['{*'] = function (code)
+    ['{<'] = function (code)
 		local code = code:trim()
         assert( code ~= '', 'Widget name must not be blank.')
         local divider_loc = code:find(' ')
