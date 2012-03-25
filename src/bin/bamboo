@@ -214,7 +214,7 @@ local killProcesses = function (settings)
 end
 
 local startProcesses = function (settings)
-	readSettings()
+	readSettings(config)
 	local appname = config.project_name
 	local monserver_dir = config.monserver_dir
    
@@ -313,7 +313,7 @@ COMMANDS = {
     
     createapp = function(settings)
         local appname = settings[1] or 'bambooapp'
-		readSettings()
+		readSettings(config)
 		local monserver_dir = config.monserver_dir
 		local bamboo_dir = config.bamboo_dir
 
@@ -367,7 +367,7 @@ host = "%s"
     
     createplugin = function(settings)
         local plugin_name = settings[1] or 'bambooplugin'
-   		readSettings()
+   		readSettings(config)
         local appname = config.project_name
 		local monserver_dir = config.monserver_dir
 		local bamboo_dir = config.bamboo_dir
@@ -392,7 +392,7 @@ host = "%s"
     
     createmodel = function(settings)
         local model_name = settings[1] or 'bamboomodel'
-   		readSettings()
+   		readSettings(config)
 		local bamboo_dir = config.bamboo_dir
         
         local newfile = ('./%s.lua'):format(model_name:lower())
@@ -415,7 +415,7 @@ host = "%s"
 	createcontroller = function(settings)
         local controller_name = settings[1] or 'bamboocontroller'
 		controller_name = controller_name:lower()
-   		readSettings()
+   		readSettings(config)
 		local bamboo_dir = config.bamboo_dir
         
         local newfile = ('./%s.lua'):format(controller_name + '_controller')
@@ -568,7 +568,7 @@ host = "%s"
     end;
 
     shell = function (settings)
-   		readSettings()
+   		readSettings(config)
 		local bamboo_dir = config.bamboo_dir
 
 		local shell_file = bamboo_dir + '/src/bin/shell.lua'
@@ -644,7 +644,7 @@ host = "%s"
 	end;
     
 	importadmin = function (settings)
-        readSettings()
+        readSettings(config)
 		local monserver_dir = config.monserver_dir
 		local bamboo_dir = config.bamboo_dir
 
@@ -659,7 +659,7 @@ host = "%s"
 	end;
 	
     createsuperuser = function (settings)
-		  readSettings()
+		  readSettings(config)
 
 		  local redis = require 'bamboo.redis'
 

@@ -29,7 +29,7 @@ require 'bamboo.widget'
 CACHE_LIFE = 1800
 -- global URLS definition
 URLS = {}
-
+PATTERN_URLS = {}
 ------------------------------------------------------------------------
 PLUGIN_LIST = {}
 PLUGIN_CALLBACKS = {}

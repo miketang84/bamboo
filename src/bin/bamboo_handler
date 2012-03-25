@@ -119,6 +119,9 @@ local function makeUrlHandlerMapping(URLS)
 	return table_concrete, table_pattern
 end
 local MappingTableConcrete, MappingTablePattern = makeUrlHandlerMapping(URLS)
+-- keep syncronization
+bamboo.URLS = MappingTableConcrete
+bamboo.PATTERN_URLS = MappingTablePattern
 
 print('-------------------- URL Settings --------------------')
 ptable(MappingTableConcrete)
