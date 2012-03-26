@@ -1661,7 +1661,10 @@ Model = Object:extend {
 		if not db:exists(custom_key) then
 			print(("[Warning] @getCustom - Key %s doesn't exist!"):format(custom_key))
 			if not atype or atype == 'string' then return nil
+			elseif atype == 'list' then
+				return List()
 			else
+				-- TODO: need to seperate every type
 				return {}
 			end
 		end
