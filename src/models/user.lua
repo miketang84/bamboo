@@ -107,6 +107,29 @@ local User = Model:extend {
 		return self
 	end;
 	
+	addPerm = function(self, ...)
+		local perms = {...}
+		for _, perm in ipairs(perms) do
+			local ps = Perm:filter(function(u) return u.name:startsWith(perm) end)
+			for _, p in ipairs(ps) do
+				self:addForeign('perms', p)
+			end
+		end
+	end;
+
+	hasPerm = function(self, ...)
+		local perms = {...}
+		for _, perm in ipairs(perms) do
+			local ps = Perm:filter(function(u) return u.name:startsWith(perm) end)
+			for _, p in ipairs(ps) do
+				if not self:hasForeign('perms', p) then
+					return false
+				end
+			end
+		end
+		return true
+	end;
+	
 }
 
 return User
