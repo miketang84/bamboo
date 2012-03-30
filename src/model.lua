@@ -683,9 +683,10 @@ _G['uneq'] = function ( cmp_obj )
 end
 
 _G['lt'] = function (limitation)
+	limitation = tonumber(limitation) or limitation
 	local t = function (v)
-		local nv = tonumber(v)
-		if nv and nv < tonumber(limitation) then
+		local nv = tonumber(v) or v
+		if nv and nv < limitation then
 			return true
 		else
 			return false
@@ -696,9 +697,10 @@ _G['lt'] = function (limitation)
 end
 
 _G['gt'] = function (limitation)
+	limitation = tonumber(limitation) or limitation
 	local t = function (v)
-		local nv = tonumber(v)
-		if nv and nv > tonumber(limitation) then
+		local nv = tonumber(v) or v
+		if nv and nv > limitation then
 			return true
 		else
 			return false
@@ -710,9 +712,10 @@ end
 
 
 _G['le'] = function (limitation)
+	limitation = tonumber(limitation) or limitation
 	local t = function (v)
-		local nv = tonumber(v)	
-		if nv and nv <= tonumber(limitation) then
+		local nv = tonumber(v) or v
+		if nv and nv <= limitation then
 			return true
 		else
 			return false
@@ -723,9 +726,10 @@ _G['le'] = function (limitation)
 end
 
 _G['ge'] = function (limitation)
+	limitation = tonumber(limitation) or limitation
 	local t = function (v)
-		local nv = tonumber(v)	
-		if nv and nv >= tonumber(limitation) then
+		local nv = tonumber(v) or v
+		if nv and nv >= limitation then
 			return true
 		else
 			return false
@@ -736,8 +740,10 @@ _G['ge'] = function (limitation)
 end
 
 _G['bt'] = function (small, big)
+	small = tonumber(small) or small
+	big = tonumber(big) or big	
 	local t = function (v)
-		local nv = tonumber(v)
+		local nv = tonumber(v) or v
 		if nv and nv > small and nv < big then
 			return true
 		else
@@ -749,8 +755,10 @@ _G['bt'] = function (small, big)
 end
 
 _G['be'] = function (small, big)
+	small = tonumber(small) or small
+	big = tonumber(big) or big	
 	local t = function (v)
-		local nv = tonumber(v)
+		local nv = tonumber(v) or v
 		if nv and nv >= small and nv <= big then
 			return true
 		else
@@ -762,8 +770,10 @@ _G['be'] = function (small, big)
 end
 
 _G['outside'] = function (small, big)
+	small = tonumber(small) or small
+	big = tonumber(big) or big	
 	local t = function (v)
-		local nv = tonumber(v)
+		local nv = tonumber(v) or v
 		if nv and nv < small and nv > big then
 			return true
 		else
