@@ -28,6 +28,7 @@ local rdactions = {
 	['MANY'] = {},
 	['FIFO'] = {},
 	['ZFIFO'] = {},
+	['LIST'] = {},
 }
 
 rdactions['string'].save = rdstring.save
@@ -42,9 +43,11 @@ rdactions['list'].save = rdlist.save
 rdactions['list'].update = rdlist.update
 rdactions['list'].retrieve = rdlist.retrieve
 rdactions['list'].remove = rdlist.remove
-rdactions['list'].add = rdlist.add
+--rdactions['list'].add = rdlist.add
+rdactions['list'].add = rdlist.append
 rdactions['list'].has = rdlist.has
-rdactions['list'].num = rdlist.num
+--rdactions['list'].num = rdlist.num
+rdactions['list'].num = rdlist.len
 
 rdactions['set'].save = rdset.save
 rdactions['set'].update = rdset.update
@@ -86,8 +89,7 @@ rdactions['ZFIFO'].add = rdzfifo.push
 rdactions['ZFIFO'].has = rdzfifo.has
 rdactions['ZFIFO'].num = rdzfifo.num
 
-
-
+rdactions['LIST'] = rdactions['list']
 rdactions['MANY'] = rdactions['zset']
 
 local getStoreModule = function (store_type)
@@ -228,10 +230,8 @@ local makeObject = function (self, data)
 		-- ensure the correction of field description table
 		checkType(fld, 'table')
 		-- convert the number type field
-		if fld.type == 'number' then
-			data[k] = tonumber(data[k])
 			
-		elseif fld.foreign then
+    	if fld.foreign then
 			local st = fld.st
 			-- in redis, we don't save MANY foreign key in db, but we want to fill them when
 			-- form lua object
@@ -241,8 +241,15 @@ local makeObject = function (self, data)
 				data[k] = 'FOREIGN FIFO ' .. fld.foreign
 			elseif st == 'ZFIFO' then
 				data[k] = 'FOREIGN ZFIFO ' .. fld.foreign
+      		elseif st == 'LIST' then
+        		data[k] = 'FOREIGN LIST ' .. fld.foreign
+      		end
+    	else
+      		if fld.type == 'number' then
+        		data[k] = tonumber(data[k])
 			end
 		end
+
 	end
 
 	-- generate an object
@@ -1153,22 +1160,14 @@ local getIndexFromManager = function (self, query_str_iden, getnum)
 	local manager_key = "_index_manager:" .. self.__name
 	local score = db:zscore(manager_key, query_str_iden)
 	if not score then 
-		if not getnum then
-			return List() 
-		else
-			return nil	
-		end
+		return (not getnum) and List() or nil
 	end
 	-- add to index manager
 	local item_key = ('_RULE:%s:%s'):format(self.__name, score)
 	if not db:exists(item_key) then 
 		-- clear the cache in the index manager
 		db:zrem(manager_key, query_str_iden)
-		if not getnum then
-			return List()
-		else
-			return nil
-		end
+		return (not getnum) and List() or nil
 	end
 	-- update expiration
 	db:expire(item_key, bamboo.config.expiration or bamboo.CACHE_LIFE)
