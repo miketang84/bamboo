@@ -1675,6 +1675,14 @@ Model = Object:extend {
 		end
 	end;
 
+	-- 
+	getCustomKey = function (self, key)
+		I_AM_CLASS_OR_INSTANCE(self)
+		checkType(key, 'string')
+		local custom_key = self:isClass() and getCustomKey(self, key) or getCustomIdKey(self, key)
+		
+		return custom_key, db:type(custom_key)
+	end;
 
 	-- 
 	getCustom = function (self, key, atype)
