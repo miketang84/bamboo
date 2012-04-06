@@ -2,16 +2,18 @@ module(..., package.seeall)
 
 
 
-local TEXT_TMPL = [[<input type="text" name="${name}" value="${value}" class="${class}" /> ]]
+local TEXT_TMPL = [[<input type="text" name="${name}" value="${value}" class="${class}" ${id} /> ]]
 text = function (args)
 	local name = args.name or 'text'
-	local class = args.class or 'text'
+	local class = args.class or name
 	local value = args.value or ''
+	local id = args.id
 	
 	local htmls = (TEXT_TMPL % { 
 		name = name, 
 		value = value, 
-		class = class, 
+		class = class,
+		id = id and format('id="%s"', id) or '' 
 	})
 
 	return htmls
@@ -20,14 +22,15 @@ end
 
 
 
-local CHECKBOX_TMPL = [[<input type="checkbox" name="${name}" value="${value}" ${checked} class="${class}">${caption} ]]
+local CHECKBOX_TMPL = [[<input type="checkbox" name="${name}" value="${value}" ${checked} class="${class}" ${id} />${caption} ]]
 checkbox = function (args)
 	local htmls = {}
 	local name = args.name or 'checkbox'
-	local class = args.class or 'checkbox'
+	local class = args.class or name
 	local value = args.value or {}
 	local value_field = args.value_field
 	local caption_field = args.caption_field
+	local id = args.id
 
 	local checked = args.checked or {}
 	local checked_set, flag = false
@@ -45,6 +48,7 @@ checkbox = function (args)
 			end
 		
 			table.insert(htmls, (CHECKBOX_TMPL % { 
+				id = id and format('id="%s"', id) or '',
 				class = class,
 				name = name,
 				value = item[value_field], 
@@ -61,6 +65,7 @@ checkbox = function (args)
 			 	flag = checked_set:has(item[1])
 			end
 			table.insert(htmls, (CHECKBOX_TMPL % { 
+				id = id and format('id="%s"', id) or '',
 				name = name, 
 				value = item[1], 
 				class = class, 
@@ -73,11 +78,11 @@ checkbox = function (args)
 	return table.concat(htmls)
 end
 
-local RADIO_TMPL = [[<input type="radio" name="${name}" value="${value}" ${checked} class="${class}">${caption} ${layout}]]
+local RADIO_TMPL = [[<input type="radio" name="${name}" value="${value}" ${checked} class="${class}" ${id}/>${caption} ${layout}]]
 radio = function (args)
 	local htmls = {}
 	local name = args.name or 'radio'
-	local class = args.class or 'radio'
+	local class = args.class or name
 	local value = args.value or {}
 	local checked = args.checked or ''
 	local value_field = args.value_field
@@ -90,6 +95,7 @@ radio = function (args)
 	if value_field and caption_field then
 		for _, item in ipairs(value) do
 			table.insert(htmls, (RADIO_TMPL % { 
+				id = id and format('id="%s"', id) or '',
 				class = class,
 				name = name,
 				value = item[value_field], 
@@ -101,6 +107,7 @@ radio = function (args)
 	else
 		for _, item in ipairs(value) do
 			table.insert(htmls, (RADIO_TMPL % { 
+				id = id and format('id="%s"', id) or '',
 				name = name, 
 				value = item[1], 
 				class = class, 
@@ -116,13 +123,13 @@ end
 
 
 
-local SELECT_TMPL0 = [[<select class="${class}" name="${name}">]]
+local SELECT_TMPL0 = [[<select class="${class}" name="${name} ${id}">]]
 local SELECT_TMPL1 = [[<option value="${value}" ${selected}>${caption}</option>]]
 local SELECT_TMPL2 = [[</select>]]
 select = function (args)
 	local htmls = {}
 	local name = args.name or 'select'
-	local class = args.class or 'select'
+	local class = args.class or name
 	local value = args.value or {}
 	local selected = args.selected or {}
 	
@@ -134,7 +141,7 @@ select = function (args)
 		selected_set = Set(selected)
 	end
 	
-	table.insert(htmls, SELECT_TMPL0 % {class=class, name=name})	
+	table.insert(htmls, SELECT_TMPL0 % {class=class, name=name, id=id and format('id="%s"', id) or ''})	
 	-- if specify value field and caption field
 	if value_field and caption_field then
 		-- here, value is datasource

@@ -2161,14 +2161,20 @@ Model = Object:extend {
     update = function (self, field, new_value)
 		I_AM_INSTANCE(self)
 		checkType(field, 'string')
-		assert(type(new_value) == 'string' or type(new_value) == 'number')
+		assert(type(new_value) == 'string' or type(new_value) == 'number' or type(new_value) == 'nil')
 		local fld = self.__fields[field]
 		if not fld then print(("[Warning] Field %s doesn't be defined!"):format(field)); return nil end
 		assert( not fld.foreign, ("[Error] %s is a foreign field, shouldn't use update function!"):format(field))
 		local model_key = getNameIdPattern(self)
 		assert(db:exists(model_key), ("[Error] Key %s does't exist! Can't apply update."):format(model_key))
-		-- apply to db
-		db:hset(model_key, field, new_value)
+
+		if new_value == nil then
+		    db:hdel(model_key, field)
+		else
+		    -- apply to db
+		    db:hset(model_key, field, new_value)
+		end
+	    
 		-- apply to lua object
 		self[field] = new_value
 		
