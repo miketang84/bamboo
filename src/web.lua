@@ -70,14 +70,14 @@ local Web = Object:extend {
         self:page(json.encode(data), 200, "OK", {['content-type'] = ctype or 'application/json'})
     end;
 
-	jsonError = function (self, err_code, err_desc)
-		self:json { success = false, err_code = err_code, err_desc = err_desc }	
-	end;
+    jsonError = function (self, err_code, err_desc)
+	self:json { success = false, err_code = err_code, err_desc = err_desc }	
+    end;
 
-	jsonSuccess = function (self, tbl)
-		tbl['success'] = true
-		self:json(tbl)
-	end;
+    jsonSuccess = function (self, tbl)
+	tbl['success'] = true
+	self:json(tbl)
+    end;
 	
     redirect = function (self, url)
         self:page("", 303, "See Other", {Location=url, ['content-type'] = false})
@@ -89,13 +89,6 @@ local Web = Object:extend {
         self:close()
         return false
     end;
-
-	loginRequired = function (self, reurl)
-		local reurl = reurl or '/index/'
-		if isFalse(req.user) then web:redirect(reurl); return false end
-		return true
-	end;
-	
 
     notFound = function (self, msg) return self:error(msg or 'Not Found', 404, 'Not Found') end;
     unauthorized = function (self, msg) return self:error(msg or 'Unauthorized', 401, 'Unauthorized') end;
@@ -120,14 +113,14 @@ local Web = Object:extend {
         end
 
         self.conn:reply_http(self.req, data, code, status, headers)
-		return false
+	return false
     end;
-	
-	html = function (self, html_tmpl, tbl)
-		local tbl = tbl or {}
-		self:page(View(html_tmpl)(tbl))
-		return false
-	end;
+
+    html = function (self, html_tmpl, tbl)
+	local tbl = tbl or {}
+	self:page(View(html_tmpl)(tbl))
+	return false
+    end;
 	
     ok = function (self, msg) self:page(msg or 'OK', 200, 'OK') end;
 	

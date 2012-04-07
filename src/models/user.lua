@@ -130,6 +130,12 @@ local User = Model:extend {
 		return true
 	end;
 	
+	loginRequired = function (self, url)
+	    local url = url or '/'
+	    if isFalse(req.user) then web:redirect(url); return false end
+	    return true
+	end;
+	
 }
 
 return User
