@@ -93,7 +93,7 @@ local VIEW_ACTIONS = {
     ['{^'] = function (code)
         local code = code:trim()
         assert( code ~= '', 'Plugin name must not be blank.')
-        local divider_loc = code:find(' ')
+        local divider_loc = code:find('%s')
         local plugin_name = nil
         local param_str = nil
 
