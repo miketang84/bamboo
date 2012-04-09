@@ -1,12 +1,11 @@
 module(..., package.seeall)
 local lgstring = require "lgstring"
 
-local PLUGIN_LIST = bamboo.PLUGIN_LIST
 
-local function getlocals(context)
+local function getlocals(context, depth)
 	local i = 1
 	while true do
-		local name, value = debug.getlocal(4, i)
+		local name, value = debug.getlocal(depth, i)
 		if not name then break end
 		context[name] = value
 		i = i + 1
@@ -43,11 +42,12 @@ local VIEW_ACTIONS = {
             _result[#_result+1] = _children[%s](getfenv())
         ]]):format(code, code, code, code)
     end,
+--[[
     -- escape tag, to make security
-    ['{<'] = function(code)
+    ['{*'] = function(code)
         return ('local http = require("lglib.http"); _result[#_result+1] = http.escapeHTML(%s)'):format(code)
     end,
-
+--]]
     ['{['] = function(code)
         -- nothing now
         return true
@@ -59,80 +59,82 @@ local VIEW_ACTIONS = {
         local name = deserialize(code)
         local tmpl_dir = findTemplDir(name)
         local base_page = io.loadFile(tmpl_dir, name)
-        local new_page = base_page
-        for block in new_page:gmatch("({%[[%s_%w%.%-\'\"]+%]})") do
-            -- remove the outer tags
-            local block_content = block:sub(3, -3):trim()
-            local this_part = this_page:match('{%[%s*======*%s*' + block_content +
-            '%s*======*%s+(.-)%s*%]}')
-
-            if this_part then
-
-                this_part = this_part:gsub('%%', '%%%%')
-                new_page = new_page:gsub('{%[ *' + block_content + ' *%]}', this_part)
-            else
-                new_page = new_page:gsub('{%[ *' + block_content + ' *%]}', "")
+        local starti = 1
+        local oi, oj = 1, 0
+        local i, j = 1, 0
+        local block, matched, block_content
+       	local part
+       	local parts = {}
+        while true do
+        	oi, oj, block = base_page:find("({%[[%s_%w%.%-\'\"]+%]})", oj + 1)
+        	if oi == nil then break end
+            block_content = block:sub(3, -3):trim()
+            while true do
+            	i, j, matched = this_page:find("(%b{})", j + 1)
+--            	DEBUG('-----', i, j, matched)
+            	
+            	if i == nil then break end
+            	part = matched:match('^{%[%s*======*%s*' + block_content +
+            '%s*======*%s+(.+)%s*%]}$')
+				if part then
+					table.insert(parts, base_page:sub(starti, oi-1))
+					table.insert(parts, part)
+					starti = oj + 1
+					break
+				end
             end
         end
+        table.insert(parts, base_page:sub(starti, -1))
 
-        return new_page
+        return table.concat(parts)
     end,
 
     -- insert plugin
     ['{^'] = function (code)
         local code = code:trim()
         assert( code ~= '', 'Plugin name must not be blank.')
-        local divider_loc = code:find(' ')
+        local divider_loc = code:find('%s')
         local plugin_name = nil
         local param_str = nil
-        local params = {}
 
         if divider_loc then
-
             plugin_name = code:sub(1, divider_loc - 1)
-            param_str = code:sub(divider_loc + 1)
-
-            local tlist = param_str:splittrim(',')
-            local has_variable = false
-            for i, v in ipairs(tlist) do
-                local var, val = unpack(v:splittrim('='))
-                assert( var ~= '' )
-                assert( val ~= '' )
-
-				-- now, we start treate val
-                if val:sub(1,1) == '"' and val:sub(-1,-1) == '"' or val:sub(1,1) == "'" and val:sub(-1,-1) == "'" then
-                	-- val is a string
-                	val = val:sub(2, -2)
-				elseif type(tonumber(val)) == 'number' then
-					-- val is number
-					val = tonumber(val)
-				else
-					-- val is variable
-					val = '{{' + val + '}}'
-					has_variable = true
-				end
-                
-                params[var] = val
-            end
-            
-            if has_variable then
-            	-- twice rendering
-            	return ('_result[#_result+1] = ([==[ %s ]==]):format(View.compileView([=[$text]=])(getfenv()))'):gsub('$text', PLUGIN_LIST[plugin_name](params))
-            else
-            	return ('_result[#_result+1] = [==[%s]==]'):format(PLUGIN_LIST[plugin_name](params))
-            end
+            param_str = '{' .. code:sub(divider_loc + 1) .. '}'
         else
-            -- if divider_loc is nil, means this plugin has no arguents
+            -- if divider_loc is nil, means this plugin has no arguments
             plugin_name = code
-
-            return ('_result[#_result+1] = [==[%s]==]'):format(PLUGIN_LIST[plugin_name]({}))
-
+            param_str = "{}"
         end
+        assert(bamboo.PLUGIN_LIST[plugin_name], ('[Error] plugin %s was not registered.'):format(plugin_name))
+        return ("_result[#_result+1] = bamboo.PLUGIN_LIST['%s'](%s, getfenv())"):format(plugin_name, param_str)
+
     end,
     
     ['{-'] = function (code)
 		return ""
     end,
+    
+    ['{<'] = function (code)
+		local code = code:trim()
+        assert( code ~= '', 'Widget name must not be blank.')
+        local divider_loc = code:find(' ')
+        local widget_name = nil
+        local param_str = nil
+
+        if divider_loc then
+            widget_name = code:sub(1, divider_loc - 1)
+            param_str = '{' .. code:sub(divider_loc + 1) .. '}'
+        else
+            -- if divider_loc is nil, means this plugin has no arguments
+            widget_name = code
+            param_str = "{}"
+        end
+        assert(bamboo.WIDGETS[widget_name], ('[Error] widget %s was not implemented.'):format(widget_name))
+        return ("_result[#_result+1] = bamboo.WIDGETS['%s'](%s)"):format(widget_name, param_str)
+
+    end,
+    
+
 }
 
 
@@ -142,8 +144,8 @@ local View = Object:extend {
     __name = 'View';
     ------------------------------------------------------------------------
     --
-    -- if ENV[PROD] is true, means it is in production mode, it will only be compiled once
-    -- else, it is in develop mode, it will be compiled every request coming in.
+    -- if config.PRODUCTION is true, means it is in production mode, it will only be compiled once every call View()
+    -- else, it is in develop mode, it will be compiled every request coming in, in compile stage and parameter fill stage.
     -- @param name:  the name of the template file
     -- @return:  a function, this function can receive a table to finish the rendering procedure
     ------------------------------------------------------------------------
@@ -152,9 +154,21 @@ local View = Object:extend {
         -- print('Template file dir:', tmpl_dir, name)
 
 		if bamboo.config.PRODUCTION then
+            -- if cached
+	        -- NOTE: here, 5 is an empiric value
+    	    bamboo.compiled_views_locals[name] = getlocals({}, 5)
+            
+            local view = bamboo.compiled_views[name]
+            if view and type(view) == 'function' then
+            	return view
+            end
+            -- load file
             local tmpf = io.loadFile(tmpl_dir, name)
             tmpf = self.preprocess(tmpf)
-            return self.compileView(tmpf, name)
+            view = self.compileView(tmpf, name)
+            -- add to cache
+            bamboo.compiled_views[name] = view
+            return view
         else
             return function (params)
                 local tmpf = io.loadFile(tmpl_dir, name)
@@ -169,7 +183,8 @@ local View = Object:extend {
 	-- preprocess course
 	preprocess = function(tmpl)
 
-		if tmpl:match('{:') then
+		-- restrict the {: :} at the head of template file, from the first char
+		if tmpl:match('^{:.-:}%s*\n') then
             -- if there is inherited tag in page, that tag must be put in the front of this file
             local block = tmpl:match("(%b{})")
             local headtwo = block:sub(1,2)
@@ -198,13 +213,15 @@ local View = Object:extend {
         local code = {'local _result, _children = {}, {}\n'}
 
 		-- render the rest
-		local text, block
+		local text, block, _ret
 		for text, block in lgstring.matchtagset(tmpl) do
 			local act = VIEW_ACTIONS[block:sub(1,2)]
 
 			if act then
 				code[#code+1] =  '_result[#_result+1] = [==[' + text + ']==]'
-				code[#code+1] = act(block:sub(3,-3))
+				_ret = act(block:sub(3,-3))
+				assert(type(_ret) == 'string', ("[Error] the returned value type by view rendering tag '%s' is not string."):format(block:sub(1,2)))
+				code[#code+1] = _ret
 			elseif #block > 2 then
 				code[#code+1] = '_result[#_result+1] = [==[' + text + block + ']==]'
 			else
@@ -214,10 +231,10 @@ local View = Object:extend {
 
         code[#code+1] = 'return table.concat(_result)'
         code = table.concat(code, '\n')
-        --print('-----', code)
+        -- print('-----', code)
         -- recode each middle view code to request
         if type(name) == 'string' then
-        	req.viewcode[name] = code
+        	bamboo.compiled_views_tmpls[name] = code
 		end
 
         -- compile the whole string code
@@ -229,13 +246,29 @@ local View = Object:extend {
 
         return function(context)
             assert(type(context) == 'table', "You must always pass in a table for context.")
-			if context[1] == 'locals' then  context[1] = nil; context = getlocals(context) end
+			-- collect locals
+			if context[1] == 'locals' then  
+				context[1] = nil
+				if bamboo.config.PRODUCTION then
+					local locals = bamboo.compiled_views_locals[name]
+					if locals then
+						for k, v in pairs(locals) do
+							if not context[k] then context[k] = v end
+						end
+					end
+				else
+					-- NOTE: here, 4 is empiric value
+					context = getlocals(context, 4)
+				end
+			end
+			
 			-- for global context rendering
 			for k, v in pairs(bamboo.context) do
 				if not context[k] then
 					context[k] = v
 				end
 			end
+			
 			setmetatable(context, {__index=_G})
 			setfenv(func, context)
 			return func()

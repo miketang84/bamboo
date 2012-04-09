@@ -17,11 +17,19 @@ local util = require 'bamboo.util'
 config = {}
 -- for global rendering usage
 context = {}
+userdata = {}
+compiled_views_tmpls = {}
+compiled_views = {}
+compiled_views_locals = {}
+
+WIDGETS = {}
+require 'bamboo.widget'
+
 -- for cache life time
 CACHE_LIFE = 1800
 -- global URLS definition
 URLS = {}
-
+PATTERN_URLS = {}
 ------------------------------------------------------------------------
 PLUGIN_LIST = {}
 PLUGIN_CALLBACKS = {}
@@ -331,6 +339,33 @@ registerModel = function (model)
 			setmetatable(fdt, {__index = FieldType[fdt.widget_type or 'text']})
 			fdt:init()
 		end
+		
+		-- check if ask field index based on rules
+		model['__rule_index_fields'] = {}
+		if rawget(model, '__use_rule_index') == true then
+			-- if set __use_rule_index manually, collect all fields
+			for key in pairs(model.__fields) do
+				table.insert(model['__rule_index_fields'], key)
+			end			
+		else
+			-- else, only collect fields set index=true flag 
+			for key, field_dt in pairs(model.__fields) do
+				if field_dt.rule_index == true then
+					model['__use_rule_index'] = true
+					table.insert(model['__rule_index_fields'], key)
+				end			
+			end
+		end
+		
+		-- check if ask fulltext index
+		model['__fulltext_index_fields'] = {}
+		for key, field_dt in pairs(model.__fields) do
+			if field_dt.fulltext_index == true then
+				model['__use_fulltext_index'] = true
+				table.insert(model.__fulltext_index_fields, key)
+			end			
+		end
+		
 
 		-- decorators
 		if not isFalse(model.__decorators) then

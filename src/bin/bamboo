@@ -4,7 +4,9 @@ require 'posix'
 require 'signal'
 require 'bamboo'
 require 'redis'
-        
+
+local util = require 'bamboo.util'
+local readSettings = util.readSettings
 local env = {}
 BAMBOO_DB = nil
 SCRIPT_PIDS = {}
@@ -20,39 +22,6 @@ end)
 -- load configuration
 local config = {}
 
-local function readSettings()
-	-- only support boot in app directory
-	local home = os.getenv("HOME")
-	local global_configfile = loadfile(home + '/.bambooconfig')
-	if global_configfile then
-		setfenv(assert(global_configfile), config)()
-	else
-		print [[
-[Error] You should make sure the existance of ~/.bambooconfig 
-
-You can use:
-	bamboo config -monserver_dir your_monserver_dir
-	bamboo config -bamboo_dir your_bamboo_dir
-
-to create this config file. Good Luck.
-]]
-		os.exit()
-	end
-	
-	-- try to load settings.lua 
-	local setting_file = loadfile('settings.lua') or loadfile('../settings.lua')
-	if setting_file then
-		setfenv(assert(setting_file), config)()
-	end
-	config.bamboo_dir = config.bamboo_dir or '/usr/local/share/lua/5.1/bamboo/'
-
-	-- check whether have a global production setting
-	local production = loadfile('/etc/bamboo_production')
-	if production then
-		config.PRODUCTION = true
-	end
-
-end
 ------------------------------------------------------------------------------
 --
 function parse_args(arg)
@@ -196,6 +165,110 @@ local function makemd5()
     return result
 end
 
+local killProcesses = function (settings)
+	local fd = io.popen('ps eaux|grep lua|grep $(pwd)', 'r')
+	local output = fd:read("*a")
+	fd:close()
+	-- print(output)
+
+	local cmd_output = output:split('\n')
+	local pattern0 = "(%d+).+lua /usr/local/bin/bamboo start"
+	local pattern1 = "(%d+).+lua /usr/local/bin/bamboo_handler"
+	local flag = true
+	local findit = false
+	local pid
+	for _, part in ipairs(cmd_output) do
+		pid = part:match(pattern0)
+		print('===>>>>', pid)
+		findit = true
+		if pid then
+			local ret = os.execute(('kill -9 %s'):format(pid))
+			if ret ~= 0 and flag == true then 
+				flag = false
+			end
+		end
+	end
+	
+	for _, part in ipairs(cmd_output) do
+		pid = part:match(pattern1)
+		print('===>>>>', pid)
+		findit = true
+		if pid then
+			local ret = os.execute(('kill -9 %s'):format(pid))
+			if ret ~= 0 and flag == true then 
+				flag = false
+			end
+		end
+	end
+	
+	if findit then
+		if flag then
+			print("OK. I did it.")
+		else
+			print("[ERROR] Failed to stop the bamboo server for this application, you'd better use 'ps ex|grep lua' to check.")
+		end
+	else
+		print('OK. No running bamboo processes for this application.')
+	end
+
+end
+
+local startProcesses = function (settings)
+	readSettings(config)
+	local appname = config.project_name
+	local monserver_dir = config.monserver_dir
+   
+	-- mount media directory
+--		local fd = io.popen('mount', 'r')
+--		local content = fd:read('*a')
+--		fd:close()
+--
+--		local matched = content:match(("media on %ssites/%s type none"):format(monserver_dir, appname))
+--		if not matched then
+--			-- mount it
+--			local cmdstr = ("mount -B media  %ssites/%s"):format(monserver_dir, appname)
+--			print(cmdstr)
+--			os.execute(cmdstr)
+--		end
+
+	--for i,v in pairs(settings) do print(i,v) end
+	-- here, app is a directory pattern string, for glob
+	local app_dir = settings.app or './'
+	local app = ('%s%s'):format((settings.app or "./"), 'app/handler_*.lua')
+	local script_times = {}
+
+	-- while true do
+
+	local function runit()
+		local targets = assert(posix.glob(app))
+
+		for _, script in ipairs(targets) do
+			if not script_times[script] then
+				script_times[script] = os.time() 
+			end
+		end
+
+		run_app(app_dir, targets)
+		local script, pid = wait_on_children()
+		local tick = os.time()
+
+		if tick - script_times[script] < 1 then
+			print("SCRIPT " .. script .. " RESTARTING TOO FAST. Pausing while you fix stuff.")
+			posix.sleep(10)
+			tick = os.time()
+		end
+
+		script_times[script] = tick
+	end
+	
+	if config.PRODUCTION then
+		while true do runit() end
+	else
+		runit()
+	end
+
+end
+
 
 COMMANDS = {
     help = function(settings)
@@ -207,11 +280,12 @@ COMMANDS = {
 
     test = function(settings)
         local target = settings.from or "tests"
-        if not config.PRODUCTION then
-            run_tests(target, settings.full ~= nil)
-        else
-            print "[Warning] Running in PRODUCTION mode, won't run tests."
-        end
+		run_tests(target, settings.full ~= nil)
+        
+        --if not config.PRODUCTION then
+        --else
+        --    print "[Warning] Running in PRODUCTION mode, won't run tests."
+        --end
     end,
     
     config = function (settings)
@@ -225,131 +299,21 @@ COMMANDS = {
     end,
 
     start = function(settings)
-		readSettings()
-		local appname = config.project_name
-		local monserver_dir = config.monserver_dir
-       
-		-- mount media directory
---		local fd = io.popen('mount', 'r')
---		local content = fd:read('*a')
---		fd:close()
---
---		local matched = content:match(("media on %ssites/%s type none"):format(monserver_dir, appname))
---		if not matched then
---			-- mount it
---			local cmdstr = ("mount -B media  %ssites/%s"):format(monserver_dir, appname)
---			print(cmdstr)
---			os.execute(cmdstr)
---		end
-
-        --for i,v in pairs(settings) do print(i,v) end
-        -- here, app is a directory pattern string, for glob
-        local app_dir = settings.app or './'
-        local app = ('%s%s'):format((settings.app or "./"), 'app/handler_*.lua')
-        local script_times = {}
-
-        -- while true do
-
-		local function runit()
-		    local targets = assert(posix.glob(app))
-
-            for _, script in ipairs(targets) do
-                if not script_times[script] then
-                    script_times[script] = os.time() 
-                end
-            end
-
-            run_app(app_dir, targets)
-            local script, pid = wait_on_children()
-            local tick = os.time()
-
-            if tick - script_times[script] < 1 then
-                print("SCRIPT " .. script .. " RESTARTING TOO FAST. Pausing while you fix stuff.")
-                posix.sleep(10)
-                tick = os.time()
-            end
-
-            script_times[script] = tick
-        end
-		
-		if config.PRODUCTION then
-		    while true do runit() end
-		else
-		    runit()
-		end 
+		startProcesses(settings)
     end,
 
     stop = function (settings)
-		local fd = io.popen('ps eaux|grep lua|grep $(pwd)', 'r')
-		local output = fd:read("*a")
-		fd:close()
-		-- print(output)
+		killProcesses()
+    end,
 
-		local cmd_output = output:split('\n')
-		local pattern0 = "(%d+).+lua /usr/local/bin/bamboo start"
-		local pattern1 = "(%d+).+lua /usr/local/bin/bamboo_handler"
-		local flag = true
-		local findit = false
-		local pid
-		for _, part in ipairs(cmd_output) do
-			pid = part:match(pattern0)
-			print('===>>>>', pid)
-			findit = true
-			if pid then
-				local ret = os.execute(('kill -9 %s'):format(pid))
-				if ret ~= 0 and flag == true then 
-					flag = false
-				end
-			end
-		end
-		
-		for _, part in ipairs(cmd_output) do
-			pid = part:match(pattern1)
-			print('===>>>>', pid)
-			findit = true
-			if pid then
-				local ret = os.execute(('kill -9 %s'):format(pid))
-				if ret ~= 0 and flag == true then 
-					flag = false
-				end
-			end
-		end
-		
-		if findit then
-			if flag then
-				print("OK. I did it.")
-			else
-				print("[ERROR] Failed to stop the bamboo server for this application, you'd better use 'ps ex|grep lua' to check.")
-			end
-		else
-			print('OK. No running bamboo processes for this application.')
-		end
-
-		-- umount
-		readSettings()
-		local appname = config.project_name
-		local monserver_dir = config.monserver_dir
-       
-		local fd = io.popen('mount', 'r')
-		local content = fd:read('*a')
-		fd:close()
-
-		local matched = content:match(("media on %ssites/%s type none"):format(monserver_dir, appname))
-		if matched then
-			-- umount it
-			local cmdstr = ("umount %ssites/%s"):format(monserver_dir, appname)
-			local ret = os.execute(cmdstr)
-			if ret ~= 0 then
-				os.execute(("umount -l %ssites/%s"):format(monserver_dir, appname))
-			end
-		end
-
-    end;
-
+    restart = function (settings)
+		killProcesses(settings)
+		startProcesses(settings)
+    end,
     
     createapp = function(settings)
         local appname = settings[1] or 'bambooapp'
-		readSettings()
+		readSettings(config)
 		local monserver_dir = config.monserver_dir
 		local bamboo_dir = config.bamboo_dir
 
@@ -403,7 +367,7 @@ host = "%s"
     
     createplugin = function(settings)
         local plugin_name = settings[1] or 'bambooplugin'
-   		readSettings()
+   		readSettings(config)
         local appname = config.project_name
 		local monserver_dir = config.monserver_dir
 		local bamboo_dir = config.bamboo_dir
@@ -428,7 +392,7 @@ host = "%s"
     
     createmodel = function(settings)
         local model_name = settings[1] or 'bamboomodel'
-   		readSettings()
+   		readSettings(config)
 		local bamboo_dir = config.bamboo_dir
         
         local newfile = ('./%s.lua'):format(model_name:lower())
@@ -451,7 +415,7 @@ host = "%s"
 	createcontroller = function(settings)
         local controller_name = settings[1] or 'bamboocontroller'
 		controller_name = controller_name:lower()
-   		readSettings()
+   		readSettings(config)
 		local bamboo_dir = config.bamboo_dir
         
         local newfile = ('./%s.lua'):format(controller_name + '_controller')
@@ -486,8 +450,9 @@ host = "%s"
         local which = env.WHICH_DB or settings.which_db or 0
 
         local redis_db = Redis.connect(params)
+        if env.AUTH then redis_db:auth(env.AUTH) end
         redis_db:select(which)
-
+        
         for k, v in pairs(env.DATA) do
             if type(v) ~= 'table' then
 				-- store the string
@@ -508,7 +473,9 @@ host = "%s"
 					-- maybe we should delete the same score item first
 					redis_db:zremrangebyscore(model_name + ':__index', num, num)
 					-- add it
-					redis_db:zadd(model_name + ':__index', num, v.name or num)
+					local indexfd
+					if env.Indexes and env.Indexes[model_name] and v[env.Indexes[model_name]] then indexfd = env.Indexes[model_name] end
+					redis_db:zadd(model_name + ':__index', num, indexfd and v[indexfd] or num)
 				end
             end
 
@@ -601,7 +568,7 @@ host = "%s"
     end;
 
     shell = function (settings)
-   		readSettings()
+   		readSettings(config)
 		local bamboo_dir = config.bamboo_dir
 
 		local shell_file = bamboo_dir + '/src/bin/shell.lua'
@@ -632,7 +599,6 @@ host = "%s"
 			for _, server in ipairs(_config.servers) do
 				assert(server and server.name, '[ERROR] server or server.name is nil.')
 				os.execute(('monserver %s %s'):format(config_file, server.name))
-				print('------------------------ Successful -------------------------')
 			end
 			print("OK.")
 		else
@@ -640,7 +606,6 @@ host = "%s"
 			for _, server in ipairs(_config.servers) do
 				if server and server.name == servername then
 					os.execute(('monserver %s %s'):format(config_file, server.name))
-					print('------------------------ Successful -------------------------')
 				end
 			end
 			print("OK.")
@@ -679,7 +644,7 @@ host = "%s"
 	end;
     
 	importadmin = function (settings)
-        readSettings()
+        readSettings(config)
 		local monserver_dir = config.monserver_dir
 		local bamboo_dir = config.bamboo_dir
 
@@ -694,7 +659,7 @@ host = "%s"
 	end;
 	
     createsuperuser = function (settings)
-		  readSettings()
+		  readSettings(config)
 
 		  local redis = require 'bamboo.redis'
 

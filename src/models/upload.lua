@@ -114,7 +114,7 @@ local Upload = Model:extend {
 			return function (self, ...)
 				I_AM_INSTANCE_OR_QUERY_SET(self)
 				-- if self is query set
-				if I_AM_QUERY_SET(self) then
+				if isQuerySet(self) then
 					for _, v in ipairs(self) do
 						-- remove file from disk
 						os.execute('rm ' + v.path)

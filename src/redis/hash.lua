@@ -52,3 +52,6 @@ function has(key, keytocheck)
 	end
 end
 
+function num(key)
+	return db:hlen(key)
+end

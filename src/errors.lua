@@ -26,8 +26,8 @@ function reportError(conn, request, err, state)
     local erroutput = ""
     local target = err:match("%[%w* *\"(%S+)\"%]:")
     local errorlinenum = tonumber(string.match(err, ":(%d+):"))
-    if target and errorlinenum then
-    	local elines = string.split(request.viewcode[target], '\n')
+    if target and errorlinenum and bamboo.compiled_views_tmpls[target] then
+    	local elines = string.split(bamboo.compiled_views_tmpls[target], '\n')
     	local errorline = elines[errorlinenum]
     	if errorline then
     		erroutput = "[Error] error occured at: " .. (errorline:match("_result%[%#_result%+1%] = (.+)$") or errorline)
@@ -58,8 +58,6 @@ local ERROR_PAGE = View.compileView [[
 </html>
 ]]
 
-	-- remove the viewcode part to show on page.
-	request.viewcode = nil
     local pretty_req = "Request\n " +  serialize(request or {})
     local page = ERROR_PAGE {err=trace, source=source, request=pretty_req, erroutput = erroutput}
     conn:reply_http(request, page, 500, "Internal Server Error")
