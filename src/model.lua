@@ -183,7 +183,7 @@ local isUsingFulltextIndex = function (self)
 end
 
 local isUsingRuleIndex = function (self)
-	if bamboo.config.index_support and self.__use_rule_index and self.__name then
+	if bamboo.config.rule_index_support and self.__use_rule_index and self.__name then
 		return true
 	end
 	return false

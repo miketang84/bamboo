@@ -350,7 +350,7 @@ registerModel = function (model)
 		else
 			-- else, only collect fields set index=true flag 
 			for key, field_dt in pairs(model.__fields) do
-				if field_dt.index == true then
+				if field_dt.rule_index == true then
 					model['__use_rule_index'] = true
 					table.insert(model['__rule_index_fields'], key)
 				end			
