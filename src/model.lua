@@ -369,6 +369,7 @@ end
 -- this function can only be called by instance
 --
 local delFromRedis = function (self, id)
+	assert(self.id or id, '[Error] @delFromRedis - must specify an id of instance.')
 	local model_key = id and getNameIdPattern2(self, id) or getNameIdPattern(self)
 	local index_key = getIndexKey(self)
 	
@@ -385,13 +386,13 @@ local delFromRedis = function (self, id)
 	-- delete the key self
 	db:del(model_key)
 	-- delete the index in the global model index zset
-	db:zremrangebyscore(index_key, self.id, self.id)
+	db:zremrangebyscore(index_key, self.id or id, self.id or id)
 	
 	-- clear fulltext index
-	if isUsingFulltextIndex(self) then
+	if isUsingFulltextIndex(self) and self.id then
 		clearFtIndexesOnDeletion(self)
 	end
-	if isUsingRuleIndex(self) then
+	if isUsingRuleIndex(self) and self.id then
 		updateIndexByRules(self, 'del')
 	end
 				
@@ -403,6 +404,7 @@ end
 -- Fake Deletion
 --  called by instance
 local fakedelFromRedis = function (self, id)
+	assert(self.id or id, '[Error] @fakedelFromRedis - must specify an id of instance.')
 	local model_key = id and getNameIdPattern2(self, id) or getNameIdPattern(self)
 	local index_key = getIndexKey(self)
 	
@@ -422,15 +424,15 @@ local fakedelFromRedis = function (self, id)
 	db:rename(model_key, 'DELETED:' + model_key)
 	-- delete the index in the global model index zset
 	-- when deleted, the instance's index cache was cleaned.
-	db:zremrangebyscore(index_key, self.id, self.id)
+	db:zremrangebyscore(index_key, self.id or id, self.id or id)
 	-- add to deleted collector
 	rdzset.add(dcollector, model_key)
 	
 	-- clear fulltext index
-	if isUsingFulltextIndex(self) then
+	if isUsingFulltextIndex(self) and self.id then
 		clearFtIndexesOnDeletion(self)
 	end
-	if isUsingRuleIndex(self) then
+	if isUsingRuleIndex(self) and self.id then
 		updateIndexByRules(self, 'del')
 	end
 
