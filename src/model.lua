@@ -2445,14 +2445,39 @@ Model = Object:extend {
 		assert(fld.foreign, ("[Error] This field %s is not a foreign field."):format(field))
 		assert(fld.st, ("[Error] No store type setting for this foreign field %s."):format(field))
 
-		local key = getFieldPattern(self, field)		
-		-- delete the foreign key
-		db:del(key)
 
 		if fld.st == 'ONE' then
 			local model_key = getNameIdPattern(self)
 			-- maybe here is rude
 			db:hdel(model_key, field)
+		else
+			local key = getFieldPattern(self, field)		
+			-- delete the foreign key
+			db:del(key)
+		end
+		
+		return self		
+	end;
+
+	deepClearForeign = function (self, field)
+		I_AM_INSTANCE(self)
+		checkType(field, 'string')
+		local fld = self.__fields[field]
+		assert(fld, ("[Error] Field %s doesn't be defined!"):format(field))
+		assert(fld.foreign, ("[Error] This field %s is not a foreign field."):format(field))
+		assert(fld.st, ("[Error] No store type setting for this foreign field %s."):format(field))
+
+		-- delete the foreign objects first
+		self:getForeign(field):del()
+
+		if fld.st == 'ONE' then
+			local model_key = getNameIdPattern(self)
+			-- maybe here is rude
+			db:hdel(model_key, field)
+		else
+			local key = getFieldPattern(self, field)		
+			-- delete the foreign key
+			db:del(key)
 		end
 		
 		return self		
