@@ -2468,7 +2468,8 @@ Model = Object:extend {
 		assert(fld.st, ("[Error] No store type setting for this foreign field %s."):format(field))
 
 		-- delete the foreign objects first
-		self:getForeign(field):del()
+		local fobjs = self:getForeign(field)
+		if fobjs then fobjs:del() end
 
 		if fld.st == 'ONE' then
 			local model_key = getNameIdPattern(self)
