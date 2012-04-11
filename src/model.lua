@@ -2448,6 +2448,12 @@ Model = Object:extend {
 		local key = getFieldPattern(self, field)		
 		-- delete the foreign key
 		db:del(key)
+
+		if fld.st == 'ONE' then
+			local model_key = getNameIdPattern(self)
+			-- maybe here is rude
+			db:hdel(model_key, field)
+		end
 		
 		return self		
 	end;
