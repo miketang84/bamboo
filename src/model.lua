@@ -366,7 +366,7 @@ local getFromRedisPipeline2 = function (pattern_list)
 end 
 
 --------------------------------------------------------------
--- this function can only be called by instance
+-- this function can be called by instance or class
 --
 local delFromRedis = function (self, id)
 	assert(self.id or id, '[Error] @delFromRedis - must specify an id of instance.')
@@ -388,7 +388,7 @@ local delFromRedis = function (self, id)
 	-- delete the index in the global model index zset
 	db:zremrangebyscore(index_key, self.id or id, self.id or id)
 	
-	-- clear fulltext index
+	-- clear fulltext index, only when it is instance
 	if isUsingFulltextIndex(self) and self.id then
 		clearFtIndexesOnDeletion(self)
 	end
@@ -2025,26 +2025,26 @@ Model = Object:extend {
     fakeDelById = function (self, ids)
     	local idtype = type(ids)
     	if idtype == 'table' then
-    		for _, v in ipairs(ids) do
-    			v = tostring(v)
-		    	fakedelFromRedis(self, v)
-    			
-    		end
-		else
-			fakedelFromRedis(self, tostring(ids))			
+	    for _, v in ipairs(ids) do
+		v = tostring(v)
+		fakedelFromRedis(self, v)
+		
+	    end
+	else
+	    fakedelFromRedis(self, tostring(ids))			
     	end
     end;
     
     trueDelById = function (self, ids)
     	local idtype = type(ids)
     	if idtype == 'table' then
-    		for _, v in ipairs(ids) do
-    			v = tostring(v)
-		    	delFromRedis(self, v)
-    			
-    		end
-		else
-			delFromRedis(self, tostring(ids))			
+	    for _, v in ipairs(ids) do
+		v = tostring(v)
+		delFromRedis(self, v)
+		
+	    end
+	else
+	    delFromRedis(self, tostring(ids))			
     	end
     end;
     
