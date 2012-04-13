@@ -1223,7 +1223,8 @@ Model = Object:extend {
 	__name = 'Model';
 	__desc = 'Model is the base of all models.';
 	__fields = {
-		['timestamp'] = { type="number" },
+	    -- here, we don't put 'id' as a field
+	    ['timestamp'] = { type="number" },
 	};
 	__indexfd = "id";
 
@@ -2075,87 +2076,95 @@ Model = Object:extend {
 	
 	
     --------------------------------------------------------------------
-	-- Instance Functions
-	--------------------------------------------------------------------
+    -- Instance Functions
+    --------------------------------------------------------------------
     -- save instance's normal field
+    -- before save, the instance has no id
     save = function (self, params)
-		I_AM_INSTANCE(self)
-        assert(self.id, "[Error] The main key 'id' field doesn't exist!")
-		assert(self:getCounter() + 1 >= tonumber(self.id), '[Error] @save - invalid id.')
-        local indexfd = self.__indexfd
+	I_AM_INSTANCE(self)
+        --assert(self.id, "[Error] The main key 'id' field doesn't exist!")
+	local indexfd = self.__indexfd
+	local fields = self.__fields
         assert(type(indexfd) == 'string' or type(indexfd) == 'nil', "[Error] the __indexfd should be string.")
-        local model_key = getNameIdPattern(self)
-		local is_existed = db:exists(model_key)
+	local id = tonumber(self.id) or self:getCounter() + 1
+	assert(self:getCounter() + 1 >= id, '[Error] @save - invalid id.')
+	local model_key = format("%s:%s", self.__name, id) --  getNameIdPattern(self)
+	local is_existed = db:exists(model_key)
 
-		local index_key = getIndexKey(self)
-		if not is_existed then
-			-- initial __counter as 1 
-			db:set(getCounterName(self), self.id)
-		else
-			-- if exist, update the index cache
-			-- delete the old one
-			db:zremrangebyscore(index_key, self.id, self.id)
-		end
-		-- score is the instance's id, member is the instance's index value
-		if isFalse(indexfd) then
-			db:zadd(index_key, self.id, self.id)
-		elseif isFalse(self[indexfd]) then
-			print("[Warning] index field value must not be empty, will not save it, please check your model defination.")
-			return nil
-		else
-			local score = db:zscore(index_key, self[indexfd])
-			-- is exist, return directely, else redis will update the score of val
-			if score then 
-				print("[Warning] save duplicate to an unique limited field, aborted!")
-				return nil 
-			end
-			db:zadd(index_key, self.id, self[indexfd])				
-		end
+	local index_key = getIndexKey(self)
+	if not is_existed then
+	    -- initial __counter as 1 
+	    db:set(getCounterName(self), id)
+	else
+	    -- if exist, update the index cache
+	    -- delete the old one
+	    db:zremrangebyscore(index_key, id, id)
+	end
 
-		local store_kv = {}
-		--- save an hash object
-		-- 'id' are essential in an object instance
-		table.insert(store_kv, 'id')
-		table.insert(store_kv, tostring(self.id))		
+	-- __index cache
+	-- score is the instance's id, member is the instance's index value
+	if isFalse(indexfd) then
+	    db:zadd(index_key, id, id)
+	elseif isFalse(self[indexfd]) then
+	    print("[Warning] index field value must not be nil, will not save it, please check your model defination.")
+	    return nil
+	else
+	    local score = db:zscore(index_key, self[indexfd])
+	    -- is exist, return directely, else redis will update the score of val
+	    if score then 
+	    	print("[Warning] save duplicate to an unique limited field, aborted!")
+		return nil 
+	    end
+	    db:zadd(index_key, id, self[indexfd])				
+	end
 
-		-- if parameters exist, update it
-		if params and type(params) == 'table' then
-			for k, v in pairs(params) do
-				if k ~= 'id' and self.__fields[k] then
-					self[k] = v
-				end
-			end
-		end
+	local store_kv = {}
+	--- save an hash object
+	-- 'id' are essential in an object instance
+	table.insert(store_kv, 'id')
+	table.insert(store_kv, id)		
 
-		for k, v in pairs(self) do
-			-- when save, need to check something
-			-- 1. only save fields defined in model defination
-			-- 2. don't save the functional member, and _parent
-			-- 3. don't save those fields not defined in model defination
-			-- 4. don't save those except ONE foreign fields, which are defined in model defination
-			local field = self.__fields[k]
-			-- if v is nil, pairs will not iterate it
-			if field then
-				if not field['foreign'] or ( field['foreign'] and field['st'] == 'ONE') then
-					-- save
-					table.insert(store_kv, k)
-					table.insert(store_kv, tostring(v))		
-				end
-			end
+	self.id = nil
+	-- if parameters exist, update it
+	if params and type(params) == 'table' then
+	    for k, v in pairs(params) do
+		if k ~= 'id' and fields[k] then
+		    self[k] = tostring(v)
 		end
-		-- save to database
-		db:hmset(model_key, unpack(store_kv))
+	    end
+	end
+
+	for k, v in pairs(self) do
+	    -- when save, need to check something
+	    -- 1. only save fields defined in model defination
+	    -- 2. don't save the functional member, and _parent
+	    -- 3. don't save those fields not defined in model defination
+	    -- 4. don't save those except ONE foreign fields, which are defined in model defination
+	    local field = fields[k]
+	    -- if v is nil, pairs will not iterate it, key will not be id
+	    if field then
+		if not field['foreign'] or ( field['foreign'] and field['st'] == 'ONE') then
+		    -- save
+		    table.insert(store_kv, k)
+		    table.insert(store_kv, v)		
+		end
+	    end
+	end
+	-- save to database
+	db:hmset(model_key, unpack(store_kv))
+
+	-- update id back to self
+	self.id = id
+
+	-- make fulltext indexes
+	if isUsingFulltextIndex(self) then
+	    makeFulltextIndexes(self)
+	end
+	if isUsingRuleIndex(self) then
+	    updateIndexByRules(self, 'save')
+	end
 		
-		-- make fulltext indexes
-		if isUsingFulltextIndex(self) then
-			makeFulltextIndexes(self)
-		end
-		if isUsingRuleIndex(self) then
-			updateIndexByRules(self, 'save')
-		end
-
-		
-		return self
+	return self
     end;
     
     -- partially update function, once one field
