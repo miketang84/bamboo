@@ -105,6 +105,11 @@ local function getCounterName(self)
 	return self.__name + ':__counter'
 end 
 
+-- return a string
+local function getCounter(self)
+    return tonumber(db:get(getCounterName(self)) or '0')
+end;
+
 local function getNameIdPattern(self)
 	return self.__name + ':' + self.id
 end
@@ -1192,6 +1197,49 @@ local getIndexFromManager = function (self, query_str_iden, getnum)
 	end
 end
 
+-- called by save
+-- self is instance
+local processBeforeSave = function (self, params)
+    local indexfd = self.__indexfd
+    local fields = self.__fields
+    local store_kv = {}
+    --- save an hash object
+    -- 'id' are essential in an object instance
+    tinsert(store_kv, 'id')
+    tinsert(store_kv, self.id)		
+
+    -- if parameters exist, update it
+    if params and type(params) == 'table' then
+	for k, v in pairs(params) do
+	    if k ~= 'id' and fields[k] then
+		self[k] = tostring(v)
+	    end
+	end
+    end
+
+    assert(not isFalse(self[indexfd]) , 
+    	"[Error] instance's indexfd value must not be nil. Please check your model defination.")
+
+    for k, v in pairs(self) do
+	-- when save, need to check something
+	-- 1. only save fields defined in model defination
+	-- 2. don't save the functional member, and _parent
+	-- 3. don't save those fields not defined in model defination
+	-- 4. don't save those except ONE foreign fields, which are defined in model defination
+	local field = fields[k]
+	-- if v is nil, pairs will not iterate it, key will and should not be 'id'
+	if field then
+	    if not field['foreign'] or ( field['foreign'] and field['st'] == 'ONE') then
+		-- save
+		tinsert(store_kv, k)
+		tinsert(store_kv, v)		
+	    end
+	end
+    end
+
+    return self, store_kv
+end
+
 
 ------------------------------------------------------------------------
 -- 
@@ -1230,9 +1278,6 @@ Model = Object:extend {
 
 	-- make every object creatation from here: every object has the 'id' and 'name' fields
 	init = function (self)
-		-- get the latest instance counter
-		-- id type is number
-		self.id = self:getCounter() + 1
 		self.timestamp = socket.gettime()
 		
 		return self 
@@ -2082,80 +2127,50 @@ Model = Object:extend {
     -- before save, the instance has no id
     save = function (self, params)
 	I_AM_INSTANCE(self)
-        --assert(self.id, "[Error] The main key 'id' field doesn't exist!")
+
+	local new_case = true
+	-- here, we separate the new create case and update case
+	-- if backwards to Model, the __indexfd is 'id'
 	local indexfd = self.__indexfd
+        assert(type(indexfd) == 'string', "[Error] the __indexfd should be string.")
 	local fields = self.__fields
-        assert(type(indexfd) == 'string' or type(indexfd) == 'nil', "[Error] the __indexfd should be string.")
-	local id = tonumber(self.id) or self:getCounter() + 1
-	assert(self:getCounter() + 1 >= id, '[Error] @save - invalid id.')
-	local model_key = format("%s:%s", self.__name, id) --  getNameIdPattern(self)
-	local is_existed = db:exists(model_key)
+
+	-- if self has id attribute, it is an instance saved before. use id to separate two cases
+	if self.id then new_case = false end
 
 	local index_key = getIndexKey(self)
-	if not is_existed then
-	    -- initial __counter as 1 
-	    db:set(getCounterName(self), id)
+	local replies
+	local is_existed = db:exists(model_key)
+	if new_case then
+	    replies = db:transaction(function(db)
+		-- increase the instance counter
+		db:incr(getCounterName(self))
+		self.id = getCounter(self)
+		local model_key = getNameIdPattern(self)
+		
+		local self, store_kv = processBeforeSave(self, params)
+		assert(not db:zscore(index_key, self[indexfd]), "[Error] save duplicate to an unique limited field, aborted!")
+		db:zadd(index_key, self.id, self[indexfd])
+		-- update object hash store key
+		db:hmset(model_key, unpack(store_kv))
+	    
+	    end)
 	else
-	    -- if exist, update the index cache
-	    -- delete the old one
-	    db:zremrangebyscore(index_key, id, id)
+	    -- update case
+	    assert(tonumber(getCounter(self)) >= tonumber(self.id), '[Error] @save - invalid id.')
+	    -- in processBeforeSave, there is no redis action
+	    local self, store_kv = processBeforeSave(self, params)
+	    replies = db:transaction(function(db)
+		local score = db:zscore(index_key, self[indexfd])
+		assert(score == self.id or score == nil, "[Error] save duplicate to an unique limited field, aborted!")
+		-- update __index score and member
+		db:zadd(index_key, self.id, self[indexfd])
+		-- update object hash store key
+		db:hmset(model_key, unpack(store_kv))
+	    
+	    end)
 	end
-
-	-- __index cache
-	-- score is the instance's id, member is the instance's index value
-	if isFalse(indexfd) then
-	    db:zadd(index_key, id, id)
-	elseif isFalse(self[indexfd]) then
-	    print("[Warning] index field value must not be nil, will not save it, please check your model defination.")
-	    return nil
-	else
-	    local score = db:zscore(index_key, self[indexfd])
-	    -- is exist, return directely, else redis will update the score of val
-	    if score then 
-	    	print("[Warning] save duplicate to an unique limited field, aborted!")
-		return nil 
-	    end
-	    db:zadd(index_key, id, self[indexfd])				
-	end
-
-	local store_kv = {}
-	--- save an hash object
-	-- 'id' are essential in an object instance
-	table.insert(store_kv, 'id')
-	table.insert(store_kv, id)		
-
-	self.id = nil
-	-- if parameters exist, update it
-	if params and type(params) == 'table' then
-	    for k, v in pairs(params) do
-		if k ~= 'id' and fields[k] then
-		    self[k] = tostring(v)
-		end
-	    end
-	end
-
-	for k, v in pairs(self) do
-	    -- when save, need to check something
-	    -- 1. only save fields defined in model defination
-	    -- 2. don't save the functional member, and _parent
-	    -- 3. don't save those fields not defined in model defination
-	    -- 4. don't save those except ONE foreign fields, which are defined in model defination
-	    local field = fields[k]
-	    -- if v is nil, pairs will not iterate it, key will not be id
-	    if field then
-		if not field['foreign'] or ( field['foreign'] and field['st'] == 'ONE') then
-		    -- save
-		    table.insert(store_kv, k)
-		    table.insert(store_kv, v)		
-		end
-	    end
-	end
-	-- save to database
-	db:hmset(model_key, unpack(store_kv))
-
-	-- update id back to self
-	self.id = id
-
+	    
 	-- make fulltext indexes
 	if isUsingFulltextIndex(self) then
 	    makeFulltextIndexes(self)
@@ -2201,11 +2216,8 @@ Model = Object:extend {
     end;
     
     -- get the model's instance counter value
-	-- this can be call by Class and Instance
-    getCounter = function (self)
-		-- 
-		return tonumber(db:get(getCounterName(self)) or 0)
-    end;
+    -- this can be call by Class and Instance
+    getCounter = getCounter; 
     
     -- delete self instance object
     -- self can be instance or query set
@@ -2276,7 +2288,7 @@ Model = Object:extend {
 	addForeign = function (self, field, obj)
 		I_AM_INSTANCE(self)
 		checkType(field, 'string')
-		assert(self:getCounter() >= tonumber(self.id), '[Error] before doing addForeign, you must save this instance.')
+		assert(tonumber(getCounter(self)) >= tonumber(self.id), '[Error] before doing addForeign, you must save this instance.')
 		assert(type(obj) == 'table' or type(obj) == 'string', '[Error] "obj" should be table or string.')
 		if type(obj) == 'table' then checkType(tonumber(obj.id), 'number') end
 		
