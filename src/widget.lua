@@ -123,7 +123,7 @@ end
 
 
 
-local SELECT_TMPL0 = [[<select class="${class}" name="${name} ${id}">]]
+local SELECT_TMPL0 = [[<select class="${class}" name="${name}" ${id}>]]
 local SELECT_TMPL1 = [[<option value="${value}" ${selected}>${caption}</option>]]
 local SELECT_TMPL2 = [[</select>]]
 select = function (args)

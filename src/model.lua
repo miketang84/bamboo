@@ -107,7 +107,7 @@ end
 
 -- return a string
 local function getCounter(self)
-    return tonumber(db:get(getCounterName(self)) or '0')
+    return db:get(getCounterName(self)) or '0'
 end;
 
 local function getNameIdPattern(self)
@@ -2140,29 +2140,31 @@ Model = Object:extend {
 
 	local index_key = getIndexKey(self)
 	local replies
-	local is_existed = db:exists(model_key)
 	if new_case then
-	    replies = db:transaction(function(db)
+	    local countername = getCounterName(self)
+	    local options = { watch = {countername, index_key}, cas = true, retry = 2 }
+	    replies = db:transaction(options, function(db)
 		-- increase the instance counter
-		db:incr(getCounterName(self))
-		self.id = getCounter(self)
+		db:incr(countername)
+		self.id = db:get(countername)
 		local model_key = getNameIdPattern(self)
-		
 		local self, store_kv = processBeforeSave(self, params)
 		assert(not db:zscore(index_key, self[indexfd]), "[Error] save duplicate to an unique limited field, aborted!")
+
 		db:zadd(index_key, self.id, self[indexfd])
 		-- update object hash store key
 		db:hmset(model_key, unpack(store_kv))
-	    
 	    end)
 	else
 	    -- update case
 	    assert(tonumber(getCounter(self)) >= tonumber(self.id), '[Error] @save - invalid id.')
 	    -- in processBeforeSave, there is no redis action
 	    local self, store_kv = processBeforeSave(self, params)
-	    replies = db:transaction(function(db)
+	    local options = { watch = {index_key}, cas = true, retry = 2 }
+	    replies = db:transaction(options, function(db)
 		local score = db:zscore(index_key, self[indexfd])
 		assert(score == self.id or score == nil, "[Error] save duplicate to an unique limited field, aborted!")
+
 		-- update __index score and member
 		db:zadd(index_key, self.id, self[indexfd])
 		-- update object hash store key
