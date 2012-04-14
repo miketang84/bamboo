@@ -69,7 +69,7 @@ checkbox = function (args)
 				name = name, 
 				value = item[1], 
 				class = class, 
-				caption = item[2] or '',
+				caption = item[2] or item[1] or '',
 				checked = flag and 'checked="checked"' or ''
 			}))
 		end
@@ -111,7 +111,7 @@ radio = function (args)
 				name = name, 
 				value = item[1], 
 				class = class, 
-				caption = item[2] or '',
+				caption = item[2] or item[1] or'',
 				checked = (checked == item[1]) and 'checked="checked"' or '',
 				layout = layout,
 			}))
@@ -142,6 +142,8 @@ select = function (args)
 	end
 	
 	table.insert(htmls, SELECT_TMPL0 % {class=class, name=name, id=id and format('id="%s"', id) or ''})	
+	local inval, incap, initem
+
 	-- if specify value field and caption field
 	if value_field and caption_field then
 		-- here, value is datasource
@@ -161,17 +163,24 @@ select = function (args)
 	else
 		-- if not specify value field and caption field		
 		for _, item in ipairs(value) do
-			if type(selected) == 'string' then
-				flag = selected == item[1]
-			else
-			 	flag = selected_set:has(item[1])
-			end
-		
-			table.insert(htmls, (SELECT_TMPL1 % { 
-				value = item[1], 
-				caption = item[2] or '',
-				selected = flag and 'selected="selected"' or ''
-			}))
+		    if type(item) == 'string' then
+			inval = item
+			incap = item
+		    else
+			inval = item[1]
+			incap = item[2] or inval
+		    end
+			
+		    if type(selected) == 'string' then
+			flag = selected == inval
+		    else
+			flag = selected_set:has(inval)
+		    end
+		    table.insert(htmls, (SELECT_TMPL1 % { 
+		    	value = inval, 
+			caption = incap,
+			selected = flag and 'selected="selected"' or ''
+		    }))
 		end
 	end
 	table.insert(htmls, SELECT_TMPL2)

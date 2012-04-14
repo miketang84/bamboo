@@ -2133,7 +2133,6 @@ Model = Object:extend {
 	-- if backwards to Model, the __indexfd is 'id'
 	local indexfd = self.__indexfd
         assert(type(indexfd) == 'string', "[Error] the __indexfd should be string.")
-	local fields = self.__fields
 
 	-- if self has id attribute, it is an instance saved before. use id to separate two cases
 	if self.id then new_case = false end
@@ -2160,16 +2159,16 @@ Model = Object:extend {
 	    assert(tonumber(getCounter(self)) >= tonumber(self.id), '[Error] @save - invalid id.')
 	    -- in processBeforeSave, there is no redis action
 	    local self, store_kv = processBeforeSave(self, params)
+	    local model_key = getNameIdPattern(self)
+
 	    local options = { watch = {index_key}, cas = true, retry = 2 }
 	    replies = db:transaction(options, function(db)
 		local score = db:zscore(index_key, self[indexfd])
 		assert(score == self.id or score == nil, "[Error] save duplicate to an unique limited field, aborted!")
-
 		-- update __index score and member
 		db:zadd(index_key, self.id, self[indexfd])
 		-- update object hash store key
 		db:hmset(model_key, unpack(store_kv))
-	    
 	    end)
 	end
 	    
