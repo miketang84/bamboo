@@ -1272,13 +1272,16 @@ Model = Object:extend {
 	__desc = 'Model is the base of all models.';
 	__fields = {
 	    -- here, we don't put 'id' as a field
-	    ['timestamp'] = { type="number" },
+	    ['created_time'] = { type="number" },
+	    ['lastmodified_time'] = { type="number" },
+	    
 	};
 	__indexfd = "id";
 
 	-- make every object creatation from here: every object has the 'id' and 'name' fields
 	init = function (self)
-		self.timestamp = socket.gettime()
+		self.created_time = socket.gettime()
+		self.lastmodified_time = self.created_time
 		
 		return self 
 	end;
@@ -2137,6 +2140,9 @@ Model = Object:extend {
 	-- if self has id attribute, it is an instance saved before. use id to separate two cases
 	if self.id then new_case = false end
 
+	-- update the lastmodified_time
+	self.lastmodified_time = socket.gettime()
+
 	local index_key = getIndexKey(self)
 	local replies
 	if new_case then
@@ -2179,7 +2185,7 @@ Model = Object:extend {
 	if isUsingRuleIndex(self) then
 	    updateIndexByRules(self, 'save')
 	end
-		
+
 	return self
     end;
     
@@ -2201,6 +2207,9 @@ Model = Object:extend {
 		    -- apply to db
 		    db:hset(model_key, field, new_value)
 		end
+		-- update the lastmodified_time
+		self.lastmodified_time = socket.gettime()
+		db:hset(model_key, 'lastmodified_time', self.lastmodified_time)
 	    
 		-- apply to lua object
 		self[field] = new_value
@@ -2213,6 +2222,7 @@ Model = Object:extend {
 			updateIndexByRules(self, 'update')
 		end
 		
+
 		return self
     end;
     
@@ -2329,6 +2339,9 @@ Model = Object:extend {
 			-- but use getForeign, we retrieve them from high to low, so newest is at left of result
 		end
 		
+		-- update the lastmodified_time
+		self.lastmodified_time = socket.gettime()
+		db:hset(model_key, 'lastmodified_time', self.lastmodified_time)
 		return self
 	end;
 	
@@ -2456,6 +2469,9 @@ Model = Object:extend {
 			store_module.remove(key, new_id)
 		end
 	
+		-- update the lastmodified_time
+		self.lastmodified_time = socket.gettime()
+		db:hset(model_key, 'lastmodified_time', self.lastmodified_time)
 		return self
 	end;
 	
@@ -2478,6 +2494,9 @@ Model = Object:extend {
 			db:del(key)
 		end
 		
+		-- update the lastmodified_time
+		self.lastmodified_time = socket.gettime()
+		db:hset(model_key, 'lastmodified_time', self.lastmodified_time)
 		return self		
 	end;
 
@@ -2503,6 +2522,9 @@ Model = Object:extend {
 			db:del(key)
 		end
 		
+		-- update the lastmodified_time
+		self.lastmodified_time = socket.gettime()
+		db:hset(model_key, 'lastmodified_time', self.lastmodified_time)
 		return self		
 	end;
 
