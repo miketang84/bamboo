@@ -109,7 +109,7 @@ local function makeUrlHandlerMapping(URLS)
 		url_t = normalizePath(url_t)
 		
 		-- separate the pattern format from normal concrete format
-		if url_t:find('%[?%%[%%%-_a-zA-Z]+%]?%+?') then
+		if url_t:find('%[?%%[%%%-_a-zA-Z]+%]?%+?%-?') or url_t:find('%.%+?%-?') then
 			table_pattern[url_t:lower()] = v
 		else
 			table_concrete[url_t:lower()] = v
