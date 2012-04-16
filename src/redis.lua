@@ -1,6 +1,6 @@
 module('bamboo.redis', package.seeall)
 
-require 'redis'
+local redis = require 'redis'
 
 function connect(config_t)
 	local params = {
@@ -9,7 +9,7 @@ function connect(config_t)
 	}
 	local which = config_t.which or 0
 
-	local redis_db = Redis.connect(params)
+	local redis_db = redis.connect(params)
 	if config_t.auth then
 		redis_db:auth(config_t.auth)
 	end
