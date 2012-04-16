@@ -2323,9 +2323,8 @@ Model = Object:extend {
 			new_id = obj.id
 		end
 		
-		
+		local model_key = getNameIdPattern(self)
 		if fld.st == 'ONE' then
-			local model_key = getNameIdPattern(self)
 			-- record in db
 			db:hset(model_key, field, new_id)
 			-- ONE foreign value can be get by 'get' series functions
@@ -2454,13 +2453,12 @@ Model = Object:extend {
 			end
 		end
 		
-		
+		local model_key = getNameIdPattern(self)
 		if fld.st == 'ONE' then
 			-- we must check the equality of self[filed] and new_id before perform delete action
-			local key = getNameIdPattern(self)
 			if self[field] == new_id then
 				-- maybe here is rude
-				db:hdel(key, field)
+				db:hdel(model_key, field)
 				self[field] = nil
 			end
 		else
@@ -2484,8 +2482,8 @@ Model = Object:extend {
 		assert(fld.st, ("[Error] No store type setting for this foreign field %s."):format(field))
 
 
+		local model_key = getNameIdPattern(self)
 		if fld.st == 'ONE' then
-			local model_key = getNameIdPattern(self)
 			-- maybe here is rude
 			db:hdel(model_key, field)
 		else
@@ -2512,8 +2510,8 @@ Model = Object:extend {
 		local fobjs = self:getForeign(field)
 		if fobjs then fobjs:del() end
 
+		local model_key = getNameIdPattern(self)
 		if fld.st == 'ONE' then
-			local model_key = getNameIdPattern(self)
 			-- maybe here is rude
 			db:hdel(model_key, field)
 		else
