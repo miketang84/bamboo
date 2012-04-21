@@ -3,6 +3,7 @@ MONDIR=~/workspace/monserver
 GITDIR=~/GIT
 SHAREDIR=/usr/local/share/lua/5.1
 LIBDIR=/usr/local/lib/lua/5.1
+THISUSER=`pwd | cut -d '/' -f3`
 
 all:
 install:
@@ -28,6 +29,6 @@ install:
 	ln -sf ${SHAREDIR}/bamboo/bin/bamboo_handler /usr/local/bin/ 
 	# monserver dir
 	mkdir -p ${MONDIR}/logs ${MONDIR}/run ${MONDIR}/sites ${MONDIR}/tmp
-	chown -R ~/workspace/
+	chown -R $(THISUSER):$(THISUSER) ~/workspace/
 	
 	
