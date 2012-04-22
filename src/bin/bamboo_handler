@@ -7,6 +7,9 @@ require 'posix'
 require 'lglib'
 require 'bamboo'
 local util = require 'bamboo.util'
+require 'zmq.poller'
+local poller = zmq.poller(64)
+bamboo.poller = poller
 ------------------------------------------------------------------------
 --- Global variables delarations: in top project code, we can see these variables
 -- two important global variables
@@ -147,7 +150,7 @@ local function getHandlerByPath(path)
 	local key, value = "", nil
 	
 	-- process concrete case first
-	if MappingTableConcrete[path] then return parse(MappingTableConcrete[path]) end
+	if MappingTableConcrete[path] then return parse(MappingTableConcrete[path]), path end
 
 	-- if process the pattern case
 	for k, v in pairs(MappingTablePattern) do
@@ -165,7 +168,7 @@ local function getHandlerByPath(path)
 
 	-- if walks here, means this is a pattern case path
 	if key and value then
-		return parse(value)
+		return parse(value), key
 	end
 	
 	-- if walks here, means no suited case matched
@@ -226,41 +229,6 @@ local function execState(state, req, before, after, action_func)
     return good, err
 end
 
---[[
-local function runCoro(conn, main, req, conn_id, path, before, after)
-    local state = STATE and STATE[path] and STATE[path][conn_id]
-    local good, err
-
-    if not state then
-        state = Web(conn, main, req, true)
-		_G['web'] = state
-		STATE[path] = {}
-		STATE[path][conn_id] = state
-        good, err = execState(state, req, before, after,
-            function (s, r)
-                return coroutine.resume(state.controller, state, req) 
-            end)
-	else
-        state.req = req
-
-        good, err = execState(state, req, before, after,
-            function (s, r)
-                return coroutine.resume(s.controller, r) 
-            end)
-    end
-
-    if not good and err then
-        errors.reportError(conn, req, err, state)
-    end
-
-    if not good or coroutine.status(state.controller) == "dead" then
-		STATE[path][conn_id] = nil
-		STATE[path] = nil
-    end
-end
---]]
-
-
 ------------------------------------------------------------------------
 -- stateless programming
 -- @param conn:		connection object
@@ -272,24 +240,55 @@ end
 ------------------------------------------------------------------------
 local function runStateless(conn, main, req, before, after)
     local state = Web(conn, main, req, false)
-	-- update the latest web state to global variale web
-	_G['web'] = state
+    -- update the latest web state to global variale web
+    _G['web'] = state
 	
     local good, err = execState(state, req, before, after, function(s,r)
-        return pcall(s.controller, s, r)
+	return pcall(s.controller, s, r)
     end)
 
     if not good and err then
-		if config.PRODUCTION then
-			web.conn:reply_http(req, '<h2>Page error.</h2>', 500, 'Page error.', req.headers)
-			print('[Error] Page error.')
-		else
-			local errors = require 'bamboo.errors'
-			errors.reportError(conn, req, err, state)
-		end
+	if config.PRODUCTION then
+	    web.conn:reply_http(req, '<h2>Page error.</h2>', 500, 'Page error.', req.headers)
+	    print('[Error] Page error.')
+	else
+	    local errors = require 'bamboo.errors'
+	    errors.reportError(conn, req, err, state)
+	end
     end
 end
 
+local function runCoro(conn, main, req, before, after)
+    local state = Web(conn, main, req, true)
+    _G['web'] = state
+    -- only run once
+    local good, err = execState(state, req, before, after, function (s, r)
+	return coroutine.resume(state.controller, state, req) 
+    end)
+
+    if not good and err then
+	if config.PRODUCTION then
+	    web.conn:reply_http(req, '<h2>Page error.</h2>', 500, 'Page error.', req.headers)
+	    print('[Error] Page error.')
+	else
+	    local errors = require 'bamboo.errors'
+	    errors.reportError(conn, req, err, state)
+	end
+    end
+end
+
+local SUSPENDED_TASKS = {}
+bamboo.SUSPENDED_TASKS = SUSPENDED_TASKS
+-- conn: zmq connection
+-- revents: return events
+local conn_dispatcher = function (conn, revents)
+    local state = SUSPENDED_TASKS[conn]
+    if not state then return nil end
+
+    return coroutine.resume(state.controller, conn:recv())
+end
+bamboo.conn_dispatcher = conn_dispatcher
+local URLS_STATES = bamboo.URLS_STATES
 
 ------------------------------------------------------------------------
 -- Bamboo's main loop for every bamboo process
@@ -303,66 +302,77 @@ local function run(conn, config)
     local good, err
     local req, msg_type, controller
     local conn_id, path
---	local PREV_PATH = {}
 	
     -- main loop
-	while true do
+    local monserver_request = function ()
+	-- while true do
         -- Get a message from the Mongrel2 server, if have no, block to wait
         req, err = conn:recv()
-		-- update the latest request object to global request reference
-		_G['req'] = req
+	-- update the latest request object to global request reference
+	_G['req'] = req
 
         if req and not err then
-			-- if http directive is not in the range of bamboo specified 
+	    -- if http directive is not in the range of bamboo specified 
             if not config.methods[req.headers.METHOD] then
                 local errors = require 'bamboo.errors'
                 errors.basicError(conn, req, "Method Not Allowed",
-                    405, "Method Not Allowed", {Allow = config.allowed_methods_header})
+		405, "Method Not Allowed", {Allow = config.allowed_methods_header})
             else
                 msg_type = req.data.type
 				
-				-- if client close the connection
+		-- if client close the connection
                 if msg_type == 'disconnect' then
-					print("DISCONNECT", req.conn_id)
+		    print("DISCONNECT", req.conn_id)
                     if disconnect then disconnect(req) end
                 else
-					-- here generate connection id, that is cookie identifier, and also session id
+		    -- here generate connection id, that is cookie identifier, and also session id
                     conn_id = ident(req)
-					-- normalize the path's format
-					path = normalizePath(req.path)
+			-- normalize the path's format
+		    path = normalizePath(req.path)
 
-					req.method = req.headers.METHOD
-					req.path = path
-					if req.headers['x-requested-with'] == 'XMLHttpRequest' then
-						req['ajax'] = true
-					end
-					req.userdata = {}
+		    req.method = req.headers.METHOD
+		    req.path = path
+		    if req.headers['x-requested-with'] == 'XMLHttpRequest' then
+			    req['ajax'] = true
+		    end
+		    req.userdata = {}
 
-					print(("req %s: %s"):format(config.route, req.conn_id), os.date(), req.path, req.method, req.session_id)
-					
-					-- record session
-					Session:set(req)
-					
-					-------------------------------------------------
-					-- according coming path, find the corresponding handler function
-					local main = getHandlerByPath(path)
-					if not main then
-					   	-- return 404 page
-						print(('[Warning] No handler to process this path: %s.'):format(path))
-						conn:reply_http(req, '<h2>Page Not Found.</h2>', 404, 'Not Found', req.headers)
-					else
-						-- inject req.GET, req.POST, req.PARAMS
-						preparse(req)
-						-- this is the default way
-						runStateless(conn, main, req, before, after)
-					end
+		    print(("req %s: %s"):format(config.route, req.conn_id), os.date(), req.path, req.method, req.session_id)
+		    
+		    -- record session
+		    Session:set(req)
+		    
+		    -------------------------------------------------
+		    -- according coming path, find the corresponding handler function
+		    local main, copath = getHandlerByPath(path)
+		    if not main then
+			-- return 404 page
+			print(('[Warning] No handler to process this path: %s.'):format(path))
+			conn:reply_http(req, '<h2>Page Not Found.</h2>', 404, 'Not Found', req.headers)
+		    else
+			-- inject req.GET, req.POST, req.PARAMS
+			preparse(req)
+			-- this is the default way
+			if URLS_STATES[copath] then
+			    runCoro(conn, main, req, before, after)
+			else
+			    runStateless(conn, main, req, before, after)
+			end
+		    end
 
-                end
+		end
             end
-		else
-            print("FATAL ERROR", good, req, err)
-        end
+	else
+	    print("FATAL ERROR", good, req, err)
+	end
     end
+    -- add the main monserver request to poll
+    -- conn.reqs is the socket pull from monserver
+    poller:add(conn.reqs, zmq.POLLIN, monserver_request)
+    -- start the main loop
+    poller:start()
+
+    print('Bamboo main loop aborted!')
 end
 
 local m2 = require 'bamboo.m2'

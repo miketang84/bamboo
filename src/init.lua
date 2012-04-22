@@ -29,6 +29,7 @@ require 'bamboo.widget'
 CACHE_LIFE = 1800
 -- global URLS definition
 URLS = {}
+URLS_STATES = {}
 PATTERN_URLS = {}
 ------------------------------------------------------------------------
 PLUGIN_LIST = {}
@@ -262,6 +263,12 @@ registerModule = function (mdl, extra_params)
 			else
 				nurl = url
 			end
+
+			if type(action) == 'table' and action.stateful then
+			    -- 
+			    URLS_STATES[nurl] = action.stateful
+			end
+			
 			
 			local nfun
 			local exclude_flag = false
