@@ -20,11 +20,17 @@ function start(config)
 
     print("BACKGROUND TASK " .. config.spec .. " STARTED.")
 
-    while true do
-	-- receive data from client
-	local data = assert(conn:recv())
-	main(conn, data)
+    if not config.custom_mainloop then
+	while true do
+	    -- receive data from client
+	    local data = assert(conn:recv())
+	    main(conn, data)
+	end
+    else
+	main(conn) 
     end
+
+    print('Task main loop terminated!')
 end
 
 -- used by client to connect the task server
