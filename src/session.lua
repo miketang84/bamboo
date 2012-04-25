@@ -22,7 +22,7 @@ local db = BAMBOO_DB
 local PREFIX = 'Session:'
 
 ------------------------------------------------------------------------
--- 
+--
 local makeRNG = function ()
     if posix.access(RNG_DEVICE) then
         local urandom = assert(io.open(RNG_DEVICE))
@@ -60,7 +60,7 @@ end
 local function parseSessionId (cookie)
     if not cookie then return nil end
 
-    return cookie:match('session=(APP-[a-z0-9\-]+);?.*$')
+    return cookie:match('session=(APP%-[a-z0-9%-]+);?.*$')
 end
 
 
@@ -101,11 +101,11 @@ end
 
 
 local Session = Object:extend {
-	__tag = 'Bamboo.Session';
-    __name = 'Session';
+	__tag = 'Object.Session';
+    --__name = 'Session';
     -- nothing to do
 	init = function (self) return self end;
-    
+
     set = function (self, req)
         local session_key = PREFIX + req.session_id
         if not db:hexists(session_key, 'session_id') then
@@ -114,7 +114,7 @@ local Session = Object:extend {
 
         local session = Session:get(req.session_id)
         -- in session, we could not use User model to record something,
-	-- because session is lower api, and shouldn't be limited as User model
+		-- because session is lower api, and shouldn't be limited as User model
         if session['user_id'] then
             local user_id = session['user_id']
             local model_name, id = user_id:match('^(%w+):(%d+)$')
@@ -127,14 +127,14 @@ local Session = Object:extend {
 
         db:expire(session_key, bamboo.config.expiration or SMALL_EXPIRE_TIME)
         req['session'] = session
-        
+
         return true
     end;
 
     get = function (self, session_id)
         local session_key = PREFIX + (session_id or req.session_id)
         local session_t = db:hgetall(session_key)
-        
+
         local ext_key
         for k, v in pairs(session_t) do
 	    if v == "__list__" then
@@ -142,13 +142,13 @@ local Session = Object:extend {
 		session_t[k] = rdlist.retrieve(ext_key)
 	    elseif v == "__set__" then
 		ext_key = ("%s:%s:set"):format(session_key, k)
-		session_t[k] = rdset.retrieve(ext_key)			
+		session_t[k] = rdset.retrieve(ext_key)
 	    elseif v == "__zset__" then
-		ext_key = ("%s:%s:zset"):format(session_key, k)			
-		session_t[k] = rdzset.retrieve(ext_key)					
+		ext_key = ("%s:%s:zset"):format(session_key, k)
+		session_t[k] = rdzset.retrieve(ext_key)
 	    end
         end
-        
+
         db:expire(session_key, bamboo.config.expiration or SMALL_EXPIRE_TIME)
         return session_t
     end;
@@ -157,33 +157,33 @@ local Session = Object:extend {
         checkType(key, 'string')
         local session_key = PREFIX + (session_id or req.session_id)
         local st = st or 'string'
-	local ext_key = ("%s:%s:%s"):format(session_key, key, st)
-        
+		local ext_key = ("%s:%s:%s"):format(session_key, key, st)
+
         --local session_t = db:hgetall(session_key)
         --session_t[key] = value
         --for k, v in pairs(session_t) do
         --end
 
-	if st == 'string' then
-	    assert( isStrOrNum(value),
-	    	"[Error] @Session:setKey - Value should be string or number.")
-            db:hset(session_key, key, value)
-	else
-	    -- checkType(val, 'table')
-	    if st == 'list' then
-		rdlist.save(ext_key, value)
-		db:hset(session_key, key, "__list__")
-	    elseif st == 'set' then
-		rdset.save(ext_key, value)
-		db:hset(session_key, key, "__set__")
-	    elseif st == 'zset' then
-		rdzset.save(ext_key, value)
-		db:hset(session_key, key, "__zset__")
-	    else
-		error("[Error] @Session:setKey - st must be one of 'string', 'list', 'set' or 'zset'")
-	    end
-	end
-        
+		if st == 'string' then
+			assert( isStrOrNum(value),
+				"[Error] @Session:setKey - Value should be string or number.")
+			db:hset(session_key, key, value)
+		else
+			-- checkType(val, 'table')
+			if st == 'list' then
+				rdlist.save(ext_key, value)
+				db:hset(session_key, key, "__list__")
+			elseif st == 'set' then
+				rdset.save(ext_key, value)
+				db:hset(session_key, key, "__set__")
+			elseif st == 'zset' then
+				rdzset.save(ext_key, value)
+				db:hset(session_key, key, "__zset__")
+			else
+				error("[Error] @Session:setKey - st must be one of 'string', 'list', 'set' or 'zset'")
+			end
+		end
+
         --req.session = session_t
         db:expire(session_key, bamboo.config.expiration or SMALL_EXPIRE_TIME)
         return true
@@ -193,26 +193,26 @@ local Session = Object:extend {
         checkType(key, 'string')
         local session_key = PREFIX + (session_id or req.session_id)
 
-	local ext_key
-	local ovalue = db:hget(session_key, key)
-	if ovalue == "__list__" then
-	    ext_key = ("%s:%s:list"):format(session_key, k)
-	    ovalue = rdlist.retrieve(ext_key)
-	elseif ovalue == "__set__" then
-	    ext_key = ("%s:%s:set"):format(session_key, k)
-	    ovalue = rdset.retrieve(ext_key)			
-	elseif ovalue == "__zset__" then
-	    ext_key = ("%s:%s:zset"):format(session_key, k)			
-	    ovalue = rdzset.retrieve(ext_key)					
-	end
+		local ext_key
+		local ovalue = db:hget(session_key, key)
+		if ovalue == "__list__" then
+			ext_key = ("%s:%s:list"):format(session_key, k)
+			ovalue = rdlist.retrieve(ext_key)
+		elseif ovalue == "__set__" then
+			ext_key = ("%s:%s:set"):format(session_key, k)
+			ovalue = rdset.retrieve(ext_key)
+		elseif ovalue == "__zset__" then
+			ext_key = ("%s:%s:zset"):format(session_key, k)
+			ovalue = rdzset.retrieve(ext_key)
+		end
 
-	db:expire(session_key, bamboo.config.expiration or SMALL_EXPIRE_TIME)
-	return ovalue
+		db:expire(session_key, bamboo.config.expiration or SMALL_EXPIRE_TIME)
+		return ovalue
     end;
 
     delKey = function (self, key, session_id)
         checkType(key, 'string')
-        local session_key = PREFIX + (session_id or req.session_id)   
+        local session_key = PREFIX + (session_id or req.session_id)
         req.session[key] = nil
 
         return db:hdel(session_key, key)
@@ -237,10 +237,19 @@ local Session = Object:extend {
     end;
 
     parseSessionId = parseSessionId;
-	
-    setExpiration = function (self, seconds)
-	checkType(seconds, 'number')
-	bamboo.config.expiration = seconds
+
+	-- redefine global expiration parameter
+	setGlobalExpiration = function (self, seconds)
+		checkType(seconds, 'number')
+		bamboo.config.expiration = seconds
+	end;
+
+	-- set expiration for each session
+	setExpiration = function (self, seconds, session_id)
+		assert(seconds, "[Error] missing params seconds.")
+		local session_key = PREFIX + (session_id or req.session_id)
+		
+		db:expire(session_key, seconds)
     end;
 }
 
