@@ -301,71 +301,70 @@ local function run(conn, config)
     local before, after = config.before, config.after
     local good, err
     local req, msg_type, controller
-    local conn_id, path
+    local path
 	
     -- main loop
     local monserver_request = function ()
-	-- while true do
+		-- while true do
         -- Get a message from the Mongrel2 server, if have no, block to wait
         req, err = conn:recv()
-	-- update the latest request object to global request reference
-	_G['req'] = req
+		-- update the latest request object to global request reference
+		_G['req'] = req
 
         if req and not err then
-	    -- if http directive is not in the range of bamboo specified 
+			-- if http directive is not in the range of bamboo specified 
             if not config.methods[req.headers.METHOD] then
                 local errors = require 'bamboo.errors'
                 errors.basicError(conn, req, "Method Not Allowed",
-		405, "Method Not Allowed", {Allow = config.allowed_methods_header})
+					405, "Method Not Allowed", {Allow = config.allowed_methods_header})
             else
                 msg_type = req.data.type
 				
-		-- if client close the connection
+				-- if client close the connection
                 if msg_type == 'disconnect' then
-		    print("DISCONNECT", req.conn_id)
+					print("DISCONNECT", req.conn_id)
                     if disconnect then disconnect(req) end
                 else
-		    -- here generate connection id, that is cookie identifier, and also session id
-                    conn_id = ident(req)
-			-- normalize the path's format
-		    path = normalizePath(req.path)
+					-- generate req.session_id
+                    ident(req)
+					-- normalize the path's format
+					path = normalizePath(req.path)
 
-		    req.method = req.headers.METHOD
-		    req.path = path
-		    if req.headers['x-requested-with'] == 'XMLHttpRequest' then
-			    req['ajax'] = true
-		    end
-		    req.userdata = {}
+					req.method = req.headers.METHOD
+					req.path = path
+					if req.headers['x-requested-with'] == 'XMLHttpRequest' then	req['ajax'] = true end
+					req.userdata = {}
 
-		    print(("req %s: %s"):format(config.route, req.conn_id), os.date(), req.path, req.method, req.session_id)
-		    
-		    -- record session
-		    Session:set(req)
-		    
-		    -------------------------------------------------
-		    -- according coming path, find the corresponding handler function
-		    local main, copath = getHandlerByPath(path)
-		    if not main then
-			-- return 404 page
-			print(('[Warning] No handler to process this path: %s.'):format(path))
-			conn:reply_http(req, '<h2>Page Not Found.</h2>', 404, 'Not Found', req.headers)
-		    else
-			-- inject req.GET, req.POST, req.PARAMS
-			preparse(req)
-			-- this is the default way
-			if URLS_STATES[copath] then
-			    runCoro(conn, main, req, before, after)
-			else
-			    runStateless(conn, main, req, before, after)
+					print(("req %s: %s"):format(config.route, req.conn_id), os.date(), req.path, req.method, req.session_id)
+					
+					-- record session
+					Session:set(req)
+					
+					-------------------------------------------------
+					-- according coming path, find the corresponding handler function
+					local main, copath = getHandlerByPath(path)
+					if not main then
+						-- return 404 page
+						print(('[Warning] No handler to process this path: %s.'):format(path))
+						conn:reply_http(req, '<h2>Page Not Found.</h2>', 404, 'Not Found', req.headers)
+					else
+						-- inject req.GET, req.POST, req.PARAMS
+						preparse(req)
+						-- this is the default way
+						if URLS_STATES[copath] then
+							runCoro(conn, main, req, before, after)
+						else
+							runStateless(conn, main, req, before, after)
+						end
+					end
+
+				end
 			end
-		    end
-
+		else
+			print("FATAL ERROR", good, req, err)
 		end
-            end
-	else
-	    print("FATAL ERROR", good, req, err)
-	end
     end
+	
     -- add the main monserver request to poll
     -- conn.reqs is the socket pull from monserver
     poller:add(conn.reqs, zmq.POLLIN, monserver_request)

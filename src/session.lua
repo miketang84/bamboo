@@ -123,9 +123,15 @@ local Session = Object:extend {
             assert(model, "[ERROR] This user model doesn't registerd.")
             -- get the real user instance, assign it to req.user
             req['user'] = model:getById(id)
+			
         end
+		
+		local expiration
+		if session['expiration'] then
+			expiration = session.expiration
+		end
 
-        db:expire(session_key, bamboo.config.expiration or SMALL_EXPIRE_TIME)
+        db:expire(session_key, expiration or bamboo.config.expiration or SMALL_EXPIRE_TIME)
         req['session'] = session
 
         return true
@@ -137,22 +143,32 @@ local Session = Object:extend {
 
         local ext_key
         for k, v in pairs(session_t) do
-	    if v == "__list__" then
-		ext_key = ("%s:%s:list"):format(session_key, k)
-		session_t[k] = rdlist.retrieve(ext_key)
-	    elseif v == "__set__" then
-		ext_key = ("%s:%s:set"):format(session_key, k)
-		session_t[k] = rdset.retrieve(ext_key)
-	    elseif v == "__zset__" then
-		ext_key = ("%s:%s:zset"):format(session_key, k)
-		session_t[k] = rdzset.retrieve(ext_key)
-	    end
+			if v == "__list__" then
+				ext_key = ("%s:%s:list"):format(session_key, k)
+				session_t[k] = rdlist.retrieve(ext_key)
+			elseif v == "__set__" then
+				ext_key = ("%s:%s:set"):format(session_key, k)
+				session_t[k] = rdset.retrieve(ext_key)
+			elseif v == "__zset__" then
+				ext_key = ("%s:%s:zset"):format(session_key, k)
+				session_t[k] = rdzset.retrieve(ext_key)
+			end
         end
 
         db:expire(session_key, bamboo.config.expiration or SMALL_EXPIRE_TIME)
         return session_t
     end;
 
+	hashReversely = function (self, user, session_id)
+		local user_id = format("%s:%s", user:classname(), user.id)
+		db:hset('_users_sessions', user_id, session_id)
+	end;
+
+	delHashReversely = function (self, user)
+		local user_id = format("%s:%s", user:classname(), user.id)
+		db:hdel('_users_sessions', user_id)
+	end;
+	
     setKey = function (self, key, value, st, session_id)
         checkType(key, 'string')
         local session_key = PREFIX + (session_id or req.session_id)
@@ -249,6 +265,7 @@ local Session = Object:extend {
 		assert(seconds, "[Error] missing params seconds.")
 		local session_key = PREFIX + (session_id or req.session_id)
 		
+		db:hset(session_key, 'expiration', seconds)
 		db:expire(session_key, seconds)
     end;
 }

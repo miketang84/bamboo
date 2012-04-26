@@ -74,12 +74,15 @@ local User = Model:extend {
 		if not authed then return nil end
 
 		Session:setKey('user_id', self:classname() + ':' + user.id)
+		Session:hashReversely(user, req.session_id)
+		
 		return user
 	end;
 
 	logout = function (self)
 		-- I_AM_CLASS(self)
 		-- Class and instance can both call this function
+		Session:delHashReversely(user)
 		return Session:delKey('user_id')
 	end;
 
