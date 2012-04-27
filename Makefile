@@ -10,7 +10,7 @@ install:
 	# monserver
 	cd ../monserver && make && make install && cd -
 	# lua-zmq
-	cd ../lua-zmq && make &&  cp zmq.so ${LIBDIR} && cd -
+	#cd ../lua-zmq && make &&  cp zmq.so ${LIBDIR} && cd -
 	# lgstring
 	cd ../lgstring && make && make install && cd -
 	# monserver-lua

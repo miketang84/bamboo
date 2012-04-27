@@ -1593,8 +1593,8 @@ Model = Object:extend {
 					if flag then
 						tinsert(query_set, obj)
 					end
-				else
-					print(('[Warning] object %s is invalid when filter.'):format(obj.id or 'nil'))
+				-- else
+					-- print(('[Warning] object %s is invalid when filter.'):format(obj.id or 'nil'))
 				end
 			end
 		end
