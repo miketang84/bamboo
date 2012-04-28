@@ -75,6 +75,7 @@ local Web = Object:extend {
     end;
 
     jsonSuccess = function (self, tbl)
+	local tbl = tbl or {}
 	tbl['success'] = true
 	self:json(tbl)
     end;

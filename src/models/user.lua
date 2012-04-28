@@ -5,7 +5,7 @@ local Model = require 'bamboo.model'
 local Session = require 'bamboo.session'
 local md5 = require 'md5'
 local socket = require 'socket'
-
+local Perm = require 'bamboo.models.permission'
 
 local User = Model:extend {
     __tag = 'Bamboo.Model.User';

@@ -105,6 +105,11 @@ local function getCounterName(self)
 	return self.__name + ':__counter'
 end 
 
+-- return a string
+local function getCounter(self)
+    return db:get(getCounterName(self)) or '0'
+end;
+
 local function getNameIdPattern(self)
 	return self.__name + ':' + self.id
 end
@@ -366,9 +371,10 @@ local getFromRedisPipeline2 = function (pattern_list)
 end 
 
 --------------------------------------------------------------
--- this function can only be called by instance
+-- this function can be called by instance or class
 --
 local delFromRedis = function (self, id)
+	assert(self.id or id, '[Error] @delFromRedis - must specify an id of instance.')
 	local model_key = id and getNameIdPattern2(self, id) or getNameIdPattern(self)
 	local index_key = getIndexKey(self)
 	
@@ -385,13 +391,13 @@ local delFromRedis = function (self, id)
 	-- delete the key self
 	db:del(model_key)
 	-- delete the index in the global model index zset
-	db:zremrangebyscore(index_key, self.id, self.id)
+	db:zremrangebyscore(index_key, self.id or id, self.id or id)
 	
-	-- clear fulltext index
-	if isUsingFulltextIndex(self) then
+	-- clear fulltext index, only when it is instance
+	if isUsingFulltextIndex(self) and self.id then
 		clearFtIndexesOnDeletion(self)
 	end
-	if isUsingRuleIndex(self) then
+	if isUsingRuleIndex(self) and self.id then
 		updateIndexByRules(self, 'del')
 	end
 				
@@ -403,6 +409,7 @@ end
 -- Fake Deletion
 --  called by instance
 local fakedelFromRedis = function (self, id)
+	assert(self.id or id, '[Error] @fakedelFromRedis - must specify an id of instance.')
 	local model_key = id and getNameIdPattern2(self, id) or getNameIdPattern(self)
 	local index_key = getIndexKey(self)
 	
@@ -422,15 +429,15 @@ local fakedelFromRedis = function (self, id)
 	db:rename(model_key, 'DELETED:' + model_key)
 	-- delete the index in the global model index zset
 	-- when deleted, the instance's index cache was cleaned.
-	db:zremrangebyscore(index_key, self.id, self.id)
+	db:zremrangebyscore(index_key, self.id or id, self.id or id)
 	-- add to deleted collector
 	rdzset.add(dcollector, model_key)
 	
 	-- clear fulltext index
-	if isUsingFulltextIndex(self) then
+	if isUsingFulltextIndex(self) and self.id then
 		clearFtIndexesOnDeletion(self)
 	end
-	if isUsingRuleIndex(self) then
+	if isUsingRuleIndex(self) and self.id then
 		updateIndexByRules(self, 'del')
 	end
 
@@ -1190,6 +1197,49 @@ local getIndexFromManager = function (self, query_str_iden, getnum)
 	end
 end
 
+-- called by save
+-- self is instance
+local processBeforeSave = function (self, params)
+    local indexfd = self.__indexfd
+    local fields = self.__fields
+    local store_kv = {}
+    --- save an hash object
+    -- 'id' are essential in an object instance
+    tinsert(store_kv, 'id')
+    tinsert(store_kv, self.id)		
+
+    -- if parameters exist, update it
+    if params and type(params) == 'table' then
+	for k, v in pairs(params) do
+	    if k ~= 'id' and fields[k] then
+		self[k] = tostring(v)
+	    end
+	end
+    end
+
+    assert(not isFalse(self[indexfd]) , 
+    	"[Error] instance's indexfd value must not be nil. Please check your model defination.")
+
+    for k, v in pairs(self) do
+	-- when save, need to check something
+	-- 1. only save fields defined in model defination
+	-- 2. don't save the functional member, and _parent
+	-- 3. don't save those fields not defined in model defination
+	-- 4. don't save those except ONE foreign fields, which are defined in model defination
+	local field = fields[k]
+	-- if v is nil, pairs will not iterate it, key will and should not be 'id'
+	if field then
+	    if not field['foreign'] or ( field['foreign'] and field['st'] == 'ONE') then
+		-- save
+		tinsert(store_kv, k)
+		tinsert(store_kv, v)		
+	    end
+	end
+    end
+
+    return self, store_kv
+end
+
 
 ------------------------------------------------------------------------
 -- 
@@ -1221,16 +1271,17 @@ Model = Object:extend {
 	__name = 'Model';
 	__desc = 'Model is the base of all models.';
 	__fields = {
-		['timestamp'] = { type="number" },
+	    -- here, we don't put 'id' as a field
+	    ['created_time'] = { type="number" },
+	    ['lastmodified_time'] = { type="number" },
+	    
 	};
 	__indexfd = "id";
 
 	-- make every object creatation from here: every object has the 'id' and 'name' fields
 	init = function (self)
-		-- get the latest instance counter
-		-- id type is number
-		self.id = self:getCounter() + 1
-		self.timestamp = socket.gettime()
+		self.created_time = socket.gettime()
+		self.lastmodified_time = self.created_time
 		
 		return self 
 	end;
@@ -1541,8 +1592,8 @@ Model = Object:extend {
 					if flag then
 						tinsert(query_set, obj)
 					end
-				else
-					print(('[Warning] object %s is invalid when filter.'):format(obj.id or 'nil'))
+				-- else
+					-- print(('[Warning] object %s is invalid when filter.'):format(obj.id or 'nil'))
 				end
 			end
 <<<<<<< HEAD
@@ -2046,26 +2097,26 @@ Model = Object:extend {
     fakeDelById = function (self, ids)
     	local idtype = type(ids)
     	if idtype == 'table' then
-    		for _, v in ipairs(ids) do
-    			v = tostring(v)
-		    	fakedelFromRedis(self, v)
-    			
-    		end
-		else
-			fakedelFromRedis(self, tostring(ids))			
+	    for _, v in ipairs(ids) do
+		v = tostring(v)
+		fakedelFromRedis(self, v)
+		
+	    end
+	else
+	    fakedelFromRedis(self, tostring(ids))			
     	end
     end;
     
     trueDelById = function (self, ids)
     	local idtype = type(ids)
     	if idtype == 'table' then
-    		for _, v in ipairs(ids) do
-    			v = tostring(v)
-		    	delFromRedis(self, v)
-    			
-    		end
-		else
-			delFromRedis(self, tostring(ids))			
+	    for _, v in ipairs(ids) do
+		v = tostring(v)
+		delFromRedis(self, v)
+		
+	    end
+	else
+	    delFromRedis(self, tostring(ids))			
     	end
     end;
     
@@ -2096,77 +2147,60 @@ Model = Object:extend {
 	
 	
     --------------------------------------------------------------------
-	-- Instance Functions
-	--------------------------------------------------------------------
+    -- Instance Functions
+    --------------------------------------------------------------------
     -- save instance's normal field
+    -- before save, the instance has no id
     save = function (self, params)
 		I_AM_INSTANCE(self)
-        assert(self.id, "[Error] The main key 'id' field doesn't exist!")
-		assert(self:getCounter() + 1 >= tonumber(self.id), '[Error] @save - invalid id.')
-        local indexfd = self.__indexfd
-        assert(type(indexfd) == 'string' or type(indexfd) == 'nil', "[Error] the __indexfd should be string.")
-        local model_key = getNameIdPattern(self)
-		local is_existed = db:exists(model_key)
+
+		local new_case = true
+		-- here, we separate the new create case and update case
+		-- if backwards to Model, the __indexfd is 'id'
+		local indexfd = self.__indexfd
+			assert(type(indexfd) == 'string', "[Error] the __indexfd should be string.")
+
+		-- if self has id attribute, it is an instance saved before. use id to separate two cases
+		if self.id then new_case = false end
+
+		-- update the lastmodified_time
+		self.lastmodified_time = socket.gettime()
 
 		local index_key = getIndexKey(self)
-		if not is_existed then
-			-- initial __counter as 1 
-			db:set(getCounterName(self), self.id)
+		local replies
+		if new_case then
+			local countername = getCounterName(self)
+			local options = { watch = {countername, index_key}, cas = true, retry = 2 }
+			replies = db:transaction(options, function(db)
+			-- increase the instance counter
+			db:incr(countername)
+			self.id = db:get(countername)
+			local model_key = getNameIdPattern(self)
+			local self, store_kv = processBeforeSave(self, params)
+			assert(not db:zscore(index_key, self[indexfd]), "[Error] save duplicate to an unique limited field, aborted!")
+
+			db:zadd(index_key, self.id, self[indexfd])
+			-- update object hash store key
+			db:hmset(model_key, unpack(store_kv))
+			end)
 		else
-			-- if exist, update the index cache
-			-- delete the old one
-			db:zremrangebyscore(index_key, self.id, self.id)
-		end
-		-- score is the instance's id, member is the instance's index value
-		if isFalse(indexfd) then
-			db:zadd(index_key, self.id, self.id)
-		elseif isFalse(self[indexfd]) then
-			print("[Warning] index field value must not be empty, will not save it, please check your model defination.")
-			return nil
-		else
+			-- update case
+			assert(tonumber(getCounter(self)) >= tonumber(self.id), '[Error] @save - invalid id.')
+			-- in processBeforeSave, there is no redis action
+			local self, store_kv = processBeforeSave(self, params)
+			local model_key = getNameIdPattern(self)
+
+			local options = { watch = {index_key}, cas = true, retry = 2 }
+			replies = db:transaction(options, function(db)
 			local score = db:zscore(index_key, self[indexfd])
-			-- is exist, return directely, else redis will update the score of val
-			if score then 
-				print("[Warning] save duplicate to an unique limited field, aborted!")
-				return nil 
-			end
-			db:zadd(index_key, self.id, self[indexfd])				
+			assert(score == self.id or score == nil, "[Error] save duplicate to an unique limited field, aborted!")
+			-- update __index score and member
+			db:zadd(index_key, self.id, self[indexfd])
+			-- update object hash store key
+			db:hmset(model_key, unpack(store_kv))
+			end)
 		end
-
-		local store_kv = {}
-		--- save an hash object
-		-- 'id' are essential in an object instance
-		table.insert(store_kv, 'id')
-		table.insert(store_kv, tostring(self.id))		
-
-		-- if parameters exist, update it
-		if params and type(params) == 'table' then
-			for k, v in pairs(params) do
-				if k ~= 'id' and self.__fields[k] then
-					self[k] = v
-				end
-			end
-		end
-
-		for k, v in pairs(self) do
-			-- when save, need to check something
-			-- 1. only save fields defined in model defination
-			-- 2. don't save the functional member, and _parent
-			-- 3. don't save those fields not defined in model defination
-			-- 4. don't save those except ONE foreign fields, which are defined in model defination
-			local field = self.__fields[k]
-			-- if v is nil, pairs will not iterate it
-			if field then
-				if not field['foreign'] or ( field['foreign'] and field['st'] == 'ONE') then
-					-- save
-					table.insert(store_kv, k)
-					table.insert(store_kv, tostring(v))		
-				end
-			end
-		end
-		-- save to database
-		db:hmset(model_key, unpack(store_kv))
-		
+			
 		-- make fulltext indexes
 		if isUsingFulltextIndex(self) then
 			makeFulltextIndexes(self)
@@ -2175,7 +2209,6 @@ Model = Object:extend {
 			updateIndexByRules(self, 'save')
 		end
 
-		
 		return self
     end;
     
@@ -2197,6 +2230,9 @@ Model = Object:extend {
 		    -- apply to db
 		    db:hset(model_key, field, new_value)
 		end
+		-- update the lastmodified_time
+		self.lastmodified_time = socket.gettime()
+		db:hset(model_key, 'lastmodified_time', self.lastmodified_time)
 	    
 		-- apply to lua object
 		self[field] = new_value
@@ -2209,15 +2245,13 @@ Model = Object:extend {
 			updateIndexByRules(self, 'update')
 		end
 		
+
 		return self
     end;
     
     -- get the model's instance counter value
-	-- this can be call by Class and Instance
-    getCounter = function (self)
-		-- 
-		return tonumber(db:get(getCounterName(self)) or 0)
-    end;
+    -- this can be call by Class and Instance
+    getCounter = getCounter; 
     
     -- delete self instance object
     -- self can be instance or query set
@@ -2288,7 +2322,7 @@ Model = Object:extend {
 	addForeign = function (self, field, obj)
 		I_AM_INSTANCE(self)
 		checkType(field, 'string')
-		assert(self:getCounter() >= tonumber(self.id), '[Error] before doing addForeign, you must save this instance.')
+		assert(tonumber(getCounter(self)) >= tonumber(self.id), '[Error] before doing addForeign, you must save this instance.')
 		assert(type(obj) == 'table' or type(obj) == 'string', '[Error] "obj" should be table or string.')
 		if type(obj) == 'table' then checkType(tonumber(obj.id), 'number') end
 		
@@ -2312,9 +2346,8 @@ Model = Object:extend {
 			new_id = obj.id
 		end
 		
-		
+		local model_key = getNameIdPattern(self)
 		if fld.st == 'ONE' then
-			local model_key = getNameIdPattern(self)
 			-- record in db
 			db:hset(model_key, field, new_id)
 			-- ONE foreign value can be get by 'get' series functions
@@ -2323,11 +2356,14 @@ Model = Object:extend {
 		else
 			local key = getFieldPattern(self, field)
 			local store_module = getStoreModule(fld.st)
-			store_module.add(key, new_id, fld.fifolen or 100)			
+			store_module.add(key, new_id, fld.fifolen)
 			-- in zset, the newest member has the higher score
 			-- but use getForeign, we retrieve them from high to low, so newest is at left of result
 		end
 		
+		-- update the lastmodified_time
+		self.lastmodified_time = socket.gettime()
+		db:hset(model_key, 'lastmodified_time', self.lastmodified_time)
 		return self
 	end;
 	
@@ -2440,13 +2476,12 @@ Model = Object:extend {
 			end
 		end
 		
-		
+		local model_key = getNameIdPattern(self)
 		if fld.st == 'ONE' then
 			-- we must check the equality of self[filed] and new_id before perform delete action
-			local key = getNameIdPattern(self)
 			if self[field] == new_id then
 				-- maybe here is rude
-				db:hdel(key, field)
+				db:hdel(model_key, field)
 				self[field] = nil
 			end
 		else
@@ -2455,6 +2490,9 @@ Model = Object:extend {
 			store_module.remove(key, new_id)
 		end
 	
+		-- update the lastmodified_time
+		self.lastmodified_time = socket.gettime()
+		db:hset(model_key, 'lastmodified_time', self.lastmodified_time)
 		return self
 	end;
 	
@@ -2466,10 +2504,48 @@ Model = Object:extend {
 		assert(fld.foreign, ("[Error] This field %s is not a foreign field."):format(field))
 		assert(fld.st, ("[Error] No store type setting for this foreign field %s."):format(field))
 
-		local key = getFieldPattern(self, field)		
-		-- delete the foreign key
-		db:del(key)
+
+		local model_key = getNameIdPattern(self)
+		if fld.st == 'ONE' then
+			-- maybe here is rude
+			db:hdel(model_key, field)
+		else
+			local key = getFieldPattern(self, field)		
+			-- delete the foreign key
+			db:del(key)
+		end
 		
+		-- update the lastmodified_time
+		self.lastmodified_time = socket.gettime()
+		db:hset(model_key, 'lastmodified_time', self.lastmodified_time)
+		return self		
+	end;
+
+	deepClearForeign = function (self, field)
+		I_AM_INSTANCE(self)
+		checkType(field, 'string')
+		local fld = self.__fields[field]
+		assert(fld, ("[Error] Field %s doesn't be defined!"):format(field))
+		assert(fld.foreign, ("[Error] This field %s is not a foreign field."):format(field))
+		assert(fld.st, ("[Error] No store type setting for this foreign field %s."):format(field))
+
+		-- delete the foreign objects first
+		local fobjs = self:getForeign(field)
+		if fobjs then fobjs:del() end
+
+		local model_key = getNameIdPattern(self)
+		if fld.st == 'ONE' then
+			-- maybe here is rude
+			db:hdel(model_key, field)
+		else
+			local key = getFieldPattern(self, field)		
+			-- delete the foreign key
+			db:del(key)
+		end
+		
+		-- update the lastmodified_time
+		self.lastmodified_time = socket.gettime()
+		db:hset(model_key, 'lastmodified_time', self.lastmodified_time)
 		return self		
 	end;
 
