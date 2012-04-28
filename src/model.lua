@@ -2129,64 +2129,64 @@ Model = Object:extend {
     -- save instance's normal field
     -- before save, the instance has no id
     save = function (self, params)
-	I_AM_INSTANCE(self)
+		I_AM_INSTANCE(self)
 
-	local new_case = true
-	-- here, we separate the new create case and update case
-	-- if backwards to Model, the __indexfd is 'id'
-	local indexfd = self.__indexfd
-        assert(type(indexfd) == 'string', "[Error] the __indexfd should be string.")
+		local new_case = true
+		-- here, we separate the new create case and update case
+		-- if backwards to Model, the __indexfd is 'id'
+		local indexfd = self.__indexfd
+			assert(type(indexfd) == 'string', "[Error] the __indexfd should be string.")
 
-	-- if self has id attribute, it is an instance saved before. use id to separate two cases
-	if self.id then new_case = false end
+		-- if self has id attribute, it is an instance saved before. use id to separate two cases
+		if self.id then new_case = false end
 
-	-- update the lastmodified_time
-	self.lastmodified_time = socket.gettime()
+		-- update the lastmodified_time
+		self.lastmodified_time = socket.gettime()
 
-	local index_key = getIndexKey(self)
-	local replies
-	if new_case then
-	    local countername = getCounterName(self)
-	    local options = { watch = {countername, index_key}, cas = true, retry = 2 }
-	    replies = db:transaction(options, function(db)
-		-- increase the instance counter
-		db:incr(countername)
-		self.id = db:get(countername)
-		local model_key = getNameIdPattern(self)
-		local self, store_kv = processBeforeSave(self, params)
-		assert(not db:zscore(index_key, self[indexfd]), "[Error] save duplicate to an unique limited field, aborted!")
+		local index_key = getIndexKey(self)
+		local replies
+		if new_case then
+			local countername = getCounterName(self)
+			local options = { watch = {countername, index_key}, cas = true, retry = 2 }
+			replies = db:transaction(options, function(db)
+			-- increase the instance counter
+			db:incr(countername)
+			self.id = db:get(countername)
+			local model_key = getNameIdPattern(self)
+			local self, store_kv = processBeforeSave(self, params)
+			assert(not db:zscore(index_key, self[indexfd]), "[Error] save duplicate to an unique limited field, aborted!")
 
-		db:zadd(index_key, self.id, self[indexfd])
-		-- update object hash store key
-		db:hmset(model_key, unpack(store_kv))
-	    end)
-	else
-	    -- update case
-	    assert(tonumber(getCounter(self)) >= tonumber(self.id), '[Error] @save - invalid id.')
-	    -- in processBeforeSave, there is no redis action
-	    local self, store_kv = processBeforeSave(self, params)
-	    local model_key = getNameIdPattern(self)
+			db:zadd(index_key, self.id, self[indexfd])
+			-- update object hash store key
+			db:hmset(model_key, unpack(store_kv))
+			end)
+		else
+			-- update case
+			assert(tonumber(getCounter(self)) >= tonumber(self.id), '[Error] @save - invalid id.')
+			-- in processBeforeSave, there is no redis action
+			local self, store_kv = processBeforeSave(self, params)
+			local model_key = getNameIdPattern(self)
 
-	    local options = { watch = {index_key}, cas = true, retry = 2 }
-	    replies = db:transaction(options, function(db)
-		local score = db:zscore(index_key, self[indexfd])
-		assert(score == self.id or score == nil, "[Error] save duplicate to an unique limited field, aborted!")
-		-- update __index score and member
-		db:zadd(index_key, self.id, self[indexfd])
-		-- update object hash store key
-		db:hmset(model_key, unpack(store_kv))
-	    end)
-	end
-	    
-	-- make fulltext indexes
-	if isUsingFulltextIndex(self) then
-	    makeFulltextIndexes(self)
-	end
-	if isUsingRuleIndex(self) then
-	    updateIndexByRules(self, 'save')
-	end
+			local options = { watch = {index_key}, cas = true, retry = 2 }
+			replies = db:transaction(options, function(db)
+			local score = db:zscore(index_key, self[indexfd])
+			assert(score == self.id or score == nil, "[Error] save duplicate to an unique limited field, aborted!")
+			-- update __index score and member
+			db:zadd(index_key, self.id, self[indexfd])
+			-- update object hash store key
+			db:hmset(model_key, unpack(store_kv))
+			end)
+		end
+			
+		-- make fulltext indexes
+		if isUsingFulltextIndex(self) then
+			makeFulltextIndexes(self)
+		end
+		if isUsingRuleIndex(self) then
+			updateIndexByRules(self, 'save')
+		end
 
-	return self
+		return self
     end;
     
     -- partially update function, once one field
