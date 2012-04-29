@@ -158,7 +158,7 @@ local Upload = Model:extend {
 				-- store to db
 				-- file_instance:save()
 				-- fix the id sequence
-				file_instance.id = file_instance.id + i - 1
+				-- file_instance.id = file_instance.id + i - 1
 				file_objs:append(file_instance)
 			end
 		end
