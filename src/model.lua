@@ -1596,12 +1596,6 @@ Model = Object:extend {
 					-- print(('[Warning] object %s is invalid when filter.'):format(obj.id or 'nil'))
 				end
 			end
-<<<<<<< HEAD
-			if not isValidInstance(obj) then print("[Error] object must not be empty."); return query_set end
-			local fields = obj.__fields
-			assert(not isFalse(fields), "[Error] object's description table must not be blank.")
-			
-=======
 		end
 		
 		--DEBUG('all_ids', all_ids)
@@ -1612,7 +1606,6 @@ Model = Object:extend {
 		else
 			-- make partially get value containing 'id' default
 			local qfs = {'id'}
->>>>>>> pipeline
 			if is_query_table then
 				for k, _ in pairs(query_args) do
 					tinsert(qfs, k)
@@ -1813,28 +1806,11 @@ Model = Object:extend {
 		I_AM_CLASS_OR_INSTANCE(self)
 		checkType(key, 'string')
 		local custom_key = self:isClass() and getCustomKey(self, key) or getCustomIdKey(self, key)
-<<<<<<< HEAD
-
-		if not db:exists(custom_key) then print('[Warning] @addCustomMember - This custom key does not exist.'); end
-		local store_type = db:type(custom_key) ~= 'none' and db:type(custom_key) or stype
-		if store_type == 'string' then
-			db:set(custom_key, val)
-		elseif store_type == 'list' then
-			rdlist.append(custom_key, val)
-		elseif store_type == 'set' then
-			rdset.add(custom_key, val)
-		elseif store_type == 'zset' then
-			rdzset.add(custom_key, val, score)
-		elseif store_type == 'hash' then
-			rdhash.add(custom_key, val)
-		end
-=======
 		
 		if not db:exists(custom_key) then print('[Warning] @addCustomMember - This custom key does not exist.'); end
 		local store_type = db:type(custom_key) ~= 'none' and db:type(custom_key) or stype
 		local store_module = getStoreModule(store_type)
 		return store_module.append(custom_key, val)
->>>>>>> pipeline
 		
 	end;
 	

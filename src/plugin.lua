@@ -10,7 +10,9 @@ function persist(plugin_name, args)
 	assert(type(args._tag) == 'string', "[Error] @plugin persist - args._tag should be string.")
 
 	-- use pluto to persist
-	local buf = pluto.persist({}, args)
+	-- here, must use deepCopy to remove all the metatables in args
+	-- pluto now can not process those metatables correctly, will report "[Error] Attempt to persist a C function."
+	local buf = pluto.persist({}, table.deepCopy(args))
 	
 	-- store to db
 	local db = BAMBOO_DB
@@ -26,6 +28,6 @@ function unpersist(plugin_name, _tag)
 	local buf = db:hget(PLUGIN_ARGS_DBKEY, format("%s:%s", plugin_name, _tag))
 	local tbl = pluto.unpersist({}, buf)
 	assert(type(tbl) == 'table', "[Error] @plugin unpersist - unpersisted result should be table.")
-	
+	fptable(tbl)
 	return tbl
 end
