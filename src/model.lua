@@ -1163,9 +1163,14 @@ end
 local addIndexToManager = function (self, query_str_iden, obj_list)
 	local manager_key = "_index_manager:" .. self.__name
 	-- add to index manager
+	-- if re enter this function, this line will return nil
 	rdzset.add(manager_key, query_str_iden)
+
+	-- if re enter this function, this line will return the original score of this rule
 	local score = db:zscore(manager_key, query_str_iden)
 	local item_key = ('_RULE:%s:%s'):format(self.__name, score)
+	-- we have plenty reasons to delete this rule key for new index data
+	db:del(item_key)
 	-- generate the index item, use list
 	db:rpush(item_key, unpack(obj_list))
 	-- set expiration to each index item
@@ -1510,7 +1515,7 @@ Model = Object:extend {
 		local is_using_rule_index = isUsingRuleIndex(self)
 		if is_using_rule_index then
 			if type(query_args) == 'function' then
-				local upvalues = collectRuleFunctionUpvalues(query_args)
+				collectRuleFunctionUpvalues(query_args)
 			                                   
 			end
 			-- make query identification string
