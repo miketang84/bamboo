@@ -1267,6 +1267,7 @@ QuerySet = function (list)
 	
 	return query_set
 end
+_G['QuerySet'] = QuerySet
 
 ------------------------------------------------------------------------
 -- Model Define
