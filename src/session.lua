@@ -4,7 +4,6 @@ require 'md5'
 require 'posix'
 
 local UUID_TYPE = 'random'
-local SMALL_EXPIRE_TIME = 3600*24		    -- one day
 local PID = tonumber(posix.getpid().pid)
 local HOSTID = posix.hostid()
 local RNG_BYTES = 8 						-- 64 bits of randomness should be good
@@ -48,7 +47,7 @@ end
 
 
 local makeExpires = function (seconds)
-    return os.date("%a, %d-%b-%Y %X GMT", os.time() + (seconds or SMALL_EXPIRE_TIME))
+    return os.date("%a, %d-%b-%Y %X GMT", os.time() + seconds)
 end
 
 
@@ -88,7 +87,7 @@ local manuSessionIdHttp = function (req)
 
     if not ident then
         ident = makeSessionId()
-        local cookie = makeSessionCookie(ident, bamboo.config.expiration)
+        local cookie = makeSessionCookie(ident, bamboo.config.expiration or bamboo.SESSION_LIFE)
 
         req.headers['set-cookie'] = cookie
         req.headers['cookie'] = cookie
@@ -98,6 +97,41 @@ local manuSessionIdHttp = function (req)
     return ident
 end
 
+local setStructure = function (session_key, k, v, st)
+	local ext_key = ("%s:%s:%s"):format(session_key, k, st)
+
+	if st == 'list' then
+		rdlist.save(ext_key, v)
+		db:hset(session_key, k, "__list__")
+	elseif st == 'set' then
+		rdset.save(ext_key, v)
+		db:hset(session_key, k, "__set__")
+	elseif st == 'zset' then
+		rdzset.save(ext_key, v)
+		db:hset(session_key, k, "__zset__")
+	else
+		error("[Error] @Session:setKey - st must be one of 'string', 'list', 'set' or 'zset'")
+	end
+
+end
+
+-- get the structure value according to string agent
+local getStructure = function (session_key, k, v)
+	local ext_key
+	local ext_val = v
+	if v == "__list__" then
+		ext_key = ("%s:%s:list"):format(session_key, k)
+		ext_val = rdlist.retrieve(ext_key)
+	elseif v == "__set__" then
+		ext_key = ("%s:%s:set"):format(session_key, k)
+		ext_val = rdset.retrieve(ext_key)
+	elseif v == "__zset__" then
+		ext_key = ("%s:%s:zset"):format(session_key, k)
+		ext_val = rdzset.retrieve(ext_key)
+	end
+	
+	return ext_val
+end
 
 
 local Session = Object:extend {
@@ -106,13 +140,16 @@ local Session = Object:extend {
     -- nothing to do
 	init = function (self) return self end;
 
-    set = function (self, req)
+    set = function (self)
         local session_key = PREFIX + req.session_id
         if not db:hexists(session_key, 'session_id') then
             db:hset(session_key, 'session_id', req.session_id)
         end
 
-        local session = Session:get(req.session_id)
+        local session = db:hgetall(session_key)
+        for k, v in pairs(session) do
+			session[k] = getStructure(session_key, k, v)
+        end
         -- in session, we could not use User model to record something,
 		-- because session is lower api, and shouldn't be limited as User model
         if session['user_id'] then
@@ -126,12 +163,8 @@ local Session = Object:extend {
 			
         end
 		
-		local expiration
-		if session['expiration'] then
-			expiration = session.expiration
-		end
-
-        db:expire(session_key, expiration or bamboo.config.expiration or SMALL_EXPIRE_TIME)
+		local expiration = session.expiration or bamboo.config.expiration or bamboo.SESSION_LIFE
+        db:expire(session_key, expiration)
         req['session'] = session
 
         return true
@@ -141,21 +174,11 @@ local Session = Object:extend {
         local session_key = PREFIX + (session_id or req.session_id)
         local session_t = db:hgetall(session_key)
 
-        local ext_key
         for k, v in pairs(session_t) do
-			if v == "__list__" then
-				ext_key = ("%s:%s:list"):format(session_key, k)
-				session_t[k] = rdlist.retrieve(ext_key)
-			elseif v == "__set__" then
-				ext_key = ("%s:%s:set"):format(session_key, k)
-				session_t[k] = rdset.retrieve(ext_key)
-			elseif v == "__zset__" then
-				ext_key = ("%s:%s:zset"):format(session_key, k)
-				session_t[k] = rdzset.retrieve(ext_key)
-			end
+			session_t[k] = getStructure(session_key, k, v)
         end
 
-        db:expire(session_key, bamboo.config.expiration or SMALL_EXPIRE_TIME)
+        db:expire(session_key, session_t.expiration or bamboo.config.expiration or bamboo.SESSION_LIFE)
         return session_t
     end;
 
@@ -173,35 +196,17 @@ local Session = Object:extend {
         checkType(key, 'string')
         local session_key = PREFIX + (session_id or req.session_id)
         local st = st or 'string'
-		local ext_key = ("%s:%s:%s"):format(session_key, key, st)
-
-        --local session_t = db:hgetall(session_key)
-        --session_t[key] = value
-        --for k, v in pairs(session_t) do
-        --end
 
 		if st == 'string' then
-			assert( isStrOrNum(value),
+			assert( isNumOrStr(value),
 				"[Error] @Session:setKey - Value should be string or number.")
 			db:hset(session_key, key, value)
 		else
-			-- checkType(val, 'table')
-			if st == 'list' then
-				rdlist.save(ext_key, value)
-				db:hset(session_key, key, "__list__")
-			elseif st == 'set' then
-				rdset.save(ext_key, value)
-				db:hset(session_key, key, "__set__")
-			elseif st == 'zset' then
-				rdzset.save(ext_key, value)
-				db:hset(session_key, key, "__zset__")
-			else
-				error("[Error] @Session:setKey - st must be one of 'string', 'list', 'set' or 'zset'")
-			end
+			setStructure(session_key, key, value, st)
 		end
 
-        --req.session = session_t
-        db:expire(session_key, bamboo.config.expiration or SMALL_EXPIRE_TIME)
+		local expiration = db:hget(session_key, 'expiration') or bamboo.config.expiration or bamboo.SESSION_LIFE
+        db:expire(session_key, expiration)
         return true
     end;
 
@@ -209,21 +214,13 @@ local Session = Object:extend {
         checkType(key, 'string')
         local session_key = PREFIX + (session_id or req.session_id)
 
-		local ext_key
 		local ovalue = db:hget(session_key, key)
-		if ovalue == "__list__" then
-			ext_key = ("%s:%s:list"):format(session_key, k)
-			ovalue = rdlist.retrieve(ext_key)
-		elseif ovalue == "__set__" then
-			ext_key = ("%s:%s:set"):format(session_key, k)
-			ovalue = rdset.retrieve(ext_key)
-		elseif ovalue == "__zset__" then
-			ext_key = ("%s:%s:zset"):format(session_key, k)
-			ovalue = rdzset.retrieve(ext_key)
-		end
+		local nvalue = getStructure(session_key, key, ovalue)
 
-		db:expire(session_key, bamboo.config.expiration or SMALL_EXPIRE_TIME)
-		return ovalue
+		local expiration = db:hget(session_key, 'expiration') or bamboo.config.expiration or bamboo.SESSION_LIFE
+        db:expire(session_key, expiration)
+		
+		return nvalue
     end;
 
     delKey = function (self, key, session_id)
@@ -231,13 +228,14 @@ local Session = Object:extend {
         local session_key = PREFIX + (session_id or req.session_id)
         req.session[key] = nil
 
+		local expiration = db:hget(session_key, 'expiration') or bamboo.config.expiration or bamboo.SESSION_LIFE
+        db:expire(session_key, expiration)
         return db:hdel(session_key, key)
     end;
 
     del = function (self, session_id)
         checkType(session_id, 'string')
-        local session_key = PREFIX+session_id
-        -- req.session = nil
+        local session_key = PREFIX + (session_id or req.session_id)
 
         return db:del(session_key)
     end;

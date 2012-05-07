@@ -25,8 +25,13 @@ compiled_views_locals = {}
 WIDGETS = {}
 require 'bamboo.widget'
 
+-- for session life time
+SESSION_LIFE = 3600 * 24
 -- for cache life time
 CACHE_LIFE = 1800
+-- for rule index life time
+RULE_LIFE = 1800
+
 -- global URLS definition
 URLS = {}
 URLS_STATES = {}

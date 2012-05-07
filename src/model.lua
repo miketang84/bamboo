@@ -1105,7 +1105,7 @@ local addInstanceToIndexOnRule = function (self, qstr)
 	--DEBUG(flag)
 	if flag then
 		db:rpush(item_key, self.id)	
-		db:expire(item_key, bamboo.config.expiration or bamboo.CACHE_LIFE)
+		db:expire(item_key, bamboo.config.rule_expiration or bamboo.RULE_LIFE)
 	end
 	return flag
 end
@@ -1125,7 +1125,7 @@ local updateInstanceToIndexOnRule = function (self, qstr)
 	if flag then
 		db:rpush(item_key, self.id)	
 	end
-	db:expire(item_key, bamboo.config.expiration or bamboo.CACHE_LIFE)
+	db:expire(item_key, bamboo.config.rule_expiration or bamboo.RULE_LIFE)
 	return flag
 end
 
@@ -1141,7 +1141,7 @@ local delInstanceToIndexOnRule = function (self, qstr)
 
 	local flag = canInstanceFitQueryRule(self, qstr)
 	db:lrem(item_key, 0, self.id)
-	db:expire(item_key, bamboo.config.expiration or bamboo.CACHE_LIFE)
+	db:expire(item_key, bamboo.config.rule_expiration or bamboo.RULE_LIFE)
 	return flag
 end
 
@@ -1175,7 +1175,7 @@ local addIndexToManager = function (self, query_str_iden, obj_list)
 	-- generate the index item, use list
 	db:rpush(item_key, unpack(obj_list))
 	-- set expiration to each index item
-	db:expire(item_key, bamboo.config.expiration or bamboo.CACHE_LIFE)
+	db:expire(item_key, bamboo.config.rule_expiration or bamboo.RULE_LIFE)
 	
 end
 
@@ -1196,7 +1196,7 @@ local getIndexFromManager = function (self, query_str_iden, getnum)
 	print(item_key)
 	
 	-- update expiration
-	db:expire(item_key, bamboo.config.expiration or bamboo.CACHE_LIFE)
+	db:expire(item_key, bamboo.config.rule_expiration or bamboo.RULE_LIFE)
 	if not getnum then
 		-- return a list
 		return List(db:lrange(item_key, 0, -1))
@@ -2450,7 +2450,7 @@ Model = Object:extend {
 		if isFalse(self[field]) then return nil end
 		
 		local new_id
-		if isStrOrNum(obj) then
+		if isNumOrStr(obj) then
 			-- obj is id or anystring
 			new_id = tostring(obj)
 		else
@@ -2550,7 +2550,7 @@ Model = Object:extend {
 		if isFalse(self[field]) then return nil end
 
 		local new_id
-		if isStrOrNum(obj) then
+		if isNumOrStr(obj) then
 			-- obj is id or anystring
 			new_id = tostring(obj)
 		else
