@@ -182,12 +182,19 @@ local Session = Object:extend {
         return session_t
     end;
 
-	hashReversely = function (self, user, session_id)
+	userHash = function (self, user, session_id)
 		local user_id = format("%s:%s", user:classname(), user.id)
 		db:hset('_users_sessions', user_id, session_id)
 	end;
+	
+	getUserHash = function (self, user)
+		local user = user or req.uesr
+		assert(user, '[Error] @Session getUserHash - user is nil.')
+		local user_id = format("%s:%s", user:classname(), user.id)
+		return db:hget('_users_sessions', user_id)
+	end;
 
-	delHashReversely = function (self, user)
+	delUserHash= function (self, user)
 		local user_id = format("%s:%s", user:classname(), user.id)
 		db:hdel('_users_sessions', user_id)
 	end;
