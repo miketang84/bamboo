@@ -53,7 +53,7 @@ end
 
 local makeSessionCookie = function (ident, seconds)
     return ('session=%s; version=1; path=/; expires=%s'):format(
-        (ident or makeSessionId()), makeExpires(seconds))
+        (ident or makeSessionId()), seconds and makeExpires(seconds) or '')  --makeExpires(seconds)
 end
 
 local function parseSessionId (cookie)
@@ -87,12 +87,39 @@ local manuSessionIdHttp = function (req)
 
     if not ident then
         ident = makeSessionId()
-        local cookie = makeSessionCookie(ident, bamboo.config.expiration or bamboo.SESSION_LIFE)
+        local cookie = makeSessionCookie(ident, bamboo.config.expiration)
 
         req.headers['set-cookie'] = cookie
         req.headers['cookie'] = cookie
-    end
 
+	else
+		if bamboo.config.expiration then
+			local session_key = PREFIX + ident
+			local custom_expiration = nil
+			if bamboo.config.open_custom_expiration then
+				custom_expiration = db:hget(session_key, 'expiration')
+			end
+			
+			if bamboo.config.relative_expiration then
+				-- for relative expiration, we need keep the expiration field in session, if have
+				-- update the same cookie and session for every visit
+				local cookie = makeSessionCookie(ident, custom_expiration or bamboo.config.expiration)
+				req.headers['set-cookie'] = cookie
+				req.headers['cookie'] = cookie
+		
+			else
+				-- for absolute expiration
+				if custom_expiration then
+					local cookie = makeSessionCookie(ident, custom_expiration)
+					req.headers['set-cookie'] = cookie
+					req.headers['cookie'] = cookie
+					-- clear the custom expiration flag, for absolute expiration, we only need it once
+					db:hdel(session_key, 'expiration')
+				end
+			end
+		end
+	end
+	
     req.session_id = ident
     return ident
 end
@@ -178,8 +205,10 @@ local Session = Object:extend {
 			session_t[k] = getStructure(session_key, k, v)
         end
 
-        db:expire(session_key, session_t.expiration or bamboo.config.expiration or bamboo.SESSION_LIFE)
-        return session_t
+		if bamboo.config.relative_expiration then
+			db:expire(session_key, session_t.expiration or bamboo.config.expiration or bamboo.SESSION_LIFE)
+        end
+		return session_t
     end;
 
 	userHash = function (self, user, session_id)
@@ -212,8 +241,11 @@ local Session = Object:extend {
 			setStructure(session_key, key, value, st)
 		end
 
-		local expiration = db:hget(session_key, 'expiration') or bamboo.config.expiration or bamboo.SESSION_LIFE
-        db:expire(session_key, expiration)
+		if bamboo.config.relative_expiration then
+			local expiration = db:hget(session_key, 'expiration') or bamboo.config.expiration or bamboo.SESSION_LIFE
+			db:expire(session_key, expiration)
+        end
+
         return true
     end;
 
@@ -224,8 +256,10 @@ local Session = Object:extend {
 		local ovalue = db:hget(session_key, key)
 		local nvalue = getStructure(session_key, key, ovalue)
 
-		local expiration = db:hget(session_key, 'expiration') or bamboo.config.expiration or bamboo.SESSION_LIFE
-        db:expire(session_key, expiration)
+		if bamboo.config.relative_expiration then
+			local expiration = db:hget(session_key, 'expiration') or bamboo.config.expiration or bamboo.SESSION_LIFE
+			db:expire(session_key, expiration)
+        end
 		
 		return nvalue
     end;
@@ -235,8 +269,10 @@ local Session = Object:extend {
         local session_key = PREFIX + (session_id or req.session_id)
         req.session[key] = nil
 
-		local expiration = db:hget(session_key, 'expiration') or bamboo.config.expiration or bamboo.SESSION_LIFE
-        db:expire(session_key, expiration)
+		if bamboo.config.relative_expiration then
+			local expiration = db:hget(session_key, 'expiration') or bamboo.config.expiration or bamboo.SESSION_LIFE
+			db:expire(session_key, expiration)
+        end
         return db:hdel(session_key, key)
     end;
 
@@ -267,6 +303,8 @@ local Session = Object:extend {
 
 	-- set expiration for each session
 	setExpiration = function (self, seconds, session_id)
+		assert(bamboo.config.open_custom_expiration, 
+			"[Error] @ setExpiration - for using this function, you must set 'open_custom_expiration=true' in settings.lua firstly!")
 		assert(seconds, "[Error] missing params seconds.")
 		local session_key = PREFIX + (session_id or req.session_id)
 		
