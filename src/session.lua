@@ -218,7 +218,7 @@ Session = Object:extend {
 		if bamboo.config.user_single_login then
 			local sid = db:hget('_users_sessions', user_id)
 			-- if logined before, force to logout it 
-			if sid then
+			if sid and sid ~= session_id then
 				Session:del(sid)
 			end
 		end
