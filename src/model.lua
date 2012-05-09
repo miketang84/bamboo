@@ -1051,8 +1051,12 @@ end
 
 local checkLogicRelation = function (self, obj, query_args, logic_choice)
 	-- NOTE: query_args can't contain [1]
+	-- here, obj may be object or string 
+	-- when obj is string, query_args must be function;
+	-- when query_args is table, obj must be table.
 	local flag = logic_choice
 	if type(query_args) == 'table' then
+		assert(isValidInstance(obj), '[Error] @checkLogicRelation - obj must be table when query_args is table.')
 		for k, v in pairs(query_args) do
 			-- to redundant query condition, once meet, jump immediately
 			if not self.__fields[k] then flag=false; break end
@@ -1595,14 +1599,14 @@ Model = Object:extend {
 				local obj = objs[i]
 				--DEBUG(obj)
 				-- check the object's legalery, only act on valid object
-				if isValidInstance(obj) then
-					local flag = checkLogicRelation(self, obj, query_args, logic_choice)
-					
-					-- if walk to this line, means find one 
-					if flag then
-						tinsert(query_set, obj)
-					end
+				--if isValidInstance(obj) then
+				local flag = checkLogicRelation(self, obj, query_args, logic_choice)
+				
+				-- if walk to this line, means find one 
+				if flag then
+					tinsert(query_set, obj)
 				end
+				--end
 			end
 		end
 		
