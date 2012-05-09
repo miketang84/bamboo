@@ -161,7 +161,8 @@ local getStructure = function (session_key, k, v)
 end
 
 
-local Session = Object:extend {
+local Session 
+Session = Object:extend {
 	__tag = 'Object.Session';
     --__name = 'Session';
     -- nothing to do
@@ -213,6 +214,15 @@ local Session = Object:extend {
 
 	userHash = function (self, user, session_id)
 		local user_id = format("%s:%s", user:classname(), user.id)
+		-- if open user single login limitation
+		if bamboo.config.user_single_login then
+			local sid = db:hget('_users_sessions', user_id)
+			-- if logined before, force to logout it 
+			if sid then
+				Session:del(sid)
+			end
+		end
+		
 		db:hset('_users_sessions', user_id, session_id)
 	end;
 	
