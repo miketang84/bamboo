@@ -2182,6 +2182,11 @@ Model = Object:extend {
 			replies = db:transaction(options, function(db)
 			local score = db:zscore(index_key, self[indexfd])
 			assert(score == self.id or score == nil, "[Error] save duplicate to an unique limited field, aborted!")
+			
+			-- if modified indexfd, score will be nil, remove the old id-indexfd pair, for later new save indexfd
+			if not score then
+				db:zremrangebyscore(index_key, self.id, self.id)
+			end
 			-- update __index score and member
 			db:zadd(index_key, self.id, self[indexfd])
 			-- update object hash store key
