@@ -1280,7 +1280,7 @@ _G['QuerySet'] = QuerySet
 
 
 Model = Object:extend {
-	__tag = 'Bamboo.Model';
+	__tag = 'Object.Model';
 	-- ATTEN: __name's value is not neccesary be equal strictly to the last word of __tag
 	__name = 'Model';
 	__desc = 'Model is the base of all models.';
@@ -1292,8 +1292,16 @@ Model = Object:extend {
 	};
 	__indexfd = "id";
 
-	-- make every object creatation from here: every object has the 'id' and 'name' fields
-	init = function (self)
+	-- make every object creatation from here: every object has the 'id', 'created_time' and 'lastmodified_time' fields
+	init = function (self, t)
+		local t = t or {}
+		local fields = self.__fields
+		
+		for field, fdt in pairs(fields) do
+			-- assign to default value if exsits
+			self[field] = t[field] or fdt.default 
+		end
+	
 		self.created_time = socket.gettime()
 		self.lastmodified_time = self.created_time
 		
@@ -2146,7 +2154,7 @@ Model = Object:extend {
 		-- here, we separate the new create case and update case
 		-- if backwards to Model, the __indexfd is 'id'
 		local indexfd = self.__indexfd
-			assert(type(indexfd) == 'string', "[Error] the __indexfd should be string.")
+		assert(type(indexfd) == 'string', "[Error] the __indexfd should be string.")
 
 		-- if self has id attribute, it is an instance saved before. use id to separate two cases
 		if self.id then new_case = false end
@@ -2217,10 +2225,23 @@ Model = Object:extend {
 		local model_key = getNameIdPattern(self)
 		assert(db:exists(model_key), ("[Error] Key %s does't exist! Can't apply update."):format(model_key))
 
+		local indexfd = self.__indexfd
+
+		
 		if new_value == nil then
-		    db:hdel(model_key, field)
+		    -- could not delete index field
+			if field ~= indexfd then
+				db:hdel(model_key, field)
+			end
 		else
 		    -- apply to db
+			-- if field is indexed, need to update the __index too
+			if field == indexfd then
+				local index_key = getIndexKey(self)
+				db:zremrangebyscore(index_key, self.id, self.id)
+				db:zadd(index_key, self.id, new_value)
+			end
+			
 		    db:hset(model_key, field, new_value)
 		end
 		-- update the lastmodified_time
