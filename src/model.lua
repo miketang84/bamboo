@@ -1,7 +1,7 @@
 module(..., package.seeall)
 local socket = require 'socket'
 
-local tinsert = table.insert
+local tinsert, tremove = table.insert, table.remove
 local format = string.format
 
 local db = BAMBOO_DB
@@ -2460,6 +2460,38 @@ Model = Object:extend {
 		end
 
 	end;    
+	
+	-- rearrange the foreign index by input list
+	rearrangeForeign = function (self, key, inlist)
+		I_AM_INSTANCE(self)
+		checkType(key, inlist, 'string', 'table')
+		local fld = self.__fields[field]
+		assert(fld, ("[Error] Field %s doesn't be defined!"):format(field))
+		assert(fld.foreign, ("[Error] This field %s is not a foreign field."):format(field))
+		assert(fld.st, ("[Error] No store type setting for this foreign field %s."):format(field))
+
+		local orig_orders = self:getForeignIds(field)
+		local new_orders = {}
+		for i, elem in ipairs(inlist) do
+			local pos = orig_orders:find(elem)
+			if pos then
+				tinsert(new_orders, elem)
+				-- remove the original element
+				tremove(orig_orders, pos)
+			end
+		end
+		
+		-- append the rest elements in foreign to the end of new_orders
+		for i, v in ipairs(orig_orders) do
+			tinsert(new_orders, v)
+		end
+		
+		local key = getFieldPattern(self, field)
+		-- override the original foreign zset value
+		rdzset.save(key, new_orders)
+		
+		return self
+	end;
 	
 	-- delelte a foreign member
 	-- obj can be instance object, also can be object's id, also can be anystring.
