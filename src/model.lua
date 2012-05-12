@@ -2473,7 +2473,7 @@ Model = Object:extend {
 		local orig_orders = self:getForeignIds(field)
 		local new_orders = {}
 		for i, elem in ipairs(inlist) do
-			local pos = orig_orders:find(elem)
+			local pos = orig_orders:find(tostring(elem))
 			if pos then
 				tinsert(new_orders, elem)
 				-- remove the original element
