@@ -2470,17 +2470,22 @@ Model = Object:extend {
 		assert(fld.foreign, ("[Error] This field %s is not a foreign field."):format(field))
 		assert(fld.st, ("[Error] No store type setting for this foreign field %s."):format(field))
 
-		local orig_orders = self:getForeignIds(field)
 		local new_orders = {}
+		local orig_orders = self:getForeignIds(field)
+		local rorig_orders = {}
+		-- make reverse hash for all ids
+		for i, v in ipairs(orig_orders) do
+			rorig_orders[tostring(v)] = i
+		end
+		-- retrieve valid elements in inlist
 		for i, elem in ipairs(inlist) do
-			local pos = orig_orders:find(tostring(elem))
+			local pos = rorig_orders[elem]  -- orig_orders:find(tostring(elem))
 			if pos then
 				tinsert(new_orders, elem)
 				-- remove the original element
 				tremove(orig_orders, pos)
 			end
 		end
-		
 		-- append the rest elements in foreign to the end of new_orders
 		for i, v in ipairs(orig_orders) do
 			tinsert(new_orders, v)
