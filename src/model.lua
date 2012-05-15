@@ -1165,7 +1165,6 @@ local updateIndexByRules = function (self, action)
 end
 
 local addIndexToManager = function (self, query_str_iden, obj_list)
-	print('enter addIndexToManager....')
 	local manager_key = "_index_manager:" .. self.__name
 	-- add to index manager
 	-- if re enter this function, this line will return nil
@@ -1196,8 +1195,6 @@ local getIndexFromManager = function (self, query_str_iden, getnum)
 		db:zrem(manager_key, query_str_iden)
 		return (not getnum) and List() or nil
 	end
-	
-	print(item_key)
 	
 	-- update expiration
 	db:expire(item_key, bamboo.config.rule_expiration or bamboo.RULE_LIFE)
