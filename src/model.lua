@@ -620,7 +620,7 @@ end;
 _G['isQuerySet'] = function (self)
 	if isList(self)
 	and rawget(self, '__spectype') == nil and self.__spectype == 'QuerySet' 
-	and self.__tag == 'Bamboo.Model'
+	and self.__tag == 'Object.Model'
 	then return true
 	else return false
 	end
@@ -1056,7 +1056,7 @@ local checkLogicRelation = function (self, obj, query_args, logic_choice)
 	-- when query_args is table, obj must be table.
 	local flag = logic_choice
 	if type(query_args) == 'table' then
-		assert(isValidInstance(obj), '[Error] @checkLogicRelation - obj must be table when query_args is table.')
+		if not isValidInstance(obj) then print('[Warning] @checkLogicRelation - obj should be valid instance when query_args is table.') end
 		for k, v in pairs(query_args) do
 			-- to redundant query condition, once meet, jump immediately
 			if not self.__fields[k] then flag=false; break end
@@ -2462,9 +2462,9 @@ Model = Object:extend {
 	end;    
 	
 	-- rearrange the foreign index by input list
-	rearrangeForeign = function (self, key, inlist)
+	rearrangeForeign = function (self, field, inlist)
 		I_AM_INSTANCE(self)
-		checkType(key, inlist, 'string', 'table')
+		assert(type(field) == 'string' and type(inlist) == 'table', '[Error] @ rearrangeForeign - parameters type error.' )
 		local fld = self.__fields[field]
 		assert(fld, ("[Error] Field %s doesn't be defined!"):format(field))
 		assert(fld.foreign, ("[Error] This field %s is not a foreign field."):format(field))
@@ -2472,6 +2472,7 @@ Model = Object:extend {
 
 		local new_orders = {}
 		local orig_orders = self:getForeignIds(field)
+		local orig_len = #orig_orders
 		local rorig_orders = {}
 		-- make reverse hash for all ids
 		for i, v in ipairs(orig_orders) do
@@ -2483,12 +2484,14 @@ Model = Object:extend {
 			if pos then
 				tinsert(new_orders, elem)
 				-- remove the original element
-				tremove(orig_orders, pos)
+				orig_orders[pos] = nil
 			end
 		end
 		-- append the rest elements in foreign to the end of new_orders
-		for i, v in ipairs(orig_orders) do
-			tinsert(new_orders, v)
+		for i = 1, orig_len do
+			if orig_orders[i] ~= nil then
+				tinsert(new_orders, v)
+			end
 		end
 		
 		local key = getFieldPattern(self, field)
