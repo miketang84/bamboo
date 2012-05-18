@@ -1827,7 +1827,7 @@ Model = Object:extend {
 		if not db:exists(custom_key) then print('[Warning] @addCustomMember - This custom key does not exist.'); end
 		local store_type = db:type(custom_key) ~= 'none' and db:type(custom_key) or stype
 		local store_module = getStoreModule(store_type)
-		return store_module.append(custom_key, val)
+		return store_module.add(custom_key, val)
 		
 	end;
 	
