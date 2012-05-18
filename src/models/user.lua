@@ -76,13 +76,14 @@ local User = Model:extend {
 		Session:setKey('user_id', self:classname() + ':' + user.id)
 		Session:userHash(user, req.session_id)
 		
+		req.user = user
 		return user
 	end;
 
 	logout = function (self)
 		-- I_AM_CLASS(self)
 		-- Class and instance can both call this function
-		Session:delUserHash(user)
+		Session:delUserHash(req.user)
 		return Session:delKey('user_id')
 	end;
 
