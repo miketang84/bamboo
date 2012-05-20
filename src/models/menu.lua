@@ -27,7 +27,7 @@ end
 
 local Menu 
 Menu = Node:extend {
-    __tag = 'Bamboo.Model.Node.Menu';
+    __tag = 'Object.Model.Node.Menu';
 	__name = 'Menu';
 	__desc = 'Menu';
 	__fields = {

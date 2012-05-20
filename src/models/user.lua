@@ -8,7 +8,7 @@ local socket = require 'socket'
 local Perm = require 'bamboo.models.permission'
 
 local User = Model:extend {
-    __tag = 'Bamboo.Model.User';
+    __tag = 'Object.Model.User';
 	__name = 'User';
 	__desc = 'Basic user definition.';
 	__indexfd = "username";

@@ -4,7 +4,7 @@ module(..., package.seeall)
 local Model = require 'bamboo.model'
 
 local Message = Model:extend {
-    __tag = 'Bamboo.Model.Message';
+    __tag = 'Object.Model.Message';
 	__name = 'Message';
 	__desc = 'General message definition.';
 	__fields = {

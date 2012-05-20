@@ -97,7 +97,7 @@ end
 
 
 local Upload = Model:extend {
-	__tag = 'Bamboo.Model.Upload';
+	__tag = 'Object.Model.Upload';
 	__name = 'Upload';
 	__desc = "User's upload files.";
 	__indexfd = "path";

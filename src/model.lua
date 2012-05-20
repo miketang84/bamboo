@@ -6,6 +6,7 @@ local format = string.format
 
 local db = BAMBOO_DB
 
+
 local List = require 'lglib.list'
 local rdstring = require 'bamboo.redis.string'
 local rdlist = require 'bamboo.redis.list'
@@ -15,8 +16,12 @@ local rdfifo = require 'bamboo.redis.fifo'
 local rdzfifo = require 'bamboo.redis.zfifo'
 local rdhash = require 'bamboo.redis.hash'
 
+
 local getModelByName  = bamboo.getModelByName
 local dcollector= 'DELETED:COLLECTOR'
+
+local QuerySet
+local Model
 
 -----------------------------------------------------------------
 local rdactions = {
@@ -293,7 +298,6 @@ local getFromRedis = function (self, model_key)
 end 
 
 -- 
-local QuerySet
 
 local getFromRedisPipeline = function (self, ids)
 	local key_list = makeModelKeyList(self, ids)
@@ -1254,21 +1258,7 @@ end
 ------------------------------------------------------------------------
 -- 
 ------------------------------------------------------------------------
-local QuerySetMeta = {__spectype='QuerySet'}
-local Model
 
-QuerySet = function (list)
-	local list = list or List()
-	-- create a query set	
-	-- add it to fit the check of isClass function
-	if not getmetatable(QuerySetMeta) then
-		QuerySetMeta = setProto(QuerySetMeta, Model)
-	end
-	local query_set = setProto(list, QuerySetMeta)
-	
-	return query_set
-end
-_G['QuerySet'] = QuerySet
 
 ------------------------------------------------------------------------
 -- Model Define
@@ -2913,5 +2903,18 @@ Model = Object:extend {
 
 }
 
+local QuerySetMeta = setProto({__spectype='QuerySet'}, Model)
+QuerySet = function (list)
+	local list = list or List()
+	-- create a query set	
+	-- add it to fit the check of isClass function
+--	if not getmetatable(QuerySetMeta) then
+--		QuerySetMeta = setProto(QuerySetMeta, Model)
+--	end
+	local query_set = setProto(list, QuerySetMeta)
+	
+	return query_set
+end
+_G['QuerySet'] = QuerySet
 
 return Model

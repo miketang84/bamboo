@@ -4,7 +4,7 @@ local Upload = require 'bamboo.models.upload'
 local Session = require 'bamboo.session'
 
 local Image = Upload:extend {
-	__tag = 'Bamboo.Model.Upload.Image';
+	__tag = 'Object.Model.Upload.Image';
 	__name = 'Image';
 	__desc = 'Generitic Image definition';
 	__indexfd = 'path';

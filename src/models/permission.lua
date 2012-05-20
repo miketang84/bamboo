@@ -4,7 +4,7 @@ local Model = require 'bamboo.model'
 
 local Permission 
 Permission = Model:extend {
-    __tag = 'Bamboo.Model.Permission';
+    __tag = 'Object.Model.Permission';
 	__name = 'Permission';
 	__desc = 'Permission is the basic tree like model';
 	__indexfd = 'name';

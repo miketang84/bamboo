@@ -6,7 +6,7 @@ local getModelByName = bamboo.getModelByName
 
 local Node 
 Node = Model:extend {
-    __tag = 'Bamboo.Model.Node';
+    __tag = 'Object.Model.Node';
 	__name = 'Node';
 	__desc = 'Node is the basic tree like model';
 	__fields = {
