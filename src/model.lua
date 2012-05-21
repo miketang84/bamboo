@@ -1286,7 +1286,12 @@ Model = Object:extend {
 		
 		for field, fdt in pairs(fields) do
 			-- assign to default value if exsits
-			self[field] = t[field] or fdt.default 
+			local tmp = t[field] or fdt.default
+			if type(tmp) == 'function' then
+				self[field] = tmp()
+			else
+				self[field] = tmp
+			end
 		end
 	
 		self.created_time = socket.gettime()
