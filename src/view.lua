@@ -71,7 +71,6 @@ local VIEW_ACTIONS = {
             block_content = block:sub(3, -3):trim()
             while true do
             	i, j, matched = this_page:find("(%b{})", j + 1)
---            	DEBUG('-----', i, j, matched)
             	
             	if i == nil then break end
             	part = matched:match('^{%[%s*======*%s*' + block_content +
@@ -137,7 +136,17 @@ local VIEW_ACTIONS = {
 
 }
 
+local function inheritate(tmpl)
+	-- if there is inherited tag in page, that tag must be put in the front of this file
+	local block = tmpl:match("(%b{})")
+--	local headtwo = block:sub(1,2)
+	local block_content = block:sub(3, -3)
+--	assert(headtwo == '{:', 'The inheriate tag must be put in front of the page.')
 
+	local act = VIEW_ACTIONS['{:']
+	return act(block_content, tmpl)
+end
+            
 -- NOTE: the instance of this class is a function
 local View = Object:extend {
     __tag = "Bamboo.View";
@@ -184,19 +193,11 @@ local View = Object:extend {
 	preprocess = function(tmpl)
 
 		-- restrict the {: :} at the head of template file, from the first char
-		if tmpl:match('^{:.-:}%s*\n') then
-            -- if there is inherited tag in page, that tag must be put in the front of this file
-            local block = tmpl:match("(%b{})")
-            local headtwo = block:sub(1,2)
-            local block_content = block:sub(3, -3)
-            assert(headtwo == '{:', 'The inheriate tag must be put in front of the page.')
-
-            local act = VIEW_ACTIONS[headtwo]
-            return act(block_content, tmpl)
-        else
-
-            return tmpl
+		while tmpl:match('^{:.-:}%s*\n') do
+            tmpl = inheritate(tmpl)
         end
+		
+		return tmpl
     end;
 
     ------------------------------------------------------------------------

@@ -2504,7 +2504,10 @@ Model = Object:extend {
 		assert(fld.foreign, ("[Error] This field %s is not a foreign field."):format(field))
 		assert(fld.st, ("[Error] No store type setting for this foreign field %s."):format(field))
 		--assert( fld.foreign == 'ANYSTRING' or obj.id, "[Error] This object doesn't contain id, it's not a valid object!")
-		assert(fld.foreign == 'ANYSTRING' or fld.foreign == 'UNFIXED' or (type(obj) == 'table' and fld.foreign == getClassName(obj)), ("[Error] This foreign field '%s' can't accept the instance of model '%s'."):format(field, getClassName(obj) or tostring(obj)))
+		assert(fld.foreign == 'ANYSTRING' 
+			or fld.foreign == 'UNFIXED' 
+			or (type(obj) == 'table' and fld.foreign == getClassName(obj)), 
+			("[Error] This foreign field '%s' can't accept the instance of model '%s'."):format(field, getClassName(obj) or tostring(obj)))
 
 		-- if self[field] is nil, it must be wrong somewhere
 		if isFalse(self[field]) then return nil end
