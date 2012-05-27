@@ -149,7 +149,7 @@ end
             
 -- NOTE: the instance of this class is a function
 local View = Object:extend {
-    __tag = "Bamboo.View";
+    __tag = "Object.View";
     __name = 'View';
     ------------------------------------------------------------------------
     --
@@ -158,8 +158,9 @@ local View = Object:extend {
     -- @param name:  the name of the template file
     -- @return:  a function, this function can receive a table to finish the rendering procedure
     ------------------------------------------------------------------------
-    init = function (self, name)
-        local tmpl_dir = findTemplDir(name)
+    init = function (self, name, is_inline)
+        local tmpl
+		-- local tmpl_dir = findTemplDir(name)
         -- print('Template file dir:', tmpl_dir, name)
 
 		if bamboo.config.PRODUCTION then
@@ -171,19 +172,35 @@ local View = Object:extend {
             if view and type(view) == 'function' then
             	return view
             end
-            -- load file
-            local tmpf = io.loadFile(tmpl_dir, name)
-            tmpf = self.preprocess(tmpf)
-            view = self.compileView(tmpf, name)
+			
+			-- passing tmpl directly
+			if is_inline == 'inline' then
+				-- here, name is the content of html fragment
+				tmpl = name
+			else
+				-- load file
+				local tmpl_dir = findTemplDir(name)
+				tmpl = io.loadFile(tmpl_dir, name)
+            end
+			tmpl = self.preprocess(tmpl)
+            view = self.compileView(tmpl, name)
             -- add to cache
             bamboo.compiled_views[name] = view
             return view
         else
             return function (params)
-                local tmpf = io.loadFile(tmpl_dir, name)
-                assert(tmpf, "Template " + tmpl_dir + name + " does not exist.")
-                tmpf = self.preprocess(tmpf)
-                return self.compileView(tmpf, name)(params)
+				-- passing tmpl directly
+				if is_inline == 'inline' then
+					-- here, name is the content of html fragment
+					tmpl = name
+				else
+					local tmpl_dir = findTemplDir(name)
+					tmpl = io.loadFile(tmpl_dir, name)
+					assert(tmpl, "Template " + tmpl_dir + name + " does not exist.")
+				end
+                
+                tmpl = self.preprocess(tmpl)
+                return self.compileView(tmpl, name)(params)
             end
         end
 
