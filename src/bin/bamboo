@@ -18,6 +18,8 @@ signal.signal("SIGINT", function (...)
     end
 end)
 
+signal.signal("SIGCLD", 'ignore')
+
 ------------------------------------------------------------------------------
 -- load configuration
 local config = {}
