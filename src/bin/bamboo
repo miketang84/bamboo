@@ -37,7 +37,7 @@ function parse_args(arg)
 	-- make the liner command line args become key value pairs
 	local function beatArgs(arg)
 		for i, opt in ipairs(arg) do
-		    local token = opt:match("\-+([a-z\-_]+)")
+		    local token = opt:match("%-+([a-z%-_]+)")
 
 		    if token then
 		        last_opt = token
@@ -136,15 +136,45 @@ local function run_tests(test_dir, full)
     end
 end
 
-local function wait_on_children()
+local function wait_on_children(app_dir, targets)
     local dead_count = 0
     local child_count = 0
     local p, msg, ret
 
-    repeat
-        p, msg, ret = posix.wait(-1)
-    until p
+	if config.auto_reload_when_code_change then
+		-------------------------------------------------------
+		local inotify = require 'inotify'
+		local handle = inotify.init()
+		while true do
+			local killed = {}
+			-- watch my home for new files and renames
+			local wd = handle:addwatch('.', inotify.IN_CREATE, inotify.IN_MOVE, inotify.IN_MODIFY, inotify.IN_DELETE)
+			local events = handle:read()
 
+			for _, ev in ipairs(events) do
+				if ev.name:endsWith('.lua') then
+					print(ev.name .. ' was changed.')
+					for script, pid in pairs(SCRIPT_PIDS) do
+						print(script, pid)
+						killed[script] = (posix.kill(pid, 9) == 0)
+					end
+				end
+			end
+
+			for _, script in ipairs(targets) do
+				if killed[script] then
+					killed[script] = false
+					run_script(app_dir, script)
+				end
+			end	
+			-------------------------------------------------------
+		end
+	else
+		repeat
+			p, msg, ret = posix.wait(-1)
+		until p
+	end
+    
     for script, pid in pairs(SCRIPT_PIDS) do
         if p == pid then
             print("CHILD DIED " .. script .. " PID " .. p ..":", msg)
@@ -249,7 +279,7 @@ local startProcesses = function (settings)
 		end
 
 		run_app(app_dir, targets)
-		local script, pid = wait_on_children()
+		local script, pid = wait_on_children(app_dir, targets)
 		local tick = os.time()
 
 		if tick - script_times[script] < 1 then
@@ -264,6 +294,7 @@ local startProcesses = function (settings)
 	if config.PRODUCTION then
 		while true do runit() end
 	else
+		os.execute('')
 		runit()
 	end
 
