@@ -1656,39 +1656,44 @@ Model = Object:extend {
 		
 		-- here, _t_query_set is the all instance fit to query_args now
 		local _t_query_set = query_set
-		if #query_set == 0 then return query_set end
 		
-		if is_get == 'get' then
-			query_set = (is_rev == 'rev') and List {_t_query_set[#_t_query_set]} or List {_t_query_set[1]}
-		else	
-			-- now id_list is a list containing all id of instances fit to this query_args rule, so need to slice
-			query_set = _t_query_set:slice(start, stop, is_rev)
-		end
+		if #query_set == 0 then
+			if not is_query_set and is_using_rule_index then
+				addIndexToManager(self, query_str_iden, {})
+			end
+		else
+			if is_get == 'get' then
+				query_set = (is_rev == 'rev') and List {_t_query_set[#_t_query_set]} or List {_t_query_set[1]}
+			else	
+				-- now id_list is a list containing all id of instances fit to this query_args rule, so need to slice
+				query_set = _t_query_set:slice(start, stop, is_rev)
+			end
 
-		-- if self is query set, its' element is always integrated
-		-- if call by class
-		if not is_query_set then
-			-- retrieve all objects' id
-			local id_list = {}
-			for _, v in ipairs(_t_query_set) do
-				tinsert(id_list, v.id)
-			end
-			-- add to index, here, we index all instances fit to query_args, rather than results applied extra limitation conditions
-			if is_using_rule_index then
-				addIndexToManager(self, query_str_iden, id_list)
-			end
-			
-			-- if partially got previously, need to get the integrated objects now
-			if partially_got then
-				id_list = {}
-				-- retrieve needed objects' id
-				for _, v in ipairs(query_set) do
+			-- if self is query set, its' element is always integrated
+			-- if call by class
+			if not is_query_set then
+				-- retrieve all objects' id
+				local id_list = {}
+				for _, v in ipairs(_t_query_set) do
 					tinsert(id_list, v.id)
 				end
-				query_set = getFromRedisPipeline(self, id_list)
+				-- add to index, here, we index all instances fit to query_args, rather than results applied extra limitation conditions
+				if is_using_rule_index then
+					addIndexToManager(self, query_str_iden, id_list)
+				end
+				
+				-- if partially got previously, need to get the integrated objects now
+				if partially_got then
+					id_list = {}
+					-- retrieve needed objects' id
+					for _, v in ipairs(query_set) do
+						tinsert(id_list, v.id)
+					end
+					query_set = getFromRedisPipeline(self, id_list)
+				end
 			end
 		end
-
+		
 		return query_set
 	end;
     
