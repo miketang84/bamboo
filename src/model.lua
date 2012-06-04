@@ -1539,17 +1539,22 @@ Model = Object:extend {
 			-- check index
 			-- XXX: Only support class now, don't support query set, maybe query set doesn't need this feature
 			local id_list = getIndexFromManager(self, query_str_iden)
-			if #id_list > 0 then
-				if is_get == 'get' then
-					id_list = (is_rev == 'rev') and List{id_list[#id_list]} or List{id_list[1]}
-				else	
-					-- now id_list is a list containing all id of instances fit to this query_args rule, so need to slice
-					id_list = id_list:slice(start, stop, is_rev)
-				end
-				
-				-- if have this list, return objects directly
-				if #id_list > 0 then
-					return getFromRedisPipeline(self, id_list)
+			if type(id_list) == 'table' then
+				if #id_list == 0 then
+					return List()
+				else
+					-- #id_list > 0
+					if is_get == 'get' then
+						id_list = (is_rev == 'rev') and List{id_list[#id_list]} or List{id_list[1]}
+					else	
+						-- now id_list is a list containing all id of instances fit to this query_args rule, so need to slice
+						id_list = id_list:slice(start, stop, is_rev)
+					end
+					
+					-- if have this list, return objects directly
+					if #id_list > 0 then
+						return getFromRedisPipeline(self, id_list)
+					end
 				end
 			end
 			-- else go ahead
