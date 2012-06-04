@@ -1194,16 +1194,16 @@ end
 
 local getIndexFromManager = function (self, query_str_iden, getnum)
 	local manager_key = "_index_manager:" .. self.__name
+	-- get this rule's socre
 	local score = db:zscore(manager_key, query_str_iden)
+	-- if has no score, means it is not rule indexed, return nil directly
 	if not score then 
-		return (not getnum) and List() or nil
+		return nil
 	end
 	-- add to index manager
 	local item_key = ('_RULE:%s:%s'):format(self.__name, score)
 	if not db:exists(item_key) then 
-		-- clear the cache in the index manager
-		db:zrem(manager_key, query_str_iden)
-		return (not getnum) and List() or nil
+		return (not getnum) and List() or 0
 	end
 	
 	-- update expiration
