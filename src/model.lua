@@ -1178,9 +1178,14 @@ local addIndexToManager = function (self, query_str_iden, obj_list)
 	local score = db:zscore(manager_key, query_str_iden)
 	local item_key = ('_RULE:%s:%s'):format(self.__name, score)
 	-- we have plenty reasons to delete this rule key for new index data
-	db:del(item_key)
-	-- generate the index item, use list
-	db:rpush(item_key, unpack(obj_list))
+	-- db:del(item_key)
+	local options = { watch = item_key, cas = true, retry = 2 }
+	db:transaction(options, function(db)
+		if not db:exists(item_key) then
+			-- generate the index item, use list
+			db:rpush(item_key, unpack(obj_list))
+		end
+	end)
 	-- set expiration to each index item
 	db:expire(item_key, bamboo.config.rule_expiration or bamboo.RULE_LIFE)
 	
