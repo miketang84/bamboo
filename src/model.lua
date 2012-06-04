@@ -1173,7 +1173,8 @@ local addIndexToManager = function (self, query_str_iden, obj_list)
 	-- add to index manager
 	-- if re enter this function, this line will return nil
 	rdzset.add(manager_key, query_str_iden)
-
+	if #obj_list == 0 then return end
+	
 	-- if re enter this function, this line will return the original score of this rule
 	local score = db:zscore(manager_key, query_str_iden)
 	local item_key = ('_RULE:%s:%s'):format(self.__name, score)
