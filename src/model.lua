@@ -1667,7 +1667,7 @@ Model = Object:extend {
 
 		-- if self is query set, its' element is always integrated
 		-- if call by class
-		if not is_query_set and #_t_query_set > 0 then
+		if not is_query_set then
 			-- retrieve all objects' id
 			local id_list = {}
 			for _, v in ipairs(_t_query_set) do
