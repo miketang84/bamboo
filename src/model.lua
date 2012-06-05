@@ -19,6 +19,8 @@ local rdhash = require 'bamboo.redis.hash'
 
 local getModelByName  = bamboo.getModelByName
 local dcollector= 'DELETED:COLLECTOR'
+local rule_manager_prefix = '_index_manager:'
+local rule_result_pattern = '_RULE:%s:%s'
 
 local QuerySet
 local Model
@@ -1098,58 +1100,57 @@ local canInstanceFitQueryRule = function (self, qstr)
 	return checkLogicRelation(self, self, query_args, logic_choice)
 end
 
+-- here, qstr rule exist surely
 local addInstanceToIndexOnRule = function (self, qstr)
-	local manager_key = "_index_manager:" .. self.__name
+	local manager_key = rule_manager_prefix .. self.__name
 	--DEBUG(self, qstr, manager_key)	
 	local score = db:zscore(manager_key, qstr)
-	local item_key = ('_RULE:%s:%s'):format(self.__name, score)
-	if not db:exists(item_key) then 
-		-- clear the cache in the index manager
-		db:zrem(manager_key, qstr)
-		return nil
-	end
-	
+	local item_key = rule_result_pattern:format(self.__name, math.floor(score))
+
 	local flag = canInstanceFitQueryRule(self, qstr)
 	--DEBUG(flag)
 	if flag then
-		db:rpush(item_key, self.id)	
-		db:expire(item_key, bamboo.config.rule_expiration or bamboo.RULE_LIFE)
+		db:transaction(function(db)
+			db:rpush(item_key, self.id)	
+			-- update the float score to integer
+			db:zadd(manager_key, math.floor(score), qstr)
+			db:expire(item_key, bamboo.config.rule_expiration or bamboo.RULE_LIFE)
+		end)
 	end
 	return flag
 end
 
 local updateInstanceToIndexOnRule = function (self, qstr)
-	local manager_key = "_index_manager:" .. self.__name
+	local manager_key = rule_manager_prefix .. self.__name
 	local score = db:zscore(manager_key, qstr)
-	local item_key = ('_RULE:%s:%s'):format(self.__name, score)
-	if not db:exists(item_key) then 
-		-- clear the cache in the index manager
-		db:zrem(manager_key, qstr)
-		return nil
-	end
+	local item_key = rule_result_pattern:format(self.__name, math.floor(score))
 
 	local flag = canInstanceFitQueryRule(self, qstr)
-	db:lrem(item_key, 0, self.id)
-	if flag then
-		db:rpush(item_key, self.id)	
-	end
-	db:expire(item_key, bamboo.config.rule_expiration or bamboo.RULE_LIFE)
+	db:transaction(function(db)
+		db:lrem(item_key, 0, self.id)
+		if flag then
+			db:rpush(item_key, self.id)	
+		end
+		db:expire(item_key, bamboo.config.rule_expiration or bamboo.RULE_LIFE)
+	end)
 	return flag
 end
 
 local delInstanceToIndexOnRule = function (self, qstr)
-	local manager_key = "_index_manager:" .. self.__name
+	local manager_key = rule_manager_prefix .. self.__name
 	local score = db:zscore(manager_key, qstr)
-	local item_key = ('_RULE:%s:%s'):format(self.__name, score)
-	if not db:exists(item_key) then 
-		-- clear the cache in the index manager
-		db:zrem(manager_key, qstr)
-		return nil
-	end
+	local item_key = rule_result_pattern:format(self.__name, math.floor(score))
 
 	local flag = canInstanceFitQueryRule(self, qstr)
-	db:lrem(item_key, 0, self.id)
-	db:expire(item_key, bamboo.config.rule_expiration or bamboo.RULE_LIFE)
+	local options = { watch = item_key, cas = true, retry = 2 }
+	db:transaction(function(db)
+		db:lrem(item_key, 0, self.id)
+		-- if delete to empty list, update the rule score to float
+		if not db:exists(item_key) then   
+			db:zadd(manager_key, score + 0.1, qstr)
+		end
+		db:expire(item_key, bamboo.config.rule_expiration or bamboo.RULE_LIFE)
+	end)
 	return flag
 end
 
@@ -1160,7 +1161,7 @@ local INDEX_ACTIONS = {
 }
 
 local updateIndexByRules = function (self, action)
-	local manager_key = "_index_manager:" .. self.__name
+	local manager_key = rule_manager_prefix .. self.__name
 	local qstr_list = db:zrange(manager_key, 0, -1)
 	local action_func = INDEX_ACTIONS[action]
 	for _, qstr in ipairs(qstr_list) do
@@ -1169,45 +1170,60 @@ local updateIndexByRules = function (self, action)
 end
 
 local addIndexToManager = function (self, query_str_iden, obj_list)
-	local manager_key = "_index_manager:" .. self.__name
+	local manager_key = rule_manager_prefix .. self.__name
 	-- add to index manager
-	-- if re enter this function, this line will return nil
-	rdzset.add(manager_key, query_str_iden)
+	local score = db:zscore(manager_key, query_str_iden)
+	-- if score then return end
+	local new_score
+	if not score then
+		-- when it is a new rule 
+		new_score = db:zcard(manager_key) + 1
+		-- use float score represent empty rule result index
+		if #obj_list == 0 then new_score = new_score + 0.1 end
+		db:zadd(manager_key, new_score, query_str_iden)
+	else
+		-- when rule result is expired, re enter this function
+		new_score = score
+	end
 	if #obj_list == 0 then return end
 	
-	-- if re enter this function, this line will return the original score of this rule
-	local score = db:zscore(manager_key, query_str_iden)
-	local item_key = ('_RULE:%s:%s'):format(self.__name, score)
-	-- we have plenty reasons to delete this rule key for new index data
-	-- db:del(item_key)
+	local item_key = rule_result_pattern:format(self.__name, math.floor(new_score))
 	local options = { watch = item_key, cas = true, retry = 2 }
 	db:transaction(options, function(db)
 		if not db:exists(item_key) then
 			-- generate the index item, use list
 			db:rpush(item_key, unpack(obj_list))
 		end
+		-- set expiration to each index item
+		db:expire(item_key, bamboo.config.rule_expiration or bamboo.RULE_LIFE)
 	end)
-	-- set expiration to each index item
-	db:expire(item_key, bamboo.config.rule_expiration or bamboo.RULE_LIFE)
-	
 end
 
 local getIndexFromManager = function (self, query_str_iden, getnum)
-	local manager_key = "_index_manager:" .. self.__name
+	local manager_key = rule_manager_prefix .. self.__name
 	-- get this rule's socre
 	local score = db:zscore(manager_key, query_str_iden)
-	-- if has no score, means it is not rule indexed, return nil directly
+	-- if has no score, means it is not rule indexed, 
+	-- return nil directly
 	if not score then 
 		return nil
 	end
-	-- add to index manager
-	local item_key = ('_RULE:%s:%s'):format(self.__name, score)
+	
+	-- if score is float, means its rule result is empty, return empty query set
+	if score % 1 ~= 0 then
+		return (not getnum) and QuerySet() or 0
+	end
+	
+	-- score is integer, not float, and rule result doesn't exist, means its rule result is expired now,
+	-- need to retreive again, so return nil
+	local item_key = rule_result_pattern:format(self.__name, score)
 	if not db:exists(item_key) then 
-		return (not getnum) and List() or 0
+		return nil
 	end
 	
 	-- update expiration
 	db:expire(item_key, bamboo.config.rule_expiration or bamboo.RULE_LIFE)
+	-- rule result is not empty, and not expired, retrieve them
 	if not getnum then
 		-- return a list
 		return List(db:lrange(item_key, 0, -1))
