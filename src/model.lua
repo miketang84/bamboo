@@ -1143,7 +1143,7 @@ local delInstanceToIndexOnRule = function (self, qstr)
 
 	local flag = canInstanceFitQueryRule(self, qstr)
 	local options = { watch = item_key, cas = true, retry = 2 }
-	db:transaction(function(db)
+	db:transaction(options, function(db)
 		db:lrem(item_key, 0, self.id)
 		-- if delete to empty list, update the rule score to float
 		if not db:exists(item_key) then   
@@ -1169,6 +1169,7 @@ local updateIndexByRules = function (self, action)
 	end
 end
 
+-- can be reentry
 local addIndexToManager = function (self, query_str_iden, obj_list)
 	local manager_key = rule_manager_prefix .. self.__name
 	-- add to index manager
