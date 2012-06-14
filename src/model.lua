@@ -2942,7 +2942,7 @@ Model = Object:extend {
 
 local QuerySetMeta = setProto({__spectype='QuerySet'}, Model)
 QuerySet = function (list)
-	local list = list or List()
+	local list = List(list)
 	-- create a query set	
 	-- add it to fit the check of isClass function
 --	if not getmetatable(QuerySetMeta) then
