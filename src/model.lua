@@ -1212,7 +1212,7 @@ local getIndexFromManager = function (self, query_str_iden, getnum)
 	
 	-- if score is float, means its rule result is empty, return empty query set
 	if score % 1 ~= 0 then
-		return (not getnum) and QuerySet() or 0
+		return (not getnum) and List() or 0
 	end
 	
 	-- score is integer, not float, and rule result doesn't exist, means its rule result is expired now,
@@ -1540,7 +1540,7 @@ Model = Object:extend {
 		
 		local is_query_set = false
 		if isQuerySet(self) then is_query_set = true end
-		local is_query_table = (type(query_args) == 'table')
+		local is_args_table = (type(query_args) == 'table')
 		local logic = 'and'
 		
 		local query_str_iden
@@ -1558,7 +1558,7 @@ Model = Object:extend {
 			local id_list = getIndexFromManager(self, query_str_iden)
 			if type(id_list) == 'table' then
 				if #id_list == 0 then
-					return List()
+					return QuerySet()
 				else
 					-- #id_list > 0
 					if is_get == 'get' then
@@ -1577,7 +1577,7 @@ Model = Object:extend {
 			-- else go ahead
 		end
 		
-		if is_query_table then
+		if is_args_table then
 
 			if query_args and query_args['id'] then
 				-- remove 'id' query argument
@@ -1613,7 +1613,7 @@ Model = Object:extend {
 			all_ids = self:allIds()
 		end
 		-- nothing in id list, return empty table
-		if #all_ids == 0 then return List() end
+		if #all_ids == 0 then return QuerySet() end
 
 		
 		-- create a query set
@@ -1623,18 +1623,14 @@ Model = Object:extend {
 
 		-- walkcheck can process full object and partial object
 		local walkcheck = function (objs)
-			for i = 1, #all_ids do
-				local obj = objs[i]
-				--DEBUG(obj)
+			for i, obj in ipairs(objs) do
 				-- check the object's legalery, only act on valid object
-				--if isValidInstance(obj) then
 				local flag = checkLogicRelation(self, obj, query_args, logic_choice)
 				
 				-- if walk to this line, means find one 
 				if flag then
 					tinsert(query_set, obj)
 				end
-				--end
 			end
 		end
 		
@@ -1646,7 +1642,7 @@ Model = Object:extend {
 		else
 			-- make partially get value containing 'id' default
 			local qfs = {'id'}
-			if is_query_table then
+			if is_args_table then
 				for k, _ in pairs(query_args) do
 					tinsert(qfs, k)
 				end
@@ -2956,6 +2952,7 @@ QuerySet = function (list)
 	
 	return query_set
 end
+
 _G['QuerySet'] = QuerySet
 
 return Model
