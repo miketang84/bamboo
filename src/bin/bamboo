@@ -169,7 +169,8 @@ local function wait_on_children(app_dir, targets)
 		-- watch all subdirs in current project directory
 		findDirs(dirs, '.')
 		for _, d in ipairs(dirs) do
-			handle:addwatch(d, inotify.IN_CREATE, inotify.IN_MOVE, inotify.IN_MODIFY, inotify.IN_DELETE)
+			-- handle:addwatch(d, inotify.IN_CREATE, inotify.IN_MOVE, inotify.IN_MODIFY, inotify.IN_DELETE)
+			handle:addwatch(d, inotify.IN_MODIFY)
 		end
 		local starttime, laststoptime = 0, 0
 		while true do
@@ -178,10 +179,10 @@ local function wait_on_children(app_dir, targets)
 			local events = handle:read()
 			
 			-- ask time distance is larger than 2 seconds
-			if starttime - laststoptime > 2 then
+			if starttime - laststoptime > 1 then
 				-- kill processes
 				for _, ev in ipairs(events) do
-				if ev.name:endsWith('.lua') then
+					if ev.name:endsWith('.lua') and not (ev.name:startsWith('.') or ev.name:startsWith('#')) then
 						print(ev.name .. ' was changed.')
 						for script, pid in pairs(SCRIPT_PIDS) do
 							local ret = posix.kill(pid)
