@@ -248,13 +248,15 @@ local function runStateless(conn, main, req, before, after)
     end)
 
     if not good and err then
-	if config.PRODUCTION then
-	    web.conn:reply_http(req, '<h2>Page error.</h2>', 500, 'Page error.', req.headers)
-	    print('[Error] Page error.')
-	else
-	    local errors = require 'bamboo.errors'
-	    errors.reportError(conn, req, err, state)
-	end
+		if config.PRODUCTION then
+			web.conn:reply_http(req, '<h2>Page error.</h2>', 500, 'Page error.', req.headers)
+			print('[Error] Page error.')
+			print("[Error]", err)
+
+		else
+			local errors = require 'bamboo.errors'
+			errors.reportError(conn, req, err, state)
+		end
     end
 end
 
