@@ -71,13 +71,13 @@ local Web = Object:extend {
     end;
 
     jsonError = function (self, err_code, err_desc)
-	self:json { success = false, err_code = err_code, err_desc = err_desc }	
+		self:json { success = false, err_code = err_code, err_desc = err_desc }	
     end;
 
     jsonSuccess = function (self, tbl)
-	local tbl = tbl or {}
-	tbl['success'] = true
-	self:json(tbl)
+		local tbl = tbl or {}
+		tbl['success'] = true
+		self:json(tbl)
     end;
 	
     redirect = function (self, url)
@@ -86,6 +86,7 @@ local Web = Object:extend {
     end;
 
     error = function (self, data, code, status, headers)
+		data = data or 'error'
         self:page(data, code, status, headers or {['content-type'] = false})
         self:close()
         return false
