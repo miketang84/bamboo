@@ -313,13 +313,16 @@ local getFromRedisPipeline = function (self, ids)
 	end)
 
 	local objs = QuerySet()
+	local nils = {}
 	local obj
-	for _, v in ipairs(data_list) do
+	for i, v in ipairs(data_list) do
 		obj = makeObject(self, v)
-		if obj then tinsert(objs, obj) end
+		if obj then tinsert(objs, obj)
+		else tinsert(nils, ids[i])
+		end
 	end
 
-	return objs
+	return objs, nils
 end 
 
 -- 
@@ -369,13 +372,16 @@ local getFromRedisPipeline2 = function (pattern_list)
 	end)
 
 	local objs = QuerySet()
+	local nils = {}
 	local obj
 	for i, model in ipairs(model_list) do
 		obj = makeObject(model, data_list[i])
-		if obj then objs:append(obj) end
+		if obj then tinsert(objs, obj) 
+		else tinsert(nils, pattern_list[i])
+		end
 	end
 
-	return objs
+	return objs, nils
 end 
 
 --------------------------------------------------------------
@@ -487,8 +493,6 @@ end
 
 
 local retrieveObjectsByForeignType = function (foreign, list)
-	local obj_list
-	
 	if foreign == 'ANYSTRING' then
 		-- return string list directly
 		return QuerySet(list)
@@ -2436,6 +2440,11 @@ Model = Object:extend {
 				local obj = link_model:getById (linked_id)
 				if not isValidInstance(obj) then
 					print('[Warning] invalid ONE foreign id or object.')
+					
+					-- clear invalid foreign value
+					db:hdel(model_key, field)
+					self[field] = nil 
+					
 					return nil
 				else
 					return obj
@@ -2453,7 +2462,14 @@ Model = Object:extend {
 			list = list:slice(start, stop, is_rev)
 			if list:isEmpty() then return QuerySet() end
 		
-			return retrieveObjectsByForeignType(fld.foreign, list)
+			local objs, nils = retrieveObjectsByForeignType(fld.foreign, list, key)
+			-- clear the invalid foreign item value
+			if not isFalse(nils) then
+				-- each element in nils is the id pattern string, when clear, remove them directly
+				for _, v in ipairs(nils) do
+					store_module.remove(key, v)
+				end
+			end
 		end
 	end;
 
