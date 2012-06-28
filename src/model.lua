@@ -233,7 +233,7 @@ end
 
 local makeObject = function (self, data)
 	-- if data is invalid, return nil
-	if not isValidInstance(data) then print("[Warning] @makeObject - Object is invalid."); return nil end
+	if not isValidInstance(data) then print("[Warning] @makeObject - Object is invalid."); print(debug.traceback());return nil end
 	-- XXX: keep id as string for convienent, because http and database are all string
 	-- data.id = tonumber(data.id) or data.id
 	
@@ -340,19 +340,22 @@ local getPartialFromRedisPipeline = function (self, ids, fields)
 	--DEBUG('data_list', data_list)
 
 	local objs = QuerySet()
+	local nils = {}
 	local obj
 	-- here, data_list is fields' order values
-	for _, v in ipairs(data_list) do
+	for i, v in ipairs(data_list) do
 		local item = {}
 		for i, key in ipairs(fields) do
 			-- v[i] is the value of ith key
 			item[key] = v[i]
 		end
 		obj = makeObject(self, item)
-		if obj then tinsert(objs, obj) end
+		if obj then tinsert(objs, obj)
+		else tinsert(nils, ids[i])
+		end
 	end
 
-	return objs
+	return objs, nils
 end 
 
 -- for use in "User:id" as each item key
@@ -1667,21 +1670,32 @@ Model = Object:extend {
 --				end
 			end
 			table.sort(qfs)
-			local objs
+			local objs, nils
 			--DEBUG(qfs)
 			-- == 1, means only have 'id', collect nothing on fields 
 			if #qfs == 1 then
 				--DEBUG('Enter full pipeline branch')
 				-- collect nothing, use 'hgetall' to retrieve, partially_got is false
 				-- when query_args is function, do this
-				objs = getFromRedisPipeline(self, all_ids)
+				objs, nils = getFromRedisPipeline(self, all_ids)
 			else
 				--DEBUG('Enter partial pipeline branch')
 				-- use hmget to retrieve, now the objs are partial objects
-				objs = getPartialFromRedisPipeline(self, all_ids, qfs)
+				objs, nils = getPartialFromRedisPipeline(self, all_ids, qfs)
 				partially_got = true
 			end
-			walkcheck(objs)			
+			walkcheck(objs)	
+
+			-- clear model main index
+			if not isFalse(nils) then
+				local index_key = getIndexKey(self)
+				-- each element in nils is the id pattern string, when clear, remove them directly
+				for _, v in ipairs(nils) do
+					db:zremrangebyscore(index_key, v, v)
+				end
+			end
+
+			
 		end
 		
 		-- here, _t_query_set is the all instance fit to query_args now
