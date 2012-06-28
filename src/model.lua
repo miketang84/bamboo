@@ -1061,13 +1061,13 @@ local checkLogicRelation = function (self, obj, query_args, logic_choice)
 	-- NOTE: query_args can't contain [1]
 	-- here, obj may be object or string 
 	-- when obj is string, query_args must be function;
-	-- when query_args is table, obj must be table.
+	-- when query_args is table, obj must be table, and must be real object.
 	local flag = logic_choice
 	if type(query_args) == 'table' then
 --		if not isValidInstance(obj) then print('[Warning] @checkLogicRelation - obj should be valid instance when query_args is table.') end
 		for k, v in pairs(query_args) do
 			-- to redundant query condition, once meet, jump immediately
-			-- if not self.__fields[k] then flag=false; break end
+			if not self.__fields[k] then flag=false; break end
 
 			if type(v) == 'function' then
 				flag = v(obj[k])
