@@ -1117,6 +1117,9 @@ local addInstanceToIndexOnRule = function (self, qstr)
 	--DEBUG(flag)
 	if flag then
 		db:transaction(function(db)
+			-- if previously added, remove it first, if no, just no effects
+			-- but this may change the default object index orders
+			db:lrem(item_key, 0, self.id)
 			db:rpush(item_key, self.id)	
 			-- update the float score to integer
 			db:zadd(manager_key, math.floor(score), qstr)
@@ -1133,6 +1136,7 @@ local updateInstanceToIndexOnRule = function (self, qstr)
 
 	local flag = canInstanceFitQueryRule(self, qstr)
 	db:transaction(function(db)
+		-- this may change the default object index orders
 		db:lrem(item_key, 0, self.id)
 		if flag then
 			db:rpush(item_key, self.id)	
