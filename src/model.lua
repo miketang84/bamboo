@@ -2474,6 +2474,8 @@ Model = Object:extend {
 					store_module.remove(key, v)
 				end
 			end
+			
+			return objs
 		end
 	end;
 
