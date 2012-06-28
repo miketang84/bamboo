@@ -316,7 +316,7 @@ local getFromRedisPipeline = function (self, ids)
 	local obj
 	for _, v in ipairs(data_list) do
 		obj = makeObject(self, v)
-		if obj then objs:append(obj) end
+		if obj then tinsert(objs, obj) end
 	end
 
 	return objs
@@ -336,15 +336,17 @@ local getPartialFromRedisPipeline = function (self, ids, fields)
 	-- every item is data_list now is the values according to 'fields'
 	--DEBUG('data_list', data_list)
 
-	local objs = {}
+	local objs = QuerySet()
 	local obj
+	-- here, data_list is fields' order values
 	for _, v in ipairs(data_list) do
 		local item = {}
 		for i, key in ipairs(fields) do
 			-- v[i] is the value of ith key
 			item[key] = v[i]
 		end
-		if not isFalse(item) then tinsert(objs, item) end
+		obj = makeObject(self, item)
+		if obj then tinsert(objs, obj) end
 	end
 
 	return objs
@@ -1646,15 +1648,15 @@ Model = Object:extend {
 				for k, _ in pairs(query_args) do
 					tinsert(qfs, k)
 				end
-			else
-				-- use precollected fields
+--			else
+				-- if query_args is function, use precollected fields
 				-- if model has set '__use_rule_index' manually, collect all fields to index
-				-- if not set '__use_rule_index' manually, collect fields with 'index=true' in their field description table
-				-- if not set '__use_rule_index' manually, and not set 'index=true' in any field, collect NOTHING
+				-- if not set '__use_rule_index' manually, collect fields with 'rule_index=true' in their field description table
+				-- if not set '__use_rule_index' manually, and not set 'rule_index=true' in any field, collect NOTHING
 				--DEBUG('__rule_index_fields', self.__rule_index_fields)
-				for _, k in ipairs(self.__rule_index_fields) do
-					tinsert(qfs, k)
-				end
+--				for _, k in ipairs(self.__rule_index_fields) do
+--					tinsert(qfs, k)
+--				end
 			end
 			table.sort(qfs)
 			local objs
@@ -1663,6 +1665,7 @@ Model = Object:extend {
 			if #qfs == 1 then
 				--DEBUG('Enter full pipeline branch')
 				-- collect nothing, use 'hgetall' to retrieve, partially_got is false
+				-- when query_args is function, do this
 				objs = getFromRedisPipeline(self, all_ids)
 			else
 				--DEBUG('Enter partial pipeline branch')
