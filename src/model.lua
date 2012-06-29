@@ -233,7 +233,11 @@ end
 
 local makeObject = function (self, data)
 	-- if data is invalid, return nil
-	if not isValidInstance(data) then print("[Warning] @makeObject - Object is invalid."); print(debug.traceback());return nil end
+	if not isValidInstance(data) then 
+		print("[Warning] @makeObject - Object is invalid.")
+		-- print(debug.traceback())
+		return nil 
+	end
 	-- XXX: keep id as string for convienent, because http and database are all string
 	-- data.id = tonumber(data.id) or data.id
 	
@@ -1122,8 +1126,12 @@ local addInstanceToIndexOnRule = function (self, qstr)
 		db:transaction(function(db)
 			-- if previously added, remove it first, if no, just no effects
 			-- but this may change the default object index orders
-			db:lrem(item_key, 0, self.id)
-			db:rpush(item_key, self.id)	
+			--db:lrem(item_key, 0, self.id)
+			--db:rpush(item_key, self.id)
+			-- insert a new id after the old same id
+			db:linsert(item_key, 'AFTER', self.id, self.id)
+			-- delete the old one id
+			db:lrem(item_key, 1, self.id)
 			-- update the float score to integer
 			db:zadd(manager_key, math.floor(score), qstr)
 			db:expire(item_key, bamboo.config.rule_expiration or bamboo.RULE_LIFE)
@@ -1139,11 +1147,17 @@ local updateInstanceToIndexOnRule = function (self, qstr)
 
 	local flag = canInstanceFitQueryRule(self, qstr)
 	db:transaction(function(db)
-		-- this may change the default object index orders
-		db:lrem(item_key, 0, self.id)
 		if flag then
-			db:rpush(item_key, self.id)	
+			db:linsert(item_key, 'AFTER', self.id, self.id)
 		end
+		-- delete the old one id
+		db:lrem(item_key, 1, self.id)
+			
+		-- this may change the default object index orders
+--		db:lrem(item_key, 0, self.id)
+--		if flag then
+--			db:rpush(item_key, self.id)	
+--		end
 		db:expire(item_key, bamboo.config.rule_expiration or bamboo.RULE_LIFE)
 	end)
 	return flag
