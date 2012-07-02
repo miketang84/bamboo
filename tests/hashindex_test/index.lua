@@ -17,6 +17,11 @@ assert(db:select(WHICH_DB));
 
 BAMBOO_DB = db
 require 'bamboo'
+
+-- load file handler_xxx.lua, make its environment as childenv, extract global variables in handler_xxx.lua to childenv
+setfenv(assert(loadfile("settings.lua")), setmetatable(bamboo.config, {__index=_G}))()
+
+
 local Model = require 'bamboo.model'
 
 
@@ -132,146 +137,173 @@ function testMain()
   
     --test number eq
     local ids = Test:filter({score = eq(1.1)})
+    for i=1,#ids do  ids[i] = ids[i].id end
     assert(#ids == 1, "test number eq failed");
     assert(tonumber(ids[1]) == 2, "test number eq failed");
-    local ids = Test:filter({score = eq(2.0)})
+    ids = Test:filter({score = eq(2.0)})
+    for i=1,#ids do  ids[i] = ids[i].id end
     assert(#ids == 2, "test number eq failed");
     assert(tonumber(ids[1]) == 4 or tonumber(ids[1]) == 7, "test number eq failed");
     assert(tonumber(ids[2]) == 4 or tonumber(ids[2]) == 7, "test number eq failed");
-    local ids = Test:filter({score = eq(210.0)})
+    ids = Test:filter({score = eq(210.0)})
+    for i=1,#ids do  ids[i] = ids[i].id end
     assert(#ids == 0, "test number eq failed");
-    local ids = Test:filter({score = 1.1})
+    ids = Test:filter({score = 1.1})
+    for i=1,#ids do  ids[i] = ids[i].id end
     assert(#ids == 1, "test number eq failed");
     assert(tonumber(ids[1]) == 2, "test number eq failed");
-    local ids = Test:filter({score = 2.0})
+    ids = Test:filter({score = 2.0})
+    for i=1,#ids do  ids[i] = ids[i].id end
     assert(#ids == 2, "test number eq failed");
     assert(tonumber(ids[1]) == 4 or tonumber(ids[1]) == 7, "test number eq failed");
     assert(tonumber(ids[2]) == 4 or tonumber(ids[2]) == 7, "test number eq failed");
-    local ids = Test:filter({score = 210.0})
+    ids = Test:filter({score = 210.0})
+    for i=1,#ids do  ids[i] = ids[i].id end
     assert(#ids == 0, "test number eq failed");
     print("number eq PASSED");
 
 
     --test number uneq
-    local ids = Test:filter({score = uneq(1.1)})
+    ids = Test:filter({score = uneq(1.1)})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 6, "test number uneq failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['2']==nil, "test number uneq failed");
-    local ids = Test:filter({score = uneq(2.0)})
+    ids = Test:filter({score = uneq(2.0)})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 5, "test number uneq failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['4'] ==nil, "test number uneq failed");
     assert(ids['7'] ==nil, "test number uneq failed");
-    local ids = Test:filter({score = uneq(210.0)})
+    ids = Test:filter({score = uneq(210.0)})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 7, "test number uneq failed");
     print("number uneq PASSED");
 
     --test number lt
-    local ids = Test:filter({score = lt(1.1)})
+    ids = Test:filter({score = lt(1.1)})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 1, "test number lt failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['1'], "test number lt failed");
-    local ids = Test:filter({score = lt(2.0)})
+    ids = Test:filter({score = lt(2.0)})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 3, "test number lt failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['1'], "test number lt failed");
     assert(ids['2'], "test number lt failed");
     assert(ids['3'], "test number lt failed");
-    local ids = Test:filter({score = lt(3)})
+    ids = Test:filter({score = lt(3)})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 6, "test number lt failed");
     assert(ids['6']==nil, "test number lt failed");
     print("number lt PASSED");
 
 
     --test number gt
-    local ids = Test:filter({score = gt(1.1)})
+    ids = Test:filter({score = gt(1.1)})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 5, "test number gt failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['1']==nil, "test number gt failed");
     assert(ids['2']==nil, "test number gt failed");
-    local ids = Test:filter({score = gt(2.0)})
+    ids = Test:filter({score = gt(2.0)})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 2, "test number gt failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['5'], "test number gt failed");
     assert(ids['6'], "test number gt failed");
-    local ids = Test:filter({score = gt(3)})
+    ids = Test:filter({score = gt(3)})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 0, "test number gt failed");
     print("number gt PASSED");
 
     --test number le
-    local ids = Test:filter({score = le(1.1)})
+    ids = Test:filter({score = le(1.1)})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 2, "test number le failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['1'], "test number le failed");
     assert(ids['2'], "test number le failed");
-    local ids = Test:filter({score = le(2.0)})
+    ids = Test:filter({score = le(2.0)})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 5, "test number le failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['1'], "test number le failed");
     assert(ids['2'], "test number le failed");
     assert(ids['3'], "test number le failed");
     assert(ids['4'], "test number le failed");
     assert(ids['7'], "test number le failed");
-    local ids = Test:filter({score = le(3)})
+    ids = Test:filter({score = le(3)})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 7, "test number le failed");
     print("number le PASSED");
 
 
 
     --test number ge
-    local ids = Test:filter({score = ge(1.1)})
+    ids = Test:filter({score = ge(1.1)})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 6, "test number ge failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['1']==nil, "test number ge failed");
-    local ids = Test:filter({score = ge(2.0)})
+    ids = Test:filter({score = ge(2.0)})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 4, "test number ge failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['5'], "test number ge failed");
     assert(ids['6'], "test number ge failed");
     assert(ids['4'], "test number ge failed");
     assert(ids['7'], "test number ge failed");
-    local ids = Test:filter({score = ge(3)})
+    ids = Test:filter({score = ge(3)})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 1, "test number ge failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['6'], "test number ge failed");
     print("number ge PASSED");
 
 
     --test number bt
-    local ids = Test:filter({score = bt(0,1.1)})
+    ids = Test:filter({score = bt(0,1.1)})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 1, "test number bt failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['1'], "test number bt failed");
-    local ids = Test:filter({score = bt(1,2.0)})
+    ids = Test:filter({score = bt(1,2.0)})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 2, "test number bt failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['2'], "test number bt failed");
     assert(ids['3'], "test number bt failed");
-    local ids = Test:filter({score = bt(2,30)})
+    ids = Test:filter({score = bt(2,30)})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 2, "test number bt failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['5'], "test number bt failed");
     assert(ids['6'], "test number bt failed");
     print("number bt PASSED");
 
 
     --test number be
-    local ids = Test:filter({score = be(0,1.1)})
+    ids = Test:filter({score = be(0,1.1)})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 2, "test number be failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['1'], "test number be failed");
     assert(ids['2'], "test number be failed");
-    local ids = Test:filter({score = be(1,2.0)})
+    ids = Test:filter({score = be(1,2.0)})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 5, "test number be failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['1'], "test number be failed");
     assert(ids['2'], "test number be failed");
     assert(ids['3'], "test number be failed");
     assert(ids['4'], "test number be failed");
     assert(ids['7'], "test number be failed");
-    local ids = Test:filter({score = be(2,30)})
+    ids = Test:filter({score = be(2,30)})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 4, "test number be failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['4'], "test number be failed");
     assert(ids['5'], "test number be failed");
     assert(ids['6'], "test number be failed");
@@ -280,22 +312,25 @@ function testMain()
 
 
     --test number outside
-    local ids = Test:filter({score = outside(0,1.1)})
+    ids = Test:filter({score = outside(0,1.1)})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 5, "test number outside failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['5'], "test number outside failed");
     assert(ids['6'], "test number outside failed");
     assert(ids['3'], "test number outside failed");
     assert(ids['4'], "test number outside failed");
     assert(ids['7'], "test number outside failed");
-    local ids = Test:filter({score = outside(1,2.0)})
+    ids = Test:filter({score = outside(1,2.0)})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 2, "test number outside failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['6'], "test number outside failed");
     assert(ids['5'], "test number outside failed");
-    local ids = Test:filter({score = outside(2,30)})
+    ids = Test:filter({score = outside(2,30)})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 3, "test number outside failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['1'], "test number outside failed");
     assert(ids['2'], "test number outside failed");
     assert(ids['3'], "test number outside failed");
@@ -303,19 +338,22 @@ function testMain()
 
 
     --test number inset
-    local ids = Test:filter({score = inset(0,1.1)})
+    ids = Test:filter({score = inset(0,1.1)})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 1, "test number inside failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['2'], "test number inside failed");
-    local ids = Test:filter({score = inset(1,2.0)})
+    ids = Test:filter({score = inset(1,2.0)})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 3, "test number inside failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['1'], "test number inside failed");
     assert(ids['4'], "test number inside failed");
     assert(ids['7'], "test number inside failed");
-    local ids = Test:filter({score = inset(2,30)})
+    ids = Test:filter({score = inset(2,30)})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 2, "test number inside failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['4'], "test number inside failed");
     assert(ids['7'], "test number inside failed");
     print("number inset PASSED");
@@ -323,25 +361,28 @@ function testMain()
 
 
     --test number uninset
-    local ids = Test:filter({score = uninset(0,1.1)})
+    ids = Test:filter({score = uninset(0,1.1)})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 6, "test number uninset failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['1'], "test number uninset failed");
     assert(ids['3'], "test number uninset failed");
     assert(ids['4'], "test number uninset failed");
     assert(ids['5'], "test number uninset failed");
     assert(ids['6'], "test number uninset failed");
     assert(ids['7'], "test number uninset failed");
-    local ids = Test:filter({score = uninset(1,2.0)})
+    ids = Test:filter({score = uninset(1,2.0)})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 4, "test number uninset failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['2'], "test number uninset failed");
     assert(ids['3'], "test number uninset failed");
     assert(ids['5'], "test number uninset failed");
     assert(ids['6'], "test number uninset failed");
-    local ids = Test:filter({score = uninset(2,30)})
+    ids = Test:filter({score = uninset(2,30)})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 5, "test number uninset failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['1'], "test number uninset failed");
     assert(ids['2'], "test number uninset failed");
     assert(ids['3'], "test number uninset failed");
@@ -350,59 +391,68 @@ function testMain()
     print("number uninset PASSED");
 
     --test string eq
-    local ids = Test:filter({name = eq("xxxx")})
+    ids = Test:filter({name = eq("xxxx")})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 3, "test string eq failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['1'], "test string eq failed");
     assert(ids['2'], "test string eq failed");
     assert(ids['3'], "test string eq failed");
-    local ids = Test:filter({name = eq("xxxx1")})
+    ids = Test:filter({name = eq("xxxx1")})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 2, "test string eq failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['4'], "test string eq failed");
     assert(ids['5'], "test string eq failed");
-    local ids = Test:filter({name = eq("xxxx3")})
+    ids = Test:filter({name = eq("xxxx3")})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 1, "test string eq failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['7'], "test string eq failed");
-    local ids = Test:filter({name = "xxxx"})
+    ids = Test:filter({name = "xxxx"})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 3, "test string eq failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['1'], "test string eq failed");
     assert(ids['2'], "test string eq failed");
     assert(ids['3'], "test string eq failed");
-    local ids = Test:filter({name = "xxxx1"})
+    ids = Test:filter({name = "xxxx1"})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 2, "test string eq failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['4'], "test string eq failed");
     assert(ids['5'], "test string eq failed");
-    local ids = Test:filter({name = "xxxx3"})
+    ids = Test:filter({name = "xxxx3"})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 1, "test string eq failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['7'], "test string eq failed");
     print("string eq PASSED");
 
 
 
     --test string uneq
-    local ids = Test:filter({name = uneq("xxxx")})
+    ids = Test:filter({name = uneq("xxxx")})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 4, "test string uneq failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['4'], "test string uneq failed");
     assert(ids['5'], "test string uneq failed");
     assert(ids['6'], "test string uneq failed");
     assert(ids['7'], "test string uneq failed");
-    local ids = Test:filter({name = uneq("xxxx1")})
+    ids = Test:filter({name = uneq("xxxx1")})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 5, "test string uneq failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['1'], "test string uneq failed");
     assert(ids['2'], "test string uneq failed");
     assert(ids['3'], "test string uneq failed");
     assert(ids['6'], "test string uneq failed");
     assert(ids['7'], "test string uneq failed");
-    local ids = Test:filter({name = uneq("xxxx3")})
+    ids = Test:filter({name = uneq("xxxx3")})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 6, "test string uneq failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['1'], "test string uneq failed");
     assert(ids['2'], "test string uneq failed");
     assert(ids['3'], "test string uneq failed");
@@ -412,18 +462,21 @@ function testMain()
     print("string uneq PASSED");
 
     --test string lt
-    local ids = Test:filter({name = lt("xxxx")})
+    ids = Test:filter({name = lt("xxxx")})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 0, "test string lt failed");
-    local ids = Set(ids);
-    local ids = Test:filter({name = lt("xxxx1")})
+    ids = Set(ids);
+    ids = Test:filter({name = lt("xxxx1")})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 3, "test string lt failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['1'], "test string lt failed");
     assert(ids['2'], "test string lt failed");
     assert(ids['3'], "test string lt failed");
-    local ids = Test:filter({name = lt("xxxx3")})
+    ids = Test:filter({name = lt("xxxx3")})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 6, "test string lt failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['1'], "test string lt failed");
     assert(ids['2'], "test string lt failed");
     assert(ids['3'], "test string lt failed");
@@ -433,41 +486,47 @@ function testMain()
     print("string lt PASSED");
 
     --test string gt
-    local ids = Test:filter({name = gt("xxxx")})
+    ids = Test:filter({name = gt("xxxx")})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 4, "test string gt failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['4'], "test string gt failed");
     assert(ids['5'], "test string gt failed");
     assert(ids['6'], "test string gt failed");
     assert(ids['7'], "test string gt failed");
-    local ids = Test:filter({name = gt("xxxx1")})
+    ids = Test:filter({name = gt("xxxx1")})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 2, "test string gt failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['6'], "test string gt failed");
     assert(ids['7'], "test string gt failed");
-    local ids = Test:filter({name = gt("xxxx3")})
+    ids = Test:filter({name = gt("xxxx3")})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 0, "test string gt failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     print("string gt PASSED");
 
     --test string le
-    local ids = Test:filter({name = le("xxxx")})
+    ids = Test:filter({name = le("xxxx")})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 3, "test string le failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['1'], "test string le failed");
     assert(ids['2'], "test string le failed");
     assert(ids['3'], "test string le failed");
-    local ids = Test:filter({name = le("xxxx1")})
+    ids = Test:filter({name = le("xxxx1")})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 5, "test string le failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['1'], "test string le failed");
     assert(ids['2'], "test string le failed");
     assert(ids['3'], "test string le failed");
     assert(ids['4'], "test string le failed");
     assert(ids['5'], "test string le failed");
-    local ids = Test:filter({name = le("xxxx3")})
+    ids = Test:filter({name = le("xxxx3")})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 7, "test string le failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['1'], "test string le failed");
     assert(ids['2'], "test string le failed");
     assert(ids['3'], "test string le failed");
@@ -478,9 +537,10 @@ function testMain()
     print("string le PASSED");
 
     --test string ge
-    local ids = Test:filter({name = ge("xxxx")})
+    ids = Test:filter({name = ge("xxxx")})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 7, "test string ge failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['1'], "test string ge failed");
     assert(ids['2'], "test string ge failed");
     assert(ids['3'], "test string ge failed");
@@ -488,55 +548,63 @@ function testMain()
     assert(ids['5'], "test string ge failed");
     assert(ids['6'], "test string ge failed");
     assert(ids['7'], "test string ge failed");
-    local ids = Test:filter({name = ge("xxxx1")})
+    ids = Test:filter({name = ge("xxxx1")})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 4, "test string ge failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['4'], "test string ge failed");
     assert(ids['5'], "test string ge failed");
     assert(ids['6'], "test string ge failed");
     assert(ids['7'], "test string ge failed");
-    local ids = Test:filter({name = ge("xxxx3")})
+    ids = Test:filter({name = ge("xxxx3")})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 1, "test string ge failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['7'], "test string ge failed");
     print("string ge PASSED");
 
     --test string bt
-    local ids = Test:filter({name = bt("a","xxxx")})
+    ids = Test:filter({name = bt("a","xxxx")})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 0, "test string bt failed");
-    local ids = Set(ids);
-    local ids = Test:filter({name = bt("aa","xxxx1")})
+    ids = Set(ids);
+    ids = Test:filter({name = bt("aa","xxxx1")})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids ==3, "test string bt failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['1'], "test string bt failed");
     assert(ids['2'], "test string bt failed");
     assert(ids['3'], "test string bt failed");
-    local ids = Test:filter({name = bt("xxxx","xxxx3")})
+    ids = Test:filter({name = bt("xxxx","xxxx3")})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 3, "test string bt failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['6'], "test string bt failed");
     assert(ids['4'], "test string bt failed");
     assert(ids['5'], "test string bt failed");
     print("string bt PASSED");
 
     --test string be
-    local ids = Test:filter({name = be("a","xxxx")})
+    ids = Test:filter({name = be("a","xxxx")})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 3, "test string be failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['1'], "test string be failed");
     assert(ids['2'], "test string be failed");
     assert(ids['3'], "test string be failed");
-    local ids = Test:filter({name = be("aa","xxxx1")})
+    ids = Test:filter({name = be("aa","xxxx1")})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids ==5, "test string be failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['1'], "test string be failed");
     assert(ids['2'], "test string be failed");
     assert(ids['3'], "test string be failed");
     assert(ids['4'], "test string be failed");
     assert(ids['5'], "test string be failed");
-    local ids = Test:filter({name = be("xxxx","xxxx3")})
+    ids = Test:filter({name = be("xxxx","xxxx3")})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 7, "test string be failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['6'], "test string be failed");
     assert(ids['1'], "test string be failed");
     assert(ids['2'], "test string be failed");
@@ -547,27 +615,31 @@ function testMain()
     print("string be PASSED");
 
     --test string outside
-    local ids = Test:filter({name = outside("a","xxxx")})
+    ids = Test:filter({name = outside("a","xxxx")})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 4, "test string outside failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['4'], "test string outside failed");
     assert(ids['5'], "test string outside failed");
     assert(ids['6'], "test string outside failed");
     assert(ids['7'], "test string outside failed");
-    local ids = Test:filter({name = outside("aa","xxxx1")})
+    ids = Test:filter({name = outside("aa","xxxx1")})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids ==2, "test string outside failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['6'], "test string outside failed");
     assert(ids['7'], "test string outside failed");
-    local ids = Test:filter({name = outside("xxxx","xxxx3")})
+    ids = Test:filter({name = outside("xxxx","xxxx3")})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 0, "test string outside failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     print("string outside PASSED");
 
     --test string contains
-    local ids = Test:filter({name = contains("xx")})
+    ids = Test:filter({name = contains("xx")})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 7, "test string contains failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['1'], "test string contains failed");
     assert(ids['2'], "test string contains failed");
     assert(ids['3'], "test string contains failed");
@@ -575,32 +647,37 @@ function testMain()
     assert(ids['5'], "test string contains failed");
     assert(ids['6'], "test string contains failed");
     assert(ids['7'], "test string contains failed");
-    local ids = Test:filter({name = contains("x1")})
+    ids = Test:filter({name = contains("x1")})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 2, "test string contains failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['4'], "test string contains failed");
     assert(ids['5'], "test string contains failed");
-    local ids = Test:filter({name = contains("3")})
+    ids = Test:filter({name = contains("3")})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 1, "test string contains failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['7'], "test string contains failed");
     print("string contains PASSED");
 
     --test string uncontains
-    local ids = Test:filter({name = uncontains("xxxx")})
+    ids = Test:filter({name = uncontains("xxxx")})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 0, "test string uncontains failed");
-    local ids = Set(ids);
-    local ids = Test:filter({name = uncontains("x1")})
+    ids = Set(ids);
+    ids = Test:filter({name = uncontains("x1")})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 5, "test string uncontains failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['1'], "test string uncontains failed");
     assert(ids['2'], "test string uncontains failed");
     assert(ids['3'], "test string uncontains failed");
     assert(ids['6'], "test string uncontains failed");
     assert(ids['7'], "test string uncontains failed");
-    local ids = Test:filter({name = uncontains("xxx3")})
+    ids = Test:filter({name = uncontains("xxx3")})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 6, "test string uncontains failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['1'], "test string uncontains failed");
     assert(ids['2'], "test string uncontains failed");
     assert(ids['3'], "test string uncontains failed");
@@ -610,35 +687,41 @@ function testMain()
     print("string uncontains PASSED");
 
     --test string startsWith
-    local ids = Test:filter({name = startsWith("xxxx2")})
+    ids = Test:filter({name = startsWith("xxxx2")})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 1, "test string startsWith failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['6'], "test string startsWith failed");
-    local ids = Test:filter({name = startsWith("xxxx1")})
+    ids = Test:filter({name = startsWith("xxxx1")})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 2, "test string startsWith failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['4'], "test string startsWith failed");
     assert(ids['5'], "test string startsWith failed");
-    local ids = Test:filter({name = startsWith("a")})
+    ids = Test:filter({name = startsWith("a")})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 0, "test string startsWith failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     print("string startsWith PASSED");
 
     --test string unstartsWith
-    local ids = Test:filter({name = unstartsWith("xxxx")})
+    ids = Test:filter({name = unstartsWith("xxxx")})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 0, "test string unstartsWith failed");
-    local ids = Set(ids);
-    local ids = Test:filter({name = unstartsWith("xxxx1")})
+    ids = Set(ids);
+    ids = Test:filter({name = unstartsWith("xxxx1")})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 5, "test string unstartsWith failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['1'], "test string unstartsWith failed");
     assert(ids['2'], "test string unstartsWith failed");
     assert(ids['3'], "test string unstartsWith failed");
     assert(ids['6'], "test string unstartsWith failed");
     assert(ids['7'], "test string unstartsWith failed");
-    local ids = Test:filter({name = unstartsWith("xxxx3")})
+    ids = Test:filter({name = unstartsWith("xxxx3")})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 6, "test string unstartsWith failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['1'], "test string unstartsWith failed");
     assert(ids['2'], "test string unstartsWith failed");
     assert(ids['3'], "test string unstartsWith failed");
@@ -648,42 +731,48 @@ function testMain()
     print("string unstartsWith PASSED");
 
     --test string endsWith
-    local ids = Test:filter({name = endsWith("xxxx")})
+    ids = Test:filter({name = endsWith("xxxx")})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 3, "test string endsWith failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['1'], "test string endsWith failed");
     assert(ids['2'], "test string endsWith failed");
     assert(ids['3'], "test string endsWith failed");
-    local ids = Test:filter({name = endsWith("xx1")})
+    ids = Test:filter({name = endsWith("xx1")})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 2, "test string endsWith failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['4'], "test string endsWith failed");
     assert(ids['5'], "test string endsWith failed");
-    local ids = Test:filter({name = endsWith("xxx3")})
+    ids = Test:filter({name = endsWith("xxx3")})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 1, "test string endsWith failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['7'], "test string endsWith failed");
     print("string endsWith PASSED");
 
     --test string unendsWith
-    local ids = Test:filter({name = unendsWith("xxxx")})
+    ids = Test:filter({name = unendsWith("xxxx")})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 4, "test string unendsWith failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['4'], "test string unendsWith failed");
     assert(ids['5'], "test string unendsWith failed");
     assert(ids['6'], "test string unendsWith failed");
     assert(ids['7'], "test string unendsWith failed");
-    local ids = Test:filter({name = unendsWith("xxxx1")})
+    ids = Test:filter({name = unendsWith("xxxx1")})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 5, "test string unendsWith failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['1'], "test string unendsWith failed");
     assert(ids['2'], "test string unendsWith failed");
     assert(ids['3'], "test string unendsWith failed");
     assert(ids['6'], "test string unendsWith failed");
     assert(ids['7'], "test string unendsWith failed");
-    local ids = Test:filter({name = unendsWith("xxxx3")})
+    ids = Test:filter({name = unendsWith("xxxx3")})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 6, "test string unendsWith failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['1'], "test string unendsWith failed");
     assert(ids['2'], "test string unendsWith failed");
     assert(ids['3'], "test string unendsWith failed");
@@ -693,20 +782,23 @@ function testMain()
     print("string unendsWith PASSED");
 
     --test string inset
-    local ids = Test:filter({name = inset("a","xxxx")})
+    ids = Test:filter({name = inset("a","xxxx")})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 3, "test string inset failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['1'], "test string inset failed");
     assert(ids['2'], "test string inset failed");
     assert(ids['3'], "test string inset failed");
-    local ids = Test:filter({name = inset("aa","xxxx1")})
+    ids = Test:filter({name = inset("aa","xxxx1")})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids ==2, "test string inset failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['4'], "test string inset failed");
     assert(ids['5'], "test string inset failed");
-    local ids = Test:filter({name = inset("xxxx","xxxx3")})
+    ids = Test:filter({name = inset("xxxx","xxxx3")})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 4, "test string inset failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['1'], "test string inset failed");
     assert(ids['2'], "test string inset failed");
     assert(ids['3'], "test string inset failed");
@@ -714,73 +806,86 @@ function testMain()
     print("string inset PASSED");
 
     --test string uninset
-    local ids = Test:filter({name = uninset("a","xxxx")})
+    ids = Test:filter({name = uninset("a","xxxx")})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 4, "test string uninset failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['4'], "test string uninset failed");
     assert(ids['5'], "test string uninset failed");
     assert(ids['6'], "test string uninset failed");
     assert(ids['7'], "test string uninset failed");
-    local ids = Test:filter({name = uninset("aa","xxxx1")})
+    ids = Test:filter({name = uninset("aa","xxxx1")})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids ==5, "test string uninset failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['1'], "test string uninset failed");
     assert(ids['2'], "test string uninset failed");
     assert(ids['3'], "test string uninset failed");
     assert(ids['6'], "test string uninset failed");
     assert(ids['7'], "test string uninset failed");
-    local ids = Test:filter({name = uninset("xxxx","xxxx3")})
+    ids = Test:filter({name = uninset("xxxx","xxxx3")})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 3, "test string uninset failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['4'], "test string uninset failed");
     assert(ids['5'], "test string uninset failed");
     assert(ids['6'], "test string uninset failed");
     print("string uninset PASSED");
 
     --test logic "or"
-    local ids = Test:filter({"or", name = "xxxx", score=1.0})
+    ids = Test:filter({"or", name = "xxxx", score=1.0})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 3, "test string "or" failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['1'], "test string "or" failed");
     assert(ids['2'], "test string "or" failed");
     assert(ids['3'], "test string "or" failed");
-    local ids = Test:filter({"or",name = "xxxx1",score=3})
+    ids = Test:filter({"or",name = "xxxx1",score=3})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids ==3, "test string "or" failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['4'], "test string "or" failed");
     assert(ids['5'], "test string "or" failed");
     assert(ids['6'], "test string "or" failed");
-    local ids = Test:filter({"or",name = "xxxryx3", score=2})
+    ids = Test:filter({"or",name = "xxxryx3", score=2})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 2, "test string "or" failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['4'], "test string "or" failed");
     assert(ids['7'], "test string "or" failed");
-    local ids = Test:filter({"or",name = "xxxryx3", score=2.15})
+    ids = Test:filter({"or",name = "xxxryx3", score=2.15})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 0, "test string "or" failed");
-    local ids = Set(ids);
-    local ids = Test:filter({"or",name = "xxxx3", score=2.20})
+    ids = Set(ids);
+    ids = Test:filter({"or",name = "xxxx3", score=2.20})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 1, "test string "or" failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['7'], "test string "or" failed");
     print("logic 'or' PASSED");
 
     --test logic "and"
-    local ids = Test:filter({"and", name = "xxxx", score=1.0})
+    ids = Test:filter({"and", name = "xxxx", score=1.0})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 1, "test string "and" failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['1'], "test string "and" failed");
-    local ids = Test:filter({"and",name = "xxxx1",score=3})
+    ids = Test:filter({"and",name = "xxxx1",score=3})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids ==0, "test string "and" failed");
-    local ids = Set(ids);
-    local ids = Test:filter({"and",name = "xxxryx3", score=2})
+    ids = Set(ids);
+    ids = Test:filter({"and",name = "xxxryx3", score=2})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 0, "test string "and" failed");
-    local ids = Set(ids);
-    local ids = Test:filter({"and",name = "xxxryx3", score=2.15})
+    ids = Set(ids);
+    ids = Test:filter({"and",name = "xxxryx3", score=2.15})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 0, "test string "and" failed");
-    local ids = Set(ids);
-    local ids = Test:filter({"and",name = "xxxx3", score=2.0})
+    ids = Set(ids);
+    ids = Test:filter({"and",name = "xxxx3", score=2.0})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 1, "test string "and" failed");
-    local ids = Set(ids);
+    ids = Set(ids);
     assert(ids['7'], "test string "and" failed");
     print("logic 'and' PASSED");
     
@@ -792,23 +897,28 @@ function testMain()
     test5:update("score", 0.1);
 
     ids = Test:filter({score = eq(1.1)})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 2, "test number eq failed");
     ids = Set(ids);
     assert(ids['2'], "test number eq failed");
     assert(ids['3'], "test number eq failed");
     ids = Test:filter({score = eq(2.0)})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 3, "test number eq failed");
     ids = Set(ids);
     assert(ids['1'], "test number eq failed");
     assert(ids['4'], "test number eq failed");
     assert(ids['7'], "test number eq failed");
     ids = Test:filter({score = eq(1)})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 0, "test number eq failed");
     ids = Set(ids);
     ids = Test:filter({score = eq(1.2)})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 0, "test number eq failed");
     ids = Set(ids);
     ids = Test:filter({score = eq(0.1)})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 1, "test number eq failed");
     ids = Set(ids);
     assert(ids['5'], "test number eq failed");
@@ -821,16 +931,19 @@ function testMain()
     test1:update("name", "yyy");
     test3:update("name", "xxxx1");
     ids = Test:filter({name = eq("xxxx")})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 1, "test string eq failed");
     ids = Set(ids);
     assert(ids['2'], "test string eq failed");
     ids = Test:filter({name = eq("xxxx1")})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 3, "test string eq failed");
     ids = Set(ids);
     assert(ids['3'], "test string eq failed");
     assert(ids['4'], "test string eq failed");
     assert(ids['5'], "test string eq failed");
     ids = Test:filter({name = eq("yyy")})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 1, "test string eq failed");
     ids = Set(ids);
     assert(ids['1'], "test string eq failed");
@@ -846,23 +959,28 @@ function testMain()
     test5["score"] = 0.1;test5:save()
 
     ids = Test:filter({score = eq(1.1)})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 2, "test number eq failed");
     ids = Set(ids);
     assert(ids['2'], "test number eq failed");
     assert(ids['3'], "test number eq failed");
     ids = Test:filter({score = eq(2.0)})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 3, "test number eq failed");
     ids = Set(ids);
     assert(ids['1'], "test number eq failed");
     assert(ids['4'], "test number eq failed");
     assert(ids['7'], "test number eq failed");
     ids = Test:filter({score = eq(1)})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 0, "test number eq failed");
     ids = Set(ids);
     ids = Test:filter({score = eq(1.2)})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 0, "test number eq failed");
     ids = Set(ids);
     ids = Test:filter({score = eq(0.1)})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 1, "test number eq failed");
     ids = Set(ids);
     assert(ids['5'], "test number eq failed");
@@ -875,16 +993,19 @@ function testMain()
     test1.name= "yyy"; test1:save()
     test3.name= "xxxx1"; test3:save()
     ids = Test:filter({name = eq("xxxx")})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 1, "test string eq failed");
     ids = Set(ids);
     assert(ids['2'], "test string eq failed");
     ids = Test:filter({name = eq("xxxx1")})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 3, "test string eq failed");
     ids = Set(ids);
     assert(ids['3'], "test string eq failed");
     assert(ids['4'], "test string eq failed");
     assert(ids['5'], "test string eq failed");
     ids = Test:filter({name = eq("yyy")})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 1, "test string eq failed");
     ids = Set(ids);
     assert(ids['1'], "test string eq failed");
@@ -896,39 +1017,47 @@ function testMain()
     test1:fakeDel();
     test6:fakeDel();
     ids = Test:filter({name = eq("xxxx")})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 2, "test string eq failed");
     ids = Set(ids);
     assert(ids['2'], "test string eq failed");
     assert(ids['3'], "test string eq failed");
     ids = Test:filter({name = eq("xxxx2")})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 0, "test string eq failed");
     ids = Set(ids);
     
     ids = Test:filter({score = eq(1)})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 0, "test string eq failed");
     ids = Set(ids);
     ids = Test:filter({score = eq(3)})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 0, "test string eq failed");
     ids = Set(ids);
 
     Test:restoreDeleted(1);
     Test:restoreDeleted(6);
     ids = Test:filter({name = eq("xxxx")})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 3, "test string eq failed");
     ids = Set(ids);
     assert(ids['1'], "test string eq failed");
     assert(ids['2'], "test string eq failed");
     assert(ids['3'], "test string eq failed");
     ids = Test:filter({name = eq("xxxx2")})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 1, "test string eq failed");
     ids = Set(ids);
     assert(ids['6'], "test string eq failed");
 
     ids = Test:filter({score = eq(1)})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 1, "test string eq failed");
     ids = Set(ids);
     assert(ids['1'], "test string eq failed");
     ids = Test:filter({score = eq(3)})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 1, "test string eq failed");
     ids = Set(ids);
     assert(ids['6'], "test string eq failed");
@@ -938,10 +1067,12 @@ function testMain()
 
     test7:del();
     ids = Test:filter({score = eq(2)})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 1, "test string eq failed");
     ids = Set(ids);
     assert(ids['4'], "test string eq failed");
     ids = Test:filter({name = "xxxx3"})
+    for i=1,#ids do  ids[i] = tostring(ids[i].id) end
     assert(#ids == 0, "test string eq failed");
     ids = Set(ids);
     print("HASH INDEX for Model:delFromRedis() PASSED");
