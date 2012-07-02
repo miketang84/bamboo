@@ -1777,14 +1777,16 @@ Model = Object:extend {
 				end
 				walkcheck(objs)
 
-				-- clear model main index
-				if not isFalse(nils) then
-					local index_key = getIndexKey(self)
-					-- each element in nils is the id pattern string, when clear, remove them directly
-					for _, v in ipairs(nils) do
-						db:zremrangebyscore(index_key, v, v)
-					end
-				end		
+				if bamboo.config.auto_clear_index_when_get_failed then
+					-- clear model main index
+					if not isFalse(nils) then
+						local index_key = getIndexKey(self)
+						-- each element in nils is the id pattern string, when clear, remove them directly
+						for _, v in ipairs(nils) do
+							db:zremrangebyscore(index_key, v, v)
+						end
+					end		
+				end
             else
 		        -- here, all_ids is the all instance id to query_args now
                 --query_set = QuerySet(all_ids);
@@ -2623,11 +2625,14 @@ Model = Object:extend {
 			if list:isEmpty() then return QuerySet() end
 		
 			local objs, nils = retrieveObjectsByForeignType(fld.foreign, list, key)
-			-- clear the invalid foreign item value
-			if not isFalse(nils) then
-				-- each element in nils is the id pattern string, when clear, remove them directly
-				for _, v in ipairs(nils) do
-					store_module.remove(key, v)
+
+			if bamboo.config.auto_clear_index_when_get_failed then
+				-- clear the invalid foreign item value
+				if not isFalse(nils) then
+					-- each element in nils is the id pattern string, when clear, remove them directly
+					for _, v in ipairs(nils) do
+						store_module.remove(key, v)
+					end
 				end
 			end
 			
