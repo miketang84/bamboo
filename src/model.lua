@@ -1113,7 +1113,7 @@ local extraQueryArgs = function (qstr)
 end
 
 
-local checkLogicRelation = function (self, obj, query_args, logic_choice)
+local checkLogicRelation = function (obj, query_args, logic_choice)
 	-- NOTE: query_args can't contain [1]
 	-- here, obj may be object or string 
 	-- when obj is string, query_args must be function;
@@ -1123,7 +1123,7 @@ local checkLogicRelation = function (self, obj, query_args, logic_choice)
 --		if not isValidInstance(obj) then print('[Warning] @checkLogicRelation - obj should be valid instance when query_args is table.') end
 		for k, v in pairs(query_args) do
 			-- to redundant query condition, once meet, jump immediately
-			if not self.__fields[k] then flag=false; break end
+			if not obj.__fields[k] then flag=false; break end
 
 			if type(v) == 'function' then
 				flag = v(obj[k])
@@ -1155,7 +1155,7 @@ local canInstanceFitQueryRule = function (self, qstr)
 	--DEBUG(query_args)
 	local logic_choice = true
 	if type(query_args) == 'table' then logic_choice = (query_args[1] == 'and'); query_args[1]=nil end
-	return checkLogicRelation(self, self, query_args, logic_choice)
+	return checkLogicRelation(self, query_args, logic_choice)
 end
 
 -- here, qstr rule exist surely
@@ -1696,7 +1696,7 @@ Model = Object:extend {
 		local walkcheck = function (objs)
 			for i, obj in ipairs(objs) do
 				-- check the object's legalery, only act on valid object
-				local flag = checkLogicRelation(self, obj, query_args, logic_choice)
+				local flag = checkLogicRelation(obj, query_args, logic_choice)
 				
 				-- if walk to this line, means find one 
 				if flag then
