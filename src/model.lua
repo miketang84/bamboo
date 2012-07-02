@@ -1721,7 +1721,7 @@ Model = Object:extend {
                 raw_filter_flag = true;
             elseif bamboo.config.index_hash then
                 for field,value in pairs(query_args) do 
-                    if self.__fields[field].indexType ~= nil then 
+                    if self.__fields[field].index_type ~= nil then 
                         hash_index_query_args[field] = value;
                         query_args[field] = nil; 
                         hash_index_flag = true;

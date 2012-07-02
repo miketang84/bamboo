@@ -84,16 +84,16 @@ function indexFieldStr(self,field) --add the new
 end
 
 -- create or update the index of the object field
-function indexField(self, field, indexType, oldObj)
+function indexField(self, field, index_type, oldObj)
     local value = self[field];
     if oldObj and oldObj[field] == value then
         return;
     end
     
-    if indexType == 'number' then
+    if index_type == 'number' then
         local indexKey = getFieldZSetKey(self,field);
         db:zadd(indexKey, value, self.id);
-    elseif indexType == 'string' then
+    elseif index_type == 'string' then
         if oldObj then
             indexFieldStrRemove(oldObj,field);--remove the old
         end
@@ -120,29 +120,29 @@ function index(self,newIndex,field)
     if newIndex then 
         -- when new ,it can not create index for the field only,
         --[[if field then -- index for field 
-            indexType = self.__fields[field].indexType;
-            if indexType then 
-                indexField(self, field, indexType, nil)
+            index_type = self.__fields[field].index_type;
+            if index_type then 
+                indexField(self, field, index_type, nil)
             end
         else--]] -- index for object
             for field, def in pairs(self.__fields) do
-                if def.indexType then
-                    indexField(self, field, def.indexType, nil);
+                if def.index_type then
+                    indexField(self, field, def.index_type, nil);
                 end
             end
 --      end
     else
         if field then -- index for field 
             local oldObj = self:getClass():getById(self.id);
-            indexType = self.__fields[field].indexType;
-            if indexType then 
-                indexField(self, field, indexType, oldObj)
+            index_type = self.__fields[field].index_type;
+            if index_type then 
+                indexField(self, field, index_type, oldObj)
             end
         else -- index for object
             local oldObj = self:getClass():getById(self.id);
             for field, def in pairs(self.__fields) do
-                if def.indexType then
-                    indexField(self, field, def.indexType, oldObj);
+                if def.index_type then
+                    indexField(self, field, def.index_type, oldObj);
                 end
             end
         end
@@ -150,19 +150,19 @@ function index(self,newIndex,field)
 end;
 
 --index  field del 
-function indexFieldDel(self, field, indexType)
-    if indexType == 'number' then
+function indexFieldDel(self, field, index_type)
+    if index_type == 'number' then
         local indexKey = getFieldZSetKey(self,field);
         db:zrem(indexKey, self.id);
-    elseif indexType == 'string' then
+    elseif index_type == 'string' then
         indexFieldStrRemove(self,field);--remove the old
     else                
     end
 end
 function indexDel(self)
     for field, def in pairs(self.__fields) do
-        if def.indexType then
-            indexFieldDel(self, field, def.indexType);
+        if def.index_type then
+            indexFieldDel(self, field, def.index_type);
         end
     end
 end
@@ -593,17 +593,17 @@ function filter(self, query_args, logic)
 
             if type(value) == 'function' then 
                 local flag,name,args = value();--get the args
-                if self.__fields[field].indexType == 'number' then 
+                if self.__fields[field].index_type == 'number' then 
                     all_ids[i] = filterNumber(self,field,name,args);
-                elseif self.__fields[field].indexType == 'string' then 
+                elseif self.__fields[field].index_type == 'string' then 
                     all_ids[i] = filterString(self,field,name,args);
                 else
                     all_ids[i] = {};
                 end
             else 
-                if self.__fields[field].indexType == 'number' then 
+                if self.__fields[field].index_type == 'number' then 
                     all_ids[i] = filterBtNumber(self,field,value,value);
-                elseif self.__fields[field].indexType == 'string' then 
+                elseif self.__fields[field].index_type == 'string' then 
                     all_ids[i] = filterEqString(self,field,value);
                 else
                     all_ids[i] = {};

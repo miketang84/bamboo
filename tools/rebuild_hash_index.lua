@@ -50,13 +50,13 @@ end
 --del all hash index 
 local fields = TagModel.__fields;
 for k,v in pairs(fields) do
-    if v.indexType == "string" then 
+    if v.index_type == "string" then 
         local setKeys = db:keys(arg[2] .. ":" .. k .. ":*__set");
         for _,setKey in pairs(setKeys) do 
             db:del(setKey);
         end
         db:del(arg[2] .. ":" .. k .. ":__hash");
-    elseif v.indexType == 'number' then 
+    elseif v.index_type == 'number' then 
         db:del(arg[2] .. ":" .. k .. ":__zset");
     else
     end

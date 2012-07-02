@@ -31,8 +31,8 @@ local Test = Model:extend{
 	__desc = 'Basic user definition.';
 --	__indexfd = {name = "string" , score = "number"};
 	__fields = {
-		['name'] = { indexType="string", required=true },
-		['score'] = { indexType="number", required=true },
+		['name'] = { index_type="string", required=true },
+		['score'] = { index_type="number", required=true },
 	};
 
     init = function (self,t)
