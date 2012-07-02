@@ -6,10 +6,16 @@ local List = require 'lglib.list'
 local rdzset = require 'bamboo.redis.zset'
 local db = BAMBOO_DB
 
-function save()
+function save(key,tbl,length)
+    for i,v in ipairs(tbl) do
+        push(key,v,length)
+    end
 end
 
-function update()
+function update(key,tbl,length)
+    for i,v in ipairs(tbl) do
+        push(key,v,length)
+    end
 end
 
 

@@ -9,11 +9,15 @@ local rdlist = require 'bamboo.redis.list'
 local db = BAMBOO_DB
 
 function save (key, tbl, length)
-
+    for i,v in ipairs(tbl) do 
+        push(key,v,length);
+    end
 end
 
 function update (key, tbl, length)
-
+    for i,v in ipairs(tbl) do 
+        push(key,v,length);
+    end
 end
 
 function push (key, val, length)

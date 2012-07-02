@@ -1,5 +1,6 @@
 module(..., package.seeall)
 local socket = require 'socket'
+local mih = require 'bamboo.model-indexhash'
 
 local tinsert, tremove = table.insert, table.remove
 local format = string.format
@@ -398,6 +399,11 @@ local delFromRedis = function (self, id)
 	assert(self.id or id, '[Error] @delFromRedis - must specify an id of instance.')
 	local model_key = id and getNameIdPattern2(self, id) or getNameIdPattern(self)
 	local index_key = getIndexKey(self)
+
+    --del hash index 
+    if bamboo.config.index_hash then 
+        mih.indexDel(self);
+    end
 	
 	local fields = self.__fields
 	-- in redis, delete the associated foreign key-value store
@@ -433,6 +439,11 @@ local fakedelFromRedis = function (self, id)
 	assert(self.id or id, '[Error] @fakedelFromRedis - must specify an id of instance.')
 	local model_key = id and getNameIdPattern2(self, id) or getNameIdPattern(self)
 	local index_key = getIndexKey(self)
+
+    --del hash index 
+    if bamboo.config.index_hash then 
+        mih.indexDel(self);
+    end
 	
 	local fields = self.__fields
 	-- in redis, delete the associated foreign key-value store
@@ -494,6 +505,10 @@ local restoreFakeDeletedInstance = function (self, id)
 	db:zadd(index_key, instance.id, instance.id)
 	-- remove from deleted collector
 	db:zrem(dcollector, model_key)
+
+    if bamboo.config.index_hash then 
+        mih.index(instance,true);--create hash index
+    end
 
 	return instance
 end
@@ -686,7 +701,9 @@ local upvalue_collector = {}
 
 _G['eq'] = function ( cmp_obj )
 	local t = function (v)
-		if v == cmp_obj then
+        if v == nil then return nil, 'eq', cmp_obj; end--only return params
+		
+        if v == cmp_obj then
 			return true
 		else
 			return false
@@ -698,6 +715,8 @@ end
 
 _G['uneq'] = function ( cmp_obj )
 	local t = function (v)
+        if v == nil then return nil, 'uneq', cmp_obj; end
+
 		if v ~= cmp_obj then
 			return true
 		else
@@ -711,6 +730,8 @@ end
 _G['lt'] = function (limitation)
 	limitation = tonumber(limitation) or limitation
 	local t = function (v)
+        if v == nil then return nil, 'lt', limitation; end
+
 		local nv = tonumber(v) or v
 		if nv and nv < limitation then
 			return true
@@ -725,6 +746,8 @@ end
 _G['gt'] = function (limitation)
 	limitation = tonumber(limitation) or limitation
 	local t = function (v)
+        if v == nil then return nil, 'gt', limitation; end
+
 		local nv = tonumber(v) or v
 		if nv and nv > limitation then
 			return true
@@ -740,6 +763,8 @@ end
 _G['le'] = function (limitation)
 	limitation = tonumber(limitation) or limitation
 	local t = function (v)
+        if v == nil then return nil, 'le', limitation; end
+
 		local nv = tonumber(v) or v
 		if nv and nv <= limitation then
 			return true
@@ -754,6 +779,8 @@ end
 _G['ge'] = function (limitation)
 	limitation = tonumber(limitation) or limitation
 	local t = function (v)
+        if v == nil then return nil, 'ge', limitation; end
+
 		local nv = tonumber(v) or v
 		if nv and nv >= limitation then
 			return true
@@ -769,6 +796,8 @@ _G['bt'] = function (small, big)
 	small = tonumber(small) or small
 	big = tonumber(big) or big	
 	local t = function (v)
+        if v == nil then return nil, 'bt', {small, big}; end
+
 		local nv = tonumber(v) or v
 		if nv and nv > small and nv < big then
 			return true
@@ -784,6 +813,8 @@ _G['be'] = function (small, big)
 	small = tonumber(small) or small
 	big = tonumber(big) or big	
 	local t = function (v)
+        if v == nil then return nil, 'be', {small,big}; end
+
 		local nv = tonumber(v) or v
 		if nv and nv >= small and nv <= big then
 			return true
@@ -799,6 +830,8 @@ _G['outside'] = function (small, big)
 	small = tonumber(small) or small
 	big = tonumber(big) or big	
 	local t = function (v)
+        if v == nil then return nil, 'outside',{small,big}; end
+
 		local nv = tonumber(v) or v
 		if nv and nv < small and nv > big then
 			return true
@@ -812,6 +845,8 @@ end
 
 _G['contains'] = function (substr)
 	local t = function (v)
+        if v == nil then return nil, 'contains', substr; end
+
 		v = tostring(v)
 		if v:contains(substr) then 
 			return true
@@ -825,6 +860,8 @@ end
 
 _G['uncontains'] = function (substr)
 	local t = function (v)
+        if v == nil then return nil, 'uncontains', substr; end
+
 		v = tostring(v)
 		if not v:contains(substr) then 
 			return true
@@ -839,6 +876,8 @@ end
 
 _G['startsWith'] = function (substr)
 	local t = function (v)
+        if v == nil then return nil, 'startsWith', substr; end
+
 		v = tostring(v)
 		if v:startsWith(substr) then 
 			return true
@@ -852,6 +891,8 @@ end
 
 _G['unstartsWith'] = function (substr)
 	local t = function (v)
+        if v == nil then return nil, 'unstartsWith', substr; end
+
 		v = tostring(v)
 		if not v:startsWith(substr) then 
 			return true
@@ -866,6 +907,7 @@ end
 
 _G['endsWith'] = function (substr)
 	local t = function (v)
+        if v == nil then return nil, 'endsWith', substr; end
 		v = tostring(v)
 		if v:endsWith(substr) then 
 			return true
@@ -879,6 +921,7 @@ end
 
 _G['unendsWith'] = function (substr)
 	local t = function (v)
+        if v == nil then return nil, 'unendsWith', substr; end
 		v = tostring(v)
 		if not v:endsWith(substr) then 
 			return true
@@ -893,6 +936,7 @@ end
 _G['inset'] = function (...)
 	local args = {...}
 	local t = function (v)
+        if v == nil then return nil, 'inset', args; end
 		v = tostring(v)
 		for _, val in ipairs(args) do
 			-- once meet one, ok
@@ -910,6 +954,7 @@ end
 _G['uninset'] = function (...)
 	local args = {...}
 	local t = function (v)
+        if v == nil then return nil, 'uninset', args; end
 		v = tostring(v)
 		for _, val in ipairs(args) do
 			-- once meet one, false
@@ -1631,17 +1676,16 @@ Model = Object:extend {
 			end
 		end
 		
-		local all_ids
+		local all_ids = {}
 		if is_query_set then
 			-- if self is query set, we think of all_ids as object list, rather than id string list
 			all_ids = self
-		else
-			-- all_ids is id string list
-			all_ids = self:allIds()
+			-- nothing in id list, return empty table
+			if #all_ids == 0 then return QuerySet() end
+		
 		end
-		-- nothing in id list, return empty table
-		if #all_ids == 0 then return QuerySet() end
-
+		
+		
 		
 		-- create a query set
 		local query_set = QuerySet()
@@ -1667,49 +1711,87 @@ Model = Object:extend {
 			-- objs are already integrated instances
 			walkcheck(objs)			
 		else
-			-- make partially get value containing 'id' default
-			local qfs = {'id'}
-			if is_args_table then
-				for k, _ in pairs(query_args) do
-					tinsert(qfs, k)
-				end
---			else
-				-- if query_args is function, use precollected fields
-				-- if model has set '__use_rule_index' manually, collect all fields to index
-				-- if not set '__use_rule_index' manually, collect fields with 'rule_index=true' in their field description table
-				-- if not set '__use_rule_index' manually, and not set 'rule_index=true' in any field, collect NOTHING
-				--DEBUG('__rule_index_fields', self.__rule_index_fields)
---				for _, k in ipairs(self.__rule_index_fields) do
---					tinsert(qfs, k)
---				end
-			end
-			table.sort(qfs)
-			local objs, nils
-			--DEBUG(qfs)
-			-- == 1, means only have 'id', collect nothing on fields 
-			if #qfs == 1 then
-				--DEBUG('Enter full pipeline branch')
-				-- collect nothing, use 'hgetall' to retrieve, partially_got is false
-				-- when query_args is function, do this
-				objs, nils = getFromRedisPipeline(self, all_ids)
-			else
-				--DEBUG('Enter partial pipeline branch')
-				-- use hmget to retrieve, now the objs are partial objects
-				objs, nils = getPartialFromRedisPipeline(self, all_ids, qfs)
-				partially_got = true
-			end
-			walkcheck(objs)	
+            local hash_index_query_args = {};
+            local hash_index_flag = false;
+            local raw_filter_flag = false;
 
-			-- clear model main index
-			if not isFalse(nils) then
-				local index_key = getIndexKey(self)
-				-- each element in nils is the id pattern string, when clear, remove them directly
-				for _, v in ipairs(nils) do
-					db:zremrangebyscore(index_key, v, v)
-				end
-			end
 
+            if type(query_args) == 'function' then
+                hash_index_flag = false;
+                raw_filter_flag = true;
+            elseif bamboo.config.index_hash then
+                for field,value in pairs(query_args) do 
+                    if self.__fields[field].indexType ~= nil then 
+                        hash_index_query_args[field] = value;
+                        query_args[field] = nil; 
+                        hash_index_flag = true;
+                    else
+                        raw_filter_flag = true;
+                    end
+                end
+            else
+                raw_filter_flag = true;
+                hash_index_flag = false;
+            end
+
+
+            if hash_index_flag then 
+                all_ids = mih.filter(self,hash_index_query_args,logic);
+            else
+			    -- all_ids is id string list
+    			all_ids = self:allIds()
+            end
+
+            if raw_filter_flag then 
+               	-- make partially get value containing 'id' default
+	    		local qfs = {'id'}
+	    		if is_args_table then
+		    		for k, _ in pairs(query_args) do
+			    		tinsert(qfs, k)
+				    end
+--    			else
+	    			-- use precollected fields
+		    		-- if model has set '__use_rule_index' manually, collect all fields to index
+			    	-- if not set '__use_rule_index' manually, collect fields with 'index=true' in their field description table
+				    -- if not set '__use_rule_index' manually, and not set 'index=true' in any field, collect NOTHING
+    				--DEBUG('__rule_index_fields', self.__rule_index_fields)
+--	    			for _, k in ipairs(self.__rule_index_fields) do
+--		    			tinsert(qfs, k)
+--			    	end
+    			end
+	    		table.sort(qfs)
 			
+				local objs, nils
+				--DEBUG(qfs)
+				-- == 1, means only have 'id', collect nothing on fields 
+				if #qfs == 1 then
+					--DEBUG('Enter full pipeline branch')
+					-- collect nothing, use 'hgetall' to retrieve, partially_got is false
+					-- when query_args is function, do this
+					objs, nils = getFromRedisPipeline(self, all_ids)
+				else
+					--DEBUG('Enter partial pipeline branch')
+					-- use hmget to retrieve, now the objs are partial objects
+					objs, nils = getPartialFromRedisPipeline(self, all_ids, qfs)
+					partially_got = true
+				end
+				walkcheck(objs)
+
+				-- clear model main index
+				if not isFalse(nils) then
+					local index_key = getIndexKey(self)
+					-- each element in nils is the id pattern string, when clear, remove them directly
+					for _, v in ipairs(nils) do
+						db:zremrangebyscore(index_key, v, v)
+					end
+				end		
+            else
+		        -- here, all_ids is the all instance id to query_args now
+                --query_set = QuerySet(all_ids);
+                for i,v in ipairs(all_ids) do 
+                    tinsert(query_set,self:getById(tonumber(v)));
+                end
+            end
 		end
 		
 		-- here, _t_query_set is the all instance fit to query_args now
@@ -1778,6 +1860,9 @@ Model = Object:extend {
 	-- 7. removeCustomMember
 	-- 8. hasCustomMember
 	-- 9. numCustom
+
+    -- 10. incrCustom   only number
+    -- 11. decrCustom   only number
 	--
 	--- five store type
 	-- 1. string
@@ -1785,10 +1870,28 @@ Model = Object:extend {
 	-- 3. set
 	-- 4. zset
 	-- 5. hash
+    -- 6. fifo   , scores is the length of fifo
 	-------------------------------------------------------------------
-	
+    
+	-- store customize key-value pair to db
+	-- now: st is string, and value is number 
+    -- if no this key, the value is 0 before performing the operation
+    incrCustom = function(self,key,step) 
+		I_AM_CLASS_OR_INSTANCE(self)
+		checkType(key, 'string')
+		local custom_key = self:isClass() and getCustomKey(self, key) or getCustomIdKey(self, key)
+        db:incrby(custom_key,step or 1) 
+    end;
+    decrCustom = function(self,key,step) 
+		I_AM_CLASS_OR_INSTANCE(self)
+		checkType(key, 'string')
+		local custom_key = self:isClass() and getCustomKey(self, key) or getCustomIdKey(self, key)
+        db:decrby(custom_key,step or 1);
+    end;
+
 	-- store customize key-value pair to db
 	-- now: it support string, list and so on
+    -- if fifo ,the scores is the length of the fifo
 	setCustom = function (self, key, val, st, scores)
 		I_AM_CLASS_OR_INSTANCE(self)
 		checkType(key, 'string')
@@ -2238,6 +2341,10 @@ Model = Object:extend {
 			db:zadd(index_key, self.id, self[indexfd])
 			-- update object hash store key
 			db:hmset(model_key, unpack(store_kv))
+            
+            if bamboo.config.index_hash then 
+                mih.index(self,true);--create hash index
+            end
 			end)
 		else
 			-- update case
@@ -2248,6 +2355,10 @@ Model = Object:extend {
 
 			local options = { watch = {index_key}, cas = true, retry = 2 }
 			replies = db:transaction(options, function(db)
+            if bamboo.config.index_hash then 
+                mih.index(self,false);--update hash index
+            end
+
 			local score = db:zscore(index_key, self[indexfd])
 			assert(score == self.id or score == nil, "[Error] save duplicate to an unique limited field, aborted!")
 			
@@ -2287,7 +2398,24 @@ Model = Object:extend {
 
 		local indexfd = self.__indexfd
 
-		
+        --old indexfd 
+        -- apply to db
+	    -- if field is indexed, need to update the __index too
+		if field == indexfd then
+		    assert(new_value ~= nil, "[Error] Can not delete indexfd field");
+        	local index_key = getIndexKey(self)
+	    	db:zremrangebyscore(index_key, self.id, self.id)
+		   	db:zadd(index_key, self.id, new_value)
+	    end
+        
+		-- update the lua object
+		self[field] = new_value
+        --hash index
+        if bamboo.config.index_hash then 
+            mih.index(self,false,field);
+        end
+
+        --update object in database
 		if new_value == nil then
 		    -- could not delete index field
 			if field ~= indexfd then
