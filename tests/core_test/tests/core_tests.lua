@@ -18,17 +18,26 @@ context("Bamboo Core Functions Testing", function ()
 
 	context("Model - model.lua", function ()
 
+		math.randomseed(os.time())
 		local MYUser = require 'models.myuser'
-		
+		local u = MYUser {
+			username = tostring(math.random()),
+			password = '123456',
+			name = 'Tang Gang',  --tostring(math.random()),
+			age = 20,
+			gender = 'male',
+		}
+		u:save()
+
 		context("Global Functions Defined in model.lua", function ()
 			test("isClass()", function ()
 				assert_equal(isClass(MYUser), true)
 				assert_equal(isClass({}), false)
-				local instance = MYUser:get{ id = 1}
+				local instance = MYUser:getById(1)
 				assert_equal(isClass(instance), false)												
 			end)
 			test("isInstance()", function ()
-				local instance = MYUser:get{ id = 1}
+				local instance = MYUser:getById(1)
 				assert_equal(isInstance(instance), true)			
 			end)
 			test("isQuerySet()", function ()
@@ -55,7 +64,7 @@ context("Bamboo Core Functions Testing", function ()
 				assert_equal(ret, true)
 			end)
 			test("I_AM_INSTANCE()", function ()
-				local instance = MYUser:get{ id = 1 }
+				local instance = MYUser:getById(1)
 				local ret, err = pcall(I_AM_INSTANCE, instance)
 				assert_equal(ret, true)
 			end)

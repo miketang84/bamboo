@@ -1592,8 +1592,12 @@ Model = Object:extend {
 	get = function (self, query_args, find_rev)
 		-- XXX: may cause effective problem
 		-- every time 'get' will cause the all objects' retrieving
-		local obj = self:filter(query_args, nil, nil, find_rev, 'get')[1]
-		return obj
+		local objs = self:filter(query_args, nil, nil, find_rev, 'get')
+		if objs then 
+			return objs[1]
+		else
+			return obj
+		end
 	end;
 
 	--- fitler some instances belong to this model
@@ -1653,8 +1657,10 @@ Model = Object:extend {
 
 			if query_args and query_args['id'] then
 				-- remove 'id' query argument
-				print("[Warning] Filter doesn't support search by id.")
-				query_args['id'] = nil 
+				print("[Warning] get and filter don't support search by id, please use getById.")
+				-- print(debug.traceback())
+				-- query_args['id'] = nil
+				return nil
 			end
 
 			-- if query table is empty, return slice instances
@@ -2333,20 +2339,21 @@ Model = Object:extend {
 			local countername = getCounterName(self)
 			local options = { watch = {countername, index_key}, cas = true, retry = 2 }
 			replies = db:transaction(options, function(db)
-			-- increase the instance counter
-			db:incr(countername)
-			self.id = db:get(countername)
-			local model_key = getNameIdPattern(self)
-			local self, store_kv = processBeforeSave(self, params)
-			assert(not db:zscore(index_key, self[indexfd]), "[Error] save duplicate to an unique limited field, aborted!")
+				-- increase the instance counter
+				db:incr(countername)
+				self.id = db:get(countername)
+				local model_key = getNameIdPattern(self)
+				local self, store_kv = processBeforeSave(self, params)
+				-- assert(not db:zscore(index_key, self[indexfd]), "[Error] save duplicate to an unique limited field, aborted!")
+				if db:zscore(index_key, self[indexfd]) then print("[Warning] save duplicate to an unique limited field, canceled!") end
 
-			db:zadd(index_key, self.id, self[indexfd])
-			-- update object hash store key
-			db:hmset(model_key, unpack(store_kv))
-            
-            if bamboo.config.index_hash then 
-                mih.index(self,true);--create hash index
-            end
+				db:zadd(index_key, self.id, self[indexfd])
+				-- update object hash store key
+				db:hmset(model_key, unpack(store_kv))
+				
+				if bamboo.config.index_hash then 
+					mih.index(self,true);--create hash index
+				end
 			end)
 		else
 			-- update case
@@ -2362,7 +2369,8 @@ Model = Object:extend {
             end
 
 			local score = db:zscore(index_key, self[indexfd])
-			assert(score == self.id or score == nil, "[Error] save duplicate to an unique limited field, aborted!")
+			-- assert(score == self.id or score == nil, "[Error] save duplicate to an unique limited field, aborted!")
+			if not (score == self.id or score == nil) then print("[Warning] save duplicate to an unique limited field, canceled!") end
 			
 			-- if modified indexfd, score will be nil, remove the old id-indexfd pair, for later new save indexfd
 			if not score then
