@@ -1319,31 +1319,39 @@ local processBeforeSave = function (self, params)
 
     -- if parameters exist, update it
     if params and type(params) == 'table' then
-	for k, v in pairs(params) do
-	    if k ~= 'id' and fields[k] then
-		self[k] = tostring(v)
-	    end
-	end
+		for k, v in pairs(params) do
+			if k ~= 'id' and fields[k] then
+				self[k] = tostring(v)
+			end
+		end
     end
 
     assert(not isFalse(self[indexfd]) , 
-    	"[Error] instance's indexfd value must not be nil. Please check your model defination.")
+    	format("[Error] instance's index field %s's value must not be nil. Please check your model defination.", indexfd))
 
-    for k, v in pairs(self) do
-	-- when save, need to check something
-	-- 1. only save fields defined in model defination
-	-- 2. don't save the functional member, and _parent
-	-- 3. don't save those fields not defined in model defination
-	-- 4. don't save those except ONE foreign fields, which are defined in model defination
-	local field = fields[k]
-	-- if v is nil, pairs will not iterate it, key will and should not be 'id'
-	if field then
-	    if not field['foreign'] or ( field['foreign'] and field['st'] == 'ONE') then
-		-- save
-		tinsert(store_kv, k)
-		tinsert(store_kv, v)		
-	    end
+	-- check required field
+	-- TODO: later we should update this to validate most attributes for each field
+	for field, fdt in pairs(fields) do
+		if fdt.required then
+			assert(self[field], format("[Error] @processBeforeSave - this field '%s' is required but its' value is nil.", field))
+		end
 	end
+		
+    for k, v in pairs(self) do
+		-- when save, need to check something
+		-- 1. only save fields defined in model defination
+		-- 2. don't save the functional member, and _parent
+		-- 3. don't save those fields not defined in model defination
+		-- 4. don't save those except ONE foreign fields, which are defined in model defination
+		local fdt = fields[k]
+		-- if v is nil, pairs will not iterate it, key will and should not be 'id'
+		if fdt then
+			if not fdt['foreign'] or ( fdt['foreign'] and fdt['st'] == 'ONE') then
+				-- save
+				tinsert(store_kv, k)
+				tinsert(store_kv, v)		
+			end
+		end
     end
 
     return self, store_kv

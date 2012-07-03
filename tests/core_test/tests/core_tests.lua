@@ -26,6 +26,7 @@ context("Bamboo Core Functions Testing", function ()
 			name = 'Tang Gang',  --tostring(math.random()),
 			age = 20,
 			gender = 'male',
+			email = 'xxxx',
 		}
 		u:save()
 
