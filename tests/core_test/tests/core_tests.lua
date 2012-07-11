@@ -45,6 +45,10 @@ context("Bamboo Core Functions Testing", function ()
 				local query_set = MYUser:all()
 				assert_equal(isQuerySet(query_set), true)
 			end)
+			test("isValidInstance()", function ()
+				local obj = MYUser:getById(1)
+				assert_equal(isValidInstance(obj), true)
+			end)
 			
 			
 			--[[
