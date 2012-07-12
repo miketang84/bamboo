@@ -59,7 +59,7 @@ local Mysql = Model:extend {
     retrieve = function(self, sqlstr)
         local cur = self.conn:execute(sqlstr);
         
-        if type(cur) == 'number' then 
+        if type(cur) == 'number' or type(cur)== 'string' then 
             return cur;
         end
 
@@ -88,6 +88,70 @@ local Mysql = Model:extend {
         self.conn:close();
     end;
 
+
+    getFromFile = function(self,datFile,achFile)
+        local fields = nil;
+        if achFile then 
+            local file = io.open(achFile,"r");
+            if file then 
+                fields = {};
+                for line in file:lines() do 
+                    table.insert(fields, string.split(line,'\t')[4]);
+                end
+                io.close(file);
+            end
+        end
+
+        local records = {};
+        if fields then 
+            local file = io.open(datFile,"r");
+            if file then 
+                for line in file:lines() do 
+                    local record = {};
+                    local temp = string.split(line,'\t');
+                    for k,field in ipairs(fields) do 
+                        record[field] = temp[k];
+                    end
+
+                    table.insert(records, record);
+                end
+
+                io.close(file);
+            end
+        else
+            local file = io.open(datFile,"r");
+            if file then 
+                for line in file:lines() do 
+                    local record = string.split(line,'\t');
+                    table.insert(records, record);
+                end
+
+                io.close(file);
+            end
+        end
+
+        return records;
+    end;
+
+
+    writeDbToFile = function(self)
+        local cur = self.conn:execute("show tables");
+
+        local tables = {};
+        local numrows = cur:numrows();
+        for i=1,numrows,1 do
+            local temp ={};
+            cur:fetch(temp);
+            tables[i] = temp[1];
+        end
+        cur:close();
+        ptable(tables);
+
+        for i,v in ipairs(tables) do 
+            self.conn:execute("select * from information_schema where table_name='"..v.."' and table_schema='" ..self.database.. "' into outfile /tmp/".. v .. ".ach");
+            self.conn:execute("select * from ".. v .. "into ourfile /tmp/".. v .. ".dat");
+        end
+    end;
 }
 
 return Mysql;
