@@ -48,7 +48,7 @@ local User = Model:extend {
 	end;
 
 	authenticate = function (self, params)
-		I_AM_CLASS(self)
+		I_AM_CLASS_OR_INSTANCE(self)
 
 		local user = self:getByIndex(params.username)
 		if not user then return false end
