@@ -50,7 +50,12 @@ local User = Model:extend {
 	authenticate = function (self, params)
 		I_AM_CLASS_OR_INSTANCE(self)
 
-		local user = self:getByIndex(params.username)
+		local user
+		if isInstance(self) then
+			user = self
+		else
+			user = self:getByIndex(params.username)
+		end
 		if not user then return false end
 
 		if self.encrypt and type(self.encrypt) == 'function' then
