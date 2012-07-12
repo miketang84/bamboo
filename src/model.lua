@@ -1113,7 +1113,7 @@ local extraQueryArgs = function (qstr)
 end
 
 
-local checkLogicRelation = function (self, obj, query_args, logic_choice)
+local checkLogicRelation = function (obj, query_args, logic_choice)
 	-- NOTE: query_args can't contain [1]
 	-- here, obj may be object or string 
 	-- when obj is string, query_args must be function;
@@ -1123,7 +1123,7 @@ local checkLogicRelation = function (self, obj, query_args, logic_choice)
 --		if not isValidInstance(obj) then print('[Warning] @checkLogicRelation - obj should be valid instance when query_args is table.') end
 		for k, v in pairs(query_args) do
 			-- to redundant query condition, once meet, jump immediately
-			if not self.__fields[k] then flag=false; break end
+			if not obj.__fields[k] then flag=false; break end
 
 			if type(v) == 'function' then
 				flag = v(obj[k])
@@ -1155,7 +1155,7 @@ local canInstanceFitQueryRule = function (self, qstr)
 	--DEBUG(query_args)
 	local logic_choice = true
 	if type(query_args) == 'table' then logic_choice = (query_args[1] == 'and'); query_args[1]=nil end
-	return checkLogicRelation(self, self, query_args, logic_choice)
+	return checkLogicRelation(self, query_args, logic_choice)
 end
 
 -- here, qstr rule exist surely
@@ -1319,31 +1319,39 @@ local processBeforeSave = function (self, params)
 
     -- if parameters exist, update it
     if params and type(params) == 'table' then
-	for k, v in pairs(params) do
-	    if k ~= 'id' and fields[k] then
-		self[k] = tostring(v)
-	    end
-	end
+		for k, v in pairs(params) do
+			if k ~= 'id' and fields[k] then
+				self[k] = tostring(v)
+			end
+		end
     end
 
     assert(not isFalse(self[indexfd]) , 
-    	"[Error] instance's indexfd value must not be nil. Please check your model defination.")
+    	format("[Error] instance's index field %s's value must not be nil. Please check your model defination.", indexfd))
 
-    for k, v in pairs(self) do
-	-- when save, need to check something
-	-- 1. only save fields defined in model defination
-	-- 2. don't save the functional member, and _parent
-	-- 3. don't save those fields not defined in model defination
-	-- 4. don't save those except ONE foreign fields, which are defined in model defination
-	local field = fields[k]
-	-- if v is nil, pairs will not iterate it, key will and should not be 'id'
-	if field then
-	    if not field['foreign'] or ( field['foreign'] and field['st'] == 'ONE') then
-		-- save
-		tinsert(store_kv, k)
-		tinsert(store_kv, v)		
-	    end
+	-- check required field
+	-- TODO: later we should update this to validate most attributes for each field
+	for field, fdt in pairs(fields) do
+		if fdt.required then
+			assert(self[field], format("[Error] @processBeforeSave - this field '%s' is required but its' value is nil.", field))
+		end
 	end
+		
+    for k, v in pairs(self) do
+		-- when save, need to check something
+		-- 1. only save fields defined in model defination
+		-- 2. don't save the functional member, and _parent
+		-- 3. don't save those fields not defined in model defination
+		-- 4. don't save those except ONE foreign fields, which are defined in model defination
+		local fdt = fields[k]
+		-- if v is nil, pairs will not iterate it, key will and should not be 'id'
+		if fdt then
+			if not fdt['foreign'] or ( fdt['foreign'] and fdt['st'] == 'ONE') then
+				-- save
+				tinsert(store_kv, k)
+				tinsert(store_kv, v)		
+			end
+		end
     end
 
     return self, store_kv
@@ -1592,8 +1600,12 @@ Model = Object:extend {
 	get = function (self, query_args, find_rev)
 		-- XXX: may cause effective problem
 		-- every time 'get' will cause the all objects' retrieving
-		local obj = self:filter(query_args, nil, nil, find_rev, 'get')[1]
-		return obj
+		local objs = self:filter(query_args, nil, nil, find_rev, 'get')
+		if objs then 
+			return objs[1]
+		else
+			return obj
+		end
 	end;
 
 	--- fitler some instances belong to this model
@@ -1653,8 +1665,10 @@ Model = Object:extend {
 
 			if query_args and query_args['id'] then
 				-- remove 'id' query argument
-				print("[Warning] Filter doesn't support search by id.")
-				query_args['id'] = nil 
+				print("[Warning] get and filter don't support search by id, please use getById.")
+				-- print(debug.traceback())
+				-- query_args['id'] = nil
+				return nil
 			end
 
 			-- if query table is empty, return slice instances
@@ -1696,7 +1710,7 @@ Model = Object:extend {
 		local walkcheck = function (objs)
 			for i, obj in ipairs(objs) do
 				-- check the object's legalery, only act on valid object
-				local flag = checkLogicRelation(self, obj, query_args, logic_choice)
+				local flag = checkLogicRelation(obj, query_args, logic_choice)
 				
 				-- if walk to this line, means find one 
 				if flag then
@@ -1777,14 +1791,16 @@ Model = Object:extend {
 				end
 				walkcheck(objs)
 
-				-- clear model main index
-				if not isFalse(nils) then
-					local index_key = getIndexKey(self)
-					-- each element in nils is the id pattern string, when clear, remove them directly
-					for _, v in ipairs(nils) do
-						db:zremrangebyscore(index_key, v, v)
-					end
-				end		
+				if bamboo.config.auto_clear_index_when_get_failed then
+					-- clear model main index
+					if not isFalse(nils) then
+						local index_key = getIndexKey(self)
+						-- each element in nils is the id pattern string, when clear, remove them directly
+						for _, v in ipairs(nils) do
+							db:zremrangebyscore(index_key, v, v)
+						end
+					end		
+				end
             else
 		        -- here, all_ids is the all instance id to query_args now
                 --query_set = QuerySet(all_ids);
@@ -1993,7 +2009,7 @@ Model = Object:extend {
 		if not db:exists(custom_key) then print('[Warning] @addCustomMember - This custom key does not exist.'); end
 		local store_type = db:type(custom_key) ~= 'none' and db:type(custom_key) or stype
 		local store_module = getStoreModule(store_type)
-		return store_module.add(custom_key, val)
+		return store_module.add(custom_key, val, score)
 		
 	end;
 	
@@ -2331,20 +2347,21 @@ Model = Object:extend {
 			local countername = getCounterName(self)
 			local options = { watch = {countername, index_key}, cas = true, retry = 2 }
 			replies = db:transaction(options, function(db)
-			-- increase the instance counter
-			db:incr(countername)
-			self.id = db:get(countername)
-			local model_key = getNameIdPattern(self)
-			local self, store_kv = processBeforeSave(self, params)
-			assert(not db:zscore(index_key, self[indexfd]), "[Error] save duplicate to an unique limited field, aborted!")
+				-- increase the instance counter
+				db:incr(countername)
+				self.id = db:get(countername)
+				local model_key = getNameIdPattern(self)
+				local self, store_kv = processBeforeSave(self, params)
+				-- assert(not db:zscore(index_key, self[indexfd]), "[Error] save duplicate to an unique limited field, aborted!")
+				if db:zscore(index_key, self[indexfd]) then print("[Warning] save duplicate to an unique limited field, canceled!") end
 
-			db:zadd(index_key, self.id, self[indexfd])
-			-- update object hash store key
-			db:hmset(model_key, unpack(store_kv))
-            
-            if bamboo.config.index_hash then 
-                mih.index(self,true);--create hash index
-            end
+				db:zadd(index_key, self.id, self[indexfd])
+				-- update object hash store key
+				db:hmset(model_key, unpack(store_kv))
+				
+				if bamboo.config.index_hash then 
+					mih.index(self,true);--create hash index
+				end
 			end)
 		else
 			-- update case
@@ -2360,7 +2377,8 @@ Model = Object:extend {
             end
 
 			local score = db:zscore(index_key, self[indexfd])
-			assert(score == self.id or score == nil, "[Error] save duplicate to an unique limited field, aborted!")
+			-- assert(score == self.id or score == nil, "[Error] save duplicate to an unique limited field, aborted!")
+			if not (score == self.id or score == nil) then print("[Warning] save duplicate to an unique limited field, canceled!") end
 			
 			-- if modified indexfd, score will be nil, remove the old id-indexfd pair, for later new save indexfd
 			if not score then
@@ -2623,11 +2641,14 @@ Model = Object:extend {
 			if list:isEmpty() then return QuerySet() end
 		
 			local objs, nils = retrieveObjectsByForeignType(fld.foreign, list, key)
-			-- clear the invalid foreign item value
-			if not isFalse(nils) then
-				-- each element in nils is the id pattern string, when clear, remove them directly
-				for _, v in ipairs(nils) do
-					store_module.remove(key, v)
+
+			if bamboo.config.auto_clear_index_when_get_failed then
+				-- clear the invalid foreign item value
+				if not isFalse(nils) then
+					-- each element in nils is the id pattern string, when clear, remove them directly
+					for _, v in ipairs(nils) do
+						store_module.remove(key, v)
+					end
 				end
 			end
 			

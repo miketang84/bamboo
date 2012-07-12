@@ -231,15 +231,15 @@ local View = Object:extend {
         local code = {'local _result, _children = {}, {}\n'}
 
 		-- render the rest
-		local text, block, _ret
+		local text, block
 		for text, block in lgstring.matchtagset(tmpl) do
 			local act = VIEW_ACTIONS[block:sub(1,2)]
 
 			if act then
 				code[#code+1] =  '_result[#_result+1] = [==[' + text + ']==]'
-				_ret = act(block:sub(3,-3))
-				assert(type(_ret) == 'string', ("[Error] the returned value type by view rendering tag '%s' is not string."):format(block:sub(1,2)))
-				code[#code+1] = _ret
+				-- _ret = act(block:sub(3,-3))
+				-- assert(type(_ret) == 'string', ("[Error] the returned value type by view rendering tag '%s' is not string."):format(block:sub(1,2)))
+				code[#code+1] = act(block:sub(3,-3))
 			elseif #block > 2 then
 				code[#code+1] = '_result[#_result+1] = [==[' + text + block + ']==]'
 			else

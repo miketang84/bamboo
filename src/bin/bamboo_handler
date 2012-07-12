@@ -367,12 +367,16 @@ local function run(conn, config)
 		end
     end
 	
-    -- add the main monserver request to poll
-    -- conn.reqs is the socket pull from monserver
-    poller:add(conn.reqs, zmq.POLLIN, monserver_request)
-    -- start the main loop
-    poller:start()
-
+	if istesting then
+		while true do monserver_request() end
+	else
+		-- add the main monserver request to poll
+		-- conn.reqs is the socket pull from monserver
+		poller:add(conn.reqs, zmq.POLLIN, monserver_request)
+		-- start the main loop
+		poller:start()
+	end
+	
     print('Bamboo main loop aborted!')
 end
 

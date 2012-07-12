@@ -15,7 +15,7 @@ function save(key, tbl, scores)
 		end 
 	else
 		checkType(scores, 'table')
-		assert(#val == #scores, '[Error] the lengths of val and scores are not equal.')
+		assert(#tbl == #scores, '[Error] the lengths of val and scores are not equal.')
 				
 		for i, v in ipairs(tbl) do
 			local score = scores[i] 
@@ -37,10 +37,9 @@ end
 
 
 function add( key, val, score )
-	local oscore = db:zscore(key, val)
+--	local oscore = db:zscore(key, val)
 	-- is exist, do nothing, else redis will update the score of val
-	if oscore then return nil end
-	
+--	if oscore then return nil end
 	if not score then
 		-- get the current element in zset
 		local n = db:zcard(key)
@@ -52,7 +51,7 @@ function add( key, val, score )
 			db:zadd(key, lastscore + 1, val)
 		end	
 	else
-		checkType(score, 'number')
+		-- checkType(score, 'number')
 		db:zadd(key, score, val)
 	end
 
