@@ -148,7 +148,6 @@ local function getHandlerByPath(path)
 	end
 	
 	local key, value = "", nil
-	
 	-- process concrete case first
 	if MappingTableConcrete[path] then return parse(MappingTableConcrete[path]), path end
 

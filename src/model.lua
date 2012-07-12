@@ -976,10 +976,12 @@ local collectRuleFunctionUpvalues = function (query_args)
 	for i=1, math.huge do
 		local name, v = debug.getupvalue(query_args, i)
 		if not name then break end
-		-- because we could not collect the upvalues whose type is 'table', report error and abort here
-		assert(type(v) ~= 'table' and type(v) ~= 'function', 
-			"[Error] @collectRuleFunctionUpvalues of filter - bamboo has no ability to collect the function upvalue whose type is 'table' or 'function'.")
-
+		-- because we could not collect the upvalues whose type is 'table', print warning here
+		if type(v) == 'table' or type(v) == 'function' then 
+			print"[Error] @collectRuleFunctionUpvalues of filter - bamboo has no ability to collect the function upvalue whose type is 'table' or 'function'."
+			return nil
+		end
+			
 		upvalues[#upvalues + 1] = { name, tostring(v), type(v) }
 	end
 end

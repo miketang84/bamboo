@@ -28,6 +28,8 @@ function deepCopyWithModelName(self, seen)
 			else
 				res[k] = deepCopyWithModelName(v, seen)
 			end
+		elseif "function" == type(v) then
+			res[k] = '__function__' .. string.dump(v)
 		else
 			res[k] = v
 		end
@@ -56,6 +58,8 @@ function table2model(tbl)
 	for k,v in pairs(tbl) do
 		if type(v) == 'table' then
 			tbl[k] = table2model(v)
+		elseif type(v) == 'string' and v:startsWith('__function__') then
+			tbl[k] = loadstring(v:sub(13, -1))
 		end
 	end
 	return tbl
