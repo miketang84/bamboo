@@ -48,14 +48,9 @@ local User = Model:extend {
 	end;
 
 	authenticate = function (self, params)
-		I_AM_CLASS_OR_INSTANCE(self)
+		I_AM_CLASS(self)
 
-		local user
-		if isInstance(self) then
-			user = self
-		else
-			user = self:getByIndex(params.username)
-		end
+		local user = self:getByIndex(params.username)
 		if not user then return false end
 
 		if self.encrypt and type(self.encrypt) == 'function' then
@@ -73,10 +68,14 @@ local User = Model:extend {
 	login = function (self, params)
 		I_AM_CLASS_OR_INSTANCE(self)
 		-- make instance can use this login
-		if isInstance(self) then params = self end
-		if not params['username'] or not params['password'] then return nil end
-		local authed, user = self:authenticate(params)
-		if not authed then return nil end
+		local user
+		if isInstance(self) then
+			user = self 
+		else
+			if not params['username'] or not params['password'] then return nil end
+			authed, user = self:authenticate(params)
+			if not authed then return nil end
+		end
 
 		Session:setKey('user_id', self:classname() + ':' + user.id)
 		Session:userHash(user, req.session_id)
