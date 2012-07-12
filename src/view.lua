@@ -73,8 +73,8 @@ local VIEW_ACTIONS = {
             	i, j, matched = this_page:find("(%b{})", j + 1)
             	
             	if i == nil then break end
-            	part = matched:match('^{%[%s*======*%s*' + block_content +
-            '%s*======*%s+(.+)%s*%]}$')
+            	part = matched:match('^{%[%s*====*%s*' + block_content +
+            '%s*====*%s+(.+)%s*%]}$')
 				if part then
 					table.insert(parts, base_page:sub(starti, oi-1))
 					table.insert(parts, part)
@@ -160,8 +160,6 @@ local View = Object:extend {
     ------------------------------------------------------------------------
     init = function (self, name, is_inline)
         local tmpl
-		-- local tmpl_dir = findTemplDir(name)
-        -- print('Template file dir:', tmpl_dir, name)
 
 		if bamboo.config.PRODUCTION then
             -- if cached
@@ -213,7 +211,14 @@ local View = Object:extend {
 		while tmpl:match('^{:.-:}%s*\n') do
             tmpl = inheritate(tmpl)
         end
-		
+
+		tmpl = tmpl:gsub('%[%[%s*====*%s*([\'\"%w_%-]+)%s*====*%s+(.-)%s*====*%s*%]%]', function (skey, sval)
+			local firstchar = skey:sub(1,1)
+			if firstchar == "'" or firstchar == '"' then skey = skey:sub(2,-2) end
+			bamboo.context[skey] = sval
+			
+			return ''
+		end)
 		return tmpl
     end;
 
@@ -237,8 +242,6 @@ local View = Object:extend {
 
 			if act then
 				code[#code+1] =  '_result[#_result+1] = [==[' + text + ']==]'
-				-- _ret = act(block:sub(3,-3))
-				-- assert(type(_ret) == 'string', ("[Error] the returned value type by view rendering tag '%s' is not string."):format(block:sub(1,2)))
 				code[#code+1] = act(block:sub(3,-3))
 			elseif #block > 2 then
 				code[#code+1] = '_result[#_result+1] = [==[' + text + block + ']==]'
@@ -286,7 +289,6 @@ local View = Object:extend {
 					context[k] = v
 				end
 			end
-			
 			setmetatable(context, {__index=_G})
 			setfenv(func, context)
 			return func()
