@@ -133,7 +133,6 @@ local Mysql = Model:extend {
         return records;
     end;
 
-
     writeDbToFile = function(self)
         local cur = self.conn:execute("show tables");
 
