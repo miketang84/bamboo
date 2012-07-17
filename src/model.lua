@@ -264,6 +264,8 @@ local makeObject = function (self, data)
     	else
       		if fld.type == 'number' then
         		data[k] = tonumber(data[k])
+			elseif fld.type == 'boolean' then
+				data[k] = data[k] == 'true' and true or false
 			end
 		end
 
