@@ -67,7 +67,8 @@ rdactions['set'].num = rdset.num
 
 rdactions['zset'].save = rdzset.save
 rdactions['zset'].update = rdzset.update
-rdactions['zset'].retrieve = rdzset.retrieve
+--rdactions['zset'].retrieve = rdzset.retrieve
+rdactions['zset'].retrieve = rdzset.retrieveWithScores
 rdactions['zset'].remove = rdzset.remove
 rdactions['zset'].add = rdzset.add
 rdactions['zset'].has = rdzset.has
@@ -2623,9 +2624,11 @@ Model = Object:extend {
 				if not isValidInstance(obj) then
 					print('[Warning] invalid ONE foreign id or object.')
 					
-					-- clear invalid foreign value
-					db:hdel(model_key, field)
-					self[field] = nil 
+					if bamboo.config.auto_clear_index_when_get_failed then
+						-- clear invalid foreign value
+						db:hdel(model_key, field)
+						self[field] = nil 
+					end
 					
 					return nil
 				else
@@ -2638,11 +2641,13 @@ Model = Object:extend {
 			local key = getFieldPattern(self, field)
 		
 			local store_module = getStoreModule(fld.st)
-			local list = store_module.retrieve(key)
+			-- scores may be nil
+			local list, scores = store_module.retrieve(key)
 
 			if list:isEmpty() then return QuerySet() end
 			list = list:slice(start, stop, is_rev)
 			if list:isEmpty() then return QuerySet() end
+			if not isFalse(scores) then scores = scores:slice(start, stop, is_rev) end
 		
 			local objs, nils = retrieveObjectsByForeignType(fld.foreign, list, key)
 
@@ -2656,7 +2661,7 @@ Model = Object:extend {
 				end
 			end
 			
-			return objs
+			return objs, scores
 		end
 	end;
 
@@ -2677,13 +2682,13 @@ Model = Object:extend {
 			if isFalse(self[field]) then return List() end
 			local key = getFieldPattern(self, field)
 			local store_module = getStoreModule(fld.st)
-			local list = store_module.retrieve(key)
+			local list, scores = store_module.retrieve(key)
 			if list:isEmpty() then return List() end
-			
 			list = list:slice(start, stop, is_rev)
 			if list:isEmpty() then return List() end
-			
-			return list
+			if not isFalse(scores) then scores = scores:slice(start, stop, is_rev) end
+
+			return list, scores
 		end
 
 	end;    

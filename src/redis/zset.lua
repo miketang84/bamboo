@@ -72,12 +72,25 @@ end
 
 function retrieveWithScores( key )
 	-- [1] is member, [2] is score
-	return List(db:zrange(key, 0, -1, 'withscores'))
+	local pair_list = db:zrange(key, 0, -1, 'withscores')
+	local value_list, score_list = List(), List()
+	for _, v in ipairs(pair_list) do
+		table.insert(value_list, v[1])
+		table.insert(score_list, v[2])
+	end
+	return value_list, score_list
 end
 
 function retrieveReverselyWithScores( key )
 	-- [1] is member, [2] is score
-	return List(db:zrevrange(key, 0, -1, 'withscores'))
+	local pair_list = db:zrevrange(key, 0, -1, 'withscores')
+	local value_list, score_list = List(), List()
+	for _, v in ipairs(pair_list) do
+		table.insert(value_list, v[1])
+		table.insert(score_list, v[2])
+	end
+
+	return value_list, score_list
 end
 
 function remove( key, val )
