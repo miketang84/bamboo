@@ -2580,7 +2580,7 @@ Model = Object:extend {
 		else
 			local key = getFieldPattern(self, field)
 			local store_module = getStoreModule(fld.st)
-			store_module.add(key, new_id, fld.fifolen)
+			store_module.add(key, new_id, fld.fifolen or socket.gettime())
 			-- in zset, the newest member has the higher score
 			-- but use getForeign, we retrieve them from high to low, so newest is at left of result
 		end
