@@ -250,6 +250,20 @@ local View = Object:extend {
 			end
 		end
 
+		-- do check before concatate
+		-- if code[i] is nil, it won't be countered
+		-- we must find all viewing bugs in develop mode
+		code[#code+1] = [==[ 
+			if not bamboo.config.PRODUCTION then
+				local ctype
+				for i, v in ipairs(_result) do  
+					local ctype = type(v)
+					if ctype ~= 'string' or ctype ~= 'number' then
+						_result[i] = tostring(v)
+					end
+				end 
+			end 
+		]==]
         code[#code+1] = 'return table.concat(_result)'
         code = table.concat(code, '\n')
         -- print('-----', code)
