@@ -241,7 +241,6 @@ local makeObject = function (self, data)
 		return nil 
 	end
 	-- XXX: keep id as string for convienent, because http and database are all string
-	-- data.id = tonumber(data.id) or data.id
 	
 	local fields = self.__fields
 	for k, fld in pairs(fields) do
@@ -333,37 +332,35 @@ local getFromRedisPipeline = function (self, ids)
 	return objs, nils
 end 
 
--- 
+-- fields must not be empty 
 local getPartialFromRedisPipeline = function (self, ids, fields)
+	tinsert(fields, 'id')
 	local key_list = makeModelKeyList(self, ids)
 	-- DEBUG('key_list', key_list, 'fields', fields)
 	
-	-- all fields are strings
 	local data_list = db:pipeline(function (p) 
 		for _, v in ipairs(key_list) do
 			p:hmget(v, unpack(fields))
 		end
 	end)
+	
+	-- all fields are strings
 	-- every item is data_list now is the values according to 'fields'
-	--DEBUG('data_list', data_list)
-
 	local objs = QuerySet()
-	local nils = {}
-	local obj
 	-- here, data_list is fields' order values
-	for i, v in ipairs(data_list) do
+	for _, v in ipairs(data_list) do
 		local item = {}
 		for i, key in ipairs(fields) do
 			-- v[i] is the value of ith key
 			item[key] = v[i]
 		end
-		obj = makeObject(self, item)
-		if obj then tinsert(objs, obj)
-		else tinsert(nils, ids[i])
+		-- only has valid field other than id can be checked as fit object
+		if #item > 1 then
+			tinsert(objs, makeObject(self, item))
 		end
 	end
 
-	return objs, nils
+	return objs
 end 
 
 -- for use in "User:id" as each item key
@@ -1762,36 +1759,23 @@ Model = Object:extend {
             end
 
             if raw_filter_flag then 
-               	-- make partially get value containing 'id' default
-	    		local qfs = {'id'}
+	    		local qfs = {}
 	    		if is_args_table then
 		    		for k, _ in pairs(query_args) do
 			    		tinsert(qfs, k)
 				    end
---    			else
-	    			-- use precollected fields
-		    		-- if model has set '__use_rule_index' manually, collect all fields to index
-			    	-- if not set '__use_rule_index' manually, collect fields with 'index=true' in their field description table
-				    -- if not set '__use_rule_index' manually, and not set 'index=true' in any field, collect NOTHING
-    				--DEBUG('__rule_index_fields', self.__rule_index_fields)
---	    			for _, k in ipairs(self.__rule_index_fields) do
---		    			tinsert(qfs, k)
---			    	end
+					table.sort(qfs)
     			end
-	    		table.sort(qfs)
 			
 				local objs, nils
-				--DEBUG(qfs)
-				-- == 1, means only have 'id', collect nothing on fields 
-				if #qfs == 1 then
-					--DEBUG('Enter full pipeline branch')
+				if #qfs == 0 then
 					-- collect nothing, use 'hgetall' to retrieve, partially_got is false
 					-- when query_args is function, do this
 					objs, nils = getFromRedisPipeline(self, all_ids)
 				else
-					--DEBUG('Enter partial pipeline branch')
 					-- use hmget to retrieve, now the objs are partial objects
-					objs, nils = getPartialFromRedisPipeline(self, all_ids, qfs)
+					-- qfs here must have key-value pair
+					objs = getPartialFromRedisPipeline(self, all_ids, qfs)
 					partially_got = true
 				end
 				walkcheck(objs)
