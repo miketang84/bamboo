@@ -356,7 +356,9 @@ local getPartialFromRedisPipeline = function (self, ids, fields)
 		end
 		-- only has valid field other than id can be checked as fit object
 		if item[fields[1]] ~= nil then
-			tinsert(objs, makeObject(self, item))
+			-- tinsert(objs, makeObject(self, item))
+			-- here, we jumped the makeObject step, to promote performance
+			tinsert(objs, item)
 		end
 	end
 
@@ -1117,21 +1119,20 @@ local extraQueryArgs = function (qstr)
 end
 
 
-local checkLogicRelation = function (obj, query_args, logic_choice)
+local checkLogicRelation = function (obj, query_args, logic_choice, model)
 	-- NOTE: query_args can't contain [1]
 	-- here, obj may be object or string 
 	-- when obj is string, query_args must be function;
 	-- when query_args is table, obj must be table, and must be real object.
 	local flag = logic_choice
 	if type(query_args) == 'table' then
---		if not isValidInstance(obj) then print('[Warning] @checkLogicRelation - obj should be valid instance when query_args is table.') end
+		local fields = model and model.__fields or obj.__fields
 		for k, v in pairs(query_args) do
 			-- to redundant query condition, once meet, jump immediately
-			if not obj.__fields[k] then flag=false; break end
+			if not fields[k] then flag=false; break end
 
 			if type(v) == 'function' then
 				flag = v(obj[k])
-				--DEBUG('table v', flag)
 			else
 				flag = (obj[k] == v)
 			end
@@ -1148,7 +1149,6 @@ local checkLogicRelation = function (obj, query_args, logic_choice)
 	else
 		-- call this query args function
 		flag = query_args(obj)
-		--DEBUG(flag)
 	end
 	
 	return flag
@@ -1703,18 +1703,16 @@ Model = Object:extend {
 		
 		end
 		
-		
-		
 		-- create a query set
 		local query_set = QuerySet()
 		local logic_choice = (logic == 'and')
 		local partially_got = false
 
 		-- walkcheck can process full object and partial object
-		local walkcheck = function (objs)
+		local walkcheck = function (objs, model)
 			for i, obj in ipairs(objs) do
 				-- check the object's legalery, only act on valid object
-				local flag = checkLogicRelation(obj, query_args, logic_choice)
+				local flag = checkLogicRelation(obj, query_args, logic_choice, model)
 				
 				-- if walk to this line, means find one 
 				if flag then
@@ -1732,7 +1730,6 @@ Model = Object:extend {
             local hash_index_query_args = {};
             local hash_index_flag = false;
             local raw_filter_flag = false;
-
 
             if type(query_args) == 'function' then
                 hash_index_flag = false;
@@ -1777,10 +1774,11 @@ Model = Object:extend {
 				else
 					-- use hmget to retrieve, now the objs are partial objects
 					-- qfs here must have key-value pair
+					-- here, objs are not real objects, only ordinary table
 					objs = getPartialFromRedisPipeline(self, all_ids, qfs)
 					partially_got = true
 				end
-				walkcheck(objs)
+				walkcheck(objs, self)
 
 				if bamboo.config.auto_clear_index_when_get_failed then
 					-- clear model main index
