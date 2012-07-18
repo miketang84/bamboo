@@ -355,7 +355,7 @@ local getPartialFromRedisPipeline = function (self, ids, fields)
 			item[key] = v[i]
 		end
 		-- only has valid field other than id can be checked as fit object
-		if #item > 1 then
+		if item[fields[1]] ~= nil then
 			tinsert(objs, makeObject(self, item))
 		end
 	end
