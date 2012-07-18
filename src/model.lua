@@ -701,7 +701,8 @@ local upvalue_collector = {}
 
 _G['eq'] = function ( cmp_obj )
 	local t = function (v)
-        if v == nil then return nil, 'eq', cmp_obj; end--only return params
+	-- XXX: here we should not open the below line. v can be nil
+	--        if v == nil then return nil, 'eq', cmp_obj; end--only return params
 		
         if v == cmp_obj then
 			return true
@@ -715,7 +716,8 @@ end
 
 _G['uneq'] = function ( cmp_obj )
 	local t = function (v)
-        if v == nil then return nil, 'uneq', cmp_obj; end
+	-- XXX: here we should not open the below line. v can be nil
+	--        if v == nil then return nil, 'uneq', cmp_obj; end
 
 		if v ~= cmp_obj then
 			return true
