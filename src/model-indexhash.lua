@@ -23,7 +23,6 @@ function getFieldZSetKey(self,field)
     return getClassName(self)..":"..field..":__zset";
 end
 
-
 function getFieldValSetKey(self, field, value)
 	return getClassName(self) .. ":" .. field..":".. value .. ':__set'
 end
