@@ -591,7 +591,7 @@ function filter(self, query_args, logic)
             end
 
             if type(value) == 'function' then 
-                local flag,name,args = value();--get the args
+                local flag,name,args = value('___hashindex^*_#@[]-+~~!$$$$');--get the args
                 if self.__fields[field].index_type == 'number' then 
                     all_ids[i] = filterNumber(self,field,name,args);
                 elseif self.__fields[field].index_type == 'string' then 
