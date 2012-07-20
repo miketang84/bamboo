@@ -144,13 +144,20 @@ local Mysql = Model:extend {
             tables[i] = temp[1];
         end
         cur:close();
-        ptable(tables);
 
         for i,v in ipairs(tables) do 
-            self.conn:execute("select * from information_schema where table_name='"..v.."' and table_schema='" ..self.database.. "' into outfile /tmp/".. v .. ".ach");
-            self.conn:execute("select * from ".. v .. "into ourfile /tmp/".. v .. ".dat");
+            print(v,self.database)
+            self.conn:execute("use information_schema");
+            self.conn:execute("select * from columns where table_name='"..v.."' and table_schema='" ..self.database.. "' into outfile '/tmp/".. v .. ".ach'");
+            self.conn:execute("use "..self.database);
+            self.conn:execute("select * from ".. v .. " into outfile '/tmp/".. v .. ".dat'");
         end
     end;
+
+    writeDataToFile = function(self, sqlStr, file)
+        local cur = self.conn:execute(sqlStr.." into outfile '"..file.."'");
+        return cur;
+    end
 }
 
 return Mysql;
