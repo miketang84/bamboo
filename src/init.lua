@@ -353,23 +353,6 @@ registerModel = function (model)
 			fdt:init()
 		end
 		
-		-- check if ask field index based on rules
-		model['__rule_index_fields'] = {}
-		if rawget(model, '__use_rule_index') == true then
-			-- if set __use_rule_index manually, collect all fields
-			for key in pairs(model.__fields) do
-				table.insert(model['__rule_index_fields'], key)
-			end			
-		else
-			-- else, only collect fields set index=true flag 
-			for key, field_dt in pairs(model.__fields) do
-				if field_dt.rule_index == true then
-					model['__use_rule_index'] = true
-					table.insert(model['__rule_index_fields'], key)
-				end			
-			end
-		end
-		
 		-- check if ask fulltext index
 		model['__fulltext_index_fields'] = {}
 		for key, field_dt in pairs(model.__fields) do

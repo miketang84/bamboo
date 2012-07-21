@@ -20,8 +20,8 @@ local rdhash = require 'bamboo.redis.hash'
 
 local getModelByName  = bamboo.getModelByName
 local dcollector= 'DELETED:COLLECTOR'
-local rule_manager_prefix = '_index_manager:'
-local rule_result_pattern = '_RULE:%s:%s'
+local rule_manager_prefix = '_RULE_INDEX_MANAGER:'
+local rule_result_pattern = '_RULE:%s:%s'   -- _RULE:Model:num
 
 local QuerySet
 local Model
@@ -196,11 +196,11 @@ local isUsingFulltextIndex = function (self)
 	end
 end
 
-local isUsingRuleIndex = function (self)
-	if bamboo.config.rule_index_support and self.__use_rule_index and self.__name then
-		return true
+local isUsingRuleIndex = function ()
+	if bamboo.config.rule_index_support == false then
+		return false
 	end
-	return false
+	return true
 end
 
 -- in model global index cache (backend is zset),
@@ -981,14 +981,21 @@ local collectRuleFunctionUpvalues = function (query_args)
 	for i=1, math.huge do
 		local name, v = debug.getupvalue(query_args, i)
 		if not name then break end
+		local ctype = type(v)
 		-- because we could not collect the upvalues whose type is 'table', print warning here
-		if type(v) == 'table' or type(v) == 'function' then 
-			print"[Error] @collectRuleFunctionUpvalues of filter - bamboo has no ability to collect the function upvalue whose type is 'table' or 'function'."
-			return nil
+		if type(v) == 'function' then 
+			print"[Warning] @collectRuleFunctionUpvalues of filter - bamboo has no ability to collect the function upvalue whose type is 'function'."
+			return false
 		end
 			
-		upvalues[#upvalues + 1] = { name, tostring(v), type(v) }
+		if ctype == 'table' then
+			upvalues[#upvalues + 1] = { name, serialize(v), type(v) }
+		else
+			upvalues[#upvalues + 1] = { name, tostring(v), type(v) }
+		end
 	end
+	
+	return true
 end
 
 
@@ -1044,7 +1051,7 @@ local compressQueryArgs = function (query_args)
 	end
 
 	-- use a delemeter to seperate obviously
-	return table.concat(out, ' ')
+	return table.concat(out, ' ~_~ ')
 end
 
 local extraQueryArgs = function (qstr)
@@ -1054,23 +1061,20 @@ local extraQueryArgs = function (qstr)
 	if qstr:startsWith('function') then
 		local startpoint = qstr:find('|') or 1
 		local endpoint = qstr:rfind('|') or -1
-		--DEBUG(startpoint, endpoint)
-		fpart = qstr:sub(startpoint + 2, endpoint - 2) -- :trim()
-		apart = qstr:sub(endpoint + 2, -1) -- :trim()
-		--DEBUG(string.len(fpart), string.len(apart))		
+		fpart = qstr:sub(startpoint + 6, endpoint - 6) -- :trim()
+		apart = qstr:sub(endpoint + 6, -1) -- :trim()
 		-- now fpart is the function binary string
 		query_args = loadstring(fpart)
 		-- now query_args is query function
-		--DEBUG(fpart, apart, query_args)
 		if not isFalse(apart) then
 			-- item 1 is key, item 2 is value, item 3 is value type, item 4 is key .... 
-			local flat_upvalues = apart:split(' ')
+			local flat_upvalues = apart:split(' ~_~ ')
 			for i=1, #flat_upvalues / 3 do
 				local vtype = flat_upvalues[3*i]
 				local key = flat_upvalues[3*i - 2]
 				local value = flat_upvalues[3*i - 1]
-				if vtype == 'string' then
-					-- nothing to do
+				if vtype == 'table' then
+					value = deserialize(value)
 				elseif vtype == 'number' then
 					value = tonumber(value)
 				elseif vtype == 'boolean' then
@@ -1078,7 +1082,6 @@ local extraQueryArgs = function (qstr)
 				elseif vtype == 'nil' then
 					value = nil
 				end
-				--DEBUG(vtype, key, value)
 				-- set upvalues
 				debug.setupvalue(query_args, i, value)
 			end
@@ -1087,15 +1090,12 @@ local extraQueryArgs = function (qstr)
 	
 		local endpoint = -1
 		qstr = qstr:sub(1, endpoint - 1)
-		local _qqstr = qstr:splittrim('|')
-		--DEBUG(qstr, _qqstr)
-		-- logic == 'and' or 'or'
-		local logic = _qqstr[1]
+		local _qqstr = qstr:split('|')
+		local logic = _qqstr[1]:sub(1, -6)
 		query_args = {logic}
 		for i=2, #_qqstr do
 			local str = _qqstr[i]
-			local kt = str:splittrim(' ')
-			--DEBUG(kt)
+			local kt = str:splittrim(' ~_~ '):slice(2, -2)
 			-- kt[1] is 'key', [2] is 'closure', [3] .. are closure's parameters
 			local key = kt[1]
 			local closure = kt[2]
@@ -1104,8 +1104,6 @@ local extraQueryArgs = function (qstr)
 				for j=3, #kt do
 					tinsert(_args, kt[j])
 				end
-				--DEBUG('_args', _args)
-				--DEBUG('_G[closure]', closure, _G[closure](unpack(_args)))				
 				-- compute closure now
 				query_args[key] = _G[closure](unpack(_args))
 			else
@@ -1113,7 +1111,6 @@ local extraQueryArgs = function (qstr)
 				query_args[key] = closure
 			end
 		end
-		--DEBUG(query_args)
 	end
 	
 	return query_args	
@@ -1632,38 +1629,40 @@ Model = Object:extend {
 		local is_args_table = (type(query_args) == 'table')
 		local logic = 'and'
 		
-		local query_str_iden
-		local is_using_rule_index = isUsingRuleIndex(self)
+		local query_str_iden, is_capable_press_rule = '', true
+		local is_using_rule_index = isUsingRuleIndex()
 		if is_using_rule_index then
 			if type(query_args) == 'function' then
-				collectRuleFunctionUpvalues(query_args)
-			                                   
+				is_capable_press_rule = collectRuleFunctionUpvalues(query_args)
 			end
-			-- make query identification string
-			query_str_iden = compressQueryArgs(query_args)
+			
+			if is_capable_press_rule then
+				-- make query identification string
+				query_str_iden = compressQueryArgs(query_args)
 
-			-- check index
-			-- XXX: Only support class now, don't support query set, maybe query set doesn't need this feature
-			local id_list = getIndexFromManager(self, query_str_iden)
-			if type(id_list) == 'table' then
-				if #id_list == 0 then
-					return QuerySet()
-				else
-					-- #id_list > 0
-					if is_get == 'get' then
-						id_list = (is_rev == 'rev') and List{id_list[#id_list]} or List{id_list[1]}
-					else	
-						-- now id_list is a list containing all id of instances fit to this query_args rule, so need to slice
-						id_list = id_list:slice(start, stop, is_rev)
-					end
-					
-					-- if have this list, return objects directly
-					if #id_list > 0 then
-						return getFromRedisPipeline(self, id_list)
+				-- check index
+				-- XXX: Only support class now, don't support query set, maybe query set doesn't need this feature
+				local id_list = getIndexFromManager(self, query_str_iden)
+				if type(id_list) == 'table' then
+					if #id_list == 0 then
+						return QuerySet()
+					else
+						-- #id_list > 0
+						if is_get == 'get' then
+							id_list = (is_rev == 'rev') and List{id_list[#id_list]} or List{id_list[1]}
+						else	
+							-- now id_list is a list containing all id of instances fit to this query_args rule, so need to slice
+							id_list = id_list:slice(start, stop, is_rev)
+						end
+						
+						-- if have this list, return objects directly
+						if #id_list > 0 then
+							return getFromRedisPipeline(self, id_list)
+						end
 					end
 				end
+				-- else go ahead
 			end
-			-- else go ahead
 		end
 		
 		if is_args_table then
@@ -1804,7 +1803,7 @@ Model = Object:extend {
 		local _t_query_set = query_set
 		
 		if #query_set == 0 then
-			if not is_query_set and is_using_rule_index then
+			if not is_query_set and is_using_rule_index and is_capable_press_rule then
 				addIndexToManager(self, query_str_iden, {})
 			end
 		else
@@ -1824,7 +1823,7 @@ Model = Object:extend {
 					tinsert(id_list, v.id)
 				end
 				-- add to index, here, we index all instances fit to query_args, rather than results applied extra limitation conditions
-				if is_using_rule_index then
+				if is_using_rule_index and is_capable_press_rule then
 					addIndexToManager(self, query_str_iden, id_list)
 				end
 				
