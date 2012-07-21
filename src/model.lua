@@ -22,7 +22,7 @@ local getModelByName  = bamboo.getModelByName
 local dcollector= 'DELETED:COLLECTOR'
 local rule_manager_prefix = '_RULE_INDEX_MANAGER:'
 local rule_result_pattern = '_RULE:%s:%s'   -- _RULE:Model:num
-
+local rule_index_divider = ' ^_^ '
 local QuerySet
 local Model
 
@@ -1055,7 +1055,7 @@ local compressQueryArgs = function (query_args)
 	end
 
 	-- use a delemeter to seperate obviously
-	return table.concat(out, ' ~_~ ')
+	return table.concat(out, rule_index_divider)
 end
 
 local extraQueryArgs = function (qstr)
@@ -1072,7 +1072,7 @@ local extraQueryArgs = function (qstr)
 		-- now query_args is query function
 		if not isFalse(apart) then
 			-- item 1 is key, item 2 is value, item 3 is value type, item 4 is key .... 
-			local flat_upvalues = apart:split(' ~_~ ')
+			local flat_upvalues = apart:split(rule_index_divider)
 			for i=1, #flat_upvalues / 3 do
 				local vtype = flat_upvalues[3*i]
 				local key = flat_upvalues[3*i - 2]
@@ -1099,7 +1099,7 @@ local extraQueryArgs = function (qstr)
 		query_args = {logic}
 		for i=2, #_qqstr do
 			local str = _qqstr[i]
-			local kt = str:splittrim(' ~_~ '):slice(2, -2)
+			local kt = str:splittrim(rule_index_divider):slice(2, -2)
 			-- kt[1] is 'key', [2] is 'closure', [3] .. are closure's parameters
 			local key = kt[1]
 			local closure = kt[2]
