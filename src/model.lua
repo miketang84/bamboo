@@ -982,9 +982,13 @@ local collectRuleFunctionUpvalues = function (query_args)
 		local name, v = debug.getupvalue(query_args, i)
 		if not name then break end
 		local ctype = type(v)
+		local table_has_metatable = false
+		if ctype == 'table' then
+			table_has_metatable = getmetatable(v) and true or false
+		end
 		-- because we could not collect the upvalues whose type is 'table', print warning here
-		if type(v) == 'function' then 
-			print"[Warning] @collectRuleFunctionUpvalues of filter - bamboo has no ability to collect the function upvalue whose type is 'function'."
+		if type(v) == 'function' or table_has_metatable then 
+			print"[Warning] @collectRuleFunctionUpvalues of filter - bamboo has no ability to collect the function upvalue whose type is 'function' or 'table' with metatable."
 			return false
 		end
 			
