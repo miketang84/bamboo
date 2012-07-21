@@ -3,7 +3,7 @@
 require 'posix'
 require 'signal'
 require 'bamboo'
-require 'redis'
+local redis = require 'redis'
 
 local util = require 'bamboo.util'
 local readSettings = util.readSettings
@@ -606,7 +606,8 @@ host = "%s"
         local which = settings.which_db or 0
 
         local redis_db = Redis.connect(params)
-        redis_db:select(which)
+        if config.AUTH then redis_db:auth(config.AUTH) end
+		redis_db:select(which)
 
 		local key_list = redis_db:keys( model_name + ':*')
 		for i, v in ipairs(key_list) do
@@ -617,6 +618,28 @@ host = "%s"
 		print('OK.')
     end;
 
+    clearrule = function (settings)
+        readSettings(config)
+        local params = {
+            host = settings.db_host or config.DB_HOST or '127.0.0.1',
+            port = settings.db_port or config.DB_PORT or 6379,
+        }
+        local which = settings.which_db or config.WHICH_DB or 0
+	
+        local redis_db = redis.connect(params)
+        if config.AUTH then redis_db:auth(config.AUTH) end
+		redis_db:select(which)
+
+		local key_list = redis_db:keys( '_RULE*')
+		for i, v in ipairs(key_list) do
+			print(v)
+			redis_db:del(v)
+		end
+
+		print('OK.')
+    end;
+
+	
     shell = function (settings)
    		readSettings(config)
 		local bamboo_dir = config.bamboo_dir
