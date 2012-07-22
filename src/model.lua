@@ -344,6 +344,7 @@ local getPartialFromRedisPipeline = function (self, ids, fields)
 		end
 	end)
 	
+	local proto_fields = self.__fields
 	-- all fields are strings
 	-- every item is data_list now is the values according to 'fields'
 	local objs = QuerySet()
@@ -353,6 +354,15 @@ local getPartialFromRedisPipeline = function (self, ids, fields)
 		for i, key in ipairs(fields) do
 			-- v[i] is the value of ith key
 			item[key] = v[i]
+			
+			local fdt = proto_fields[key]
+			if fdt and fdt.type then
+				if fdt.type == 'number' then
+					item[key] = tonumber(item[key])
+				elseif fdt.type == 'boolean' then
+					item[key] = item[key] == 'true' and true or false
+				end
+			end
 		end
 		-- only has valid field other than id can be checked as fit object
 		if item[fields[1]] ~= nil then
