@@ -21,7 +21,10 @@ local rdhash = require 'bamboo.redis.hash'
 local getModelByName  = bamboo.getModelByName
 local dcollector= 'DELETED:COLLECTOR'
 local rule_manager_prefix = '_RULE_INDEX_MANAGER:'
-local rule_result_pattern = '_RULE:%s:%s'   -- _RULE:Model:num
+local rule_query_result_pattern = '_RULE:%s:%s'   -- _RULE:Model:num
+local rule_sortby_manager_prefix = '_RULE_INDEX_SORTBY_MANAGER:'
+local rule_sortby_result_pattern = '_RULE_SORTBY:%s:%s'
+local rule_index_query_sortby_divider = ' |^|^| '
 local rule_index_divider = ' ^_^ '
 local QuerySet
 local Model
@@ -437,7 +440,8 @@ local delFromRedis = function (self, id)
 		clearFtIndexesOnDeletion(self)
 	end
 	if isUsingRuleIndex(self) and self.id then
-		updateIndexByRules(self, 'del')
+		updateIndexByRules(self, 'del', rule_query_result_pattern)
+		updateIndexByRules(self, 'del', rule_sortby_result_pattern)
 	end
 				
 	-- release the lua object
@@ -482,7 +486,8 @@ local fakedelFromRedis = function (self, id)
 		clearFtIndexesOnDeletion(self)
 	end
 	if isUsingRuleIndex(self) and self.id then
-		updateIndexByRules(self, 'del')
+		updateIndexByRules(self, 'del', rule_query_result_pattern)
+		updateIndexByRules(self, 'del', rule_sortby_result_pattern)
 	end
 
 	-- release the lua object
@@ -1012,7 +1017,116 @@ local collectRuleFunctionUpvalues = function (query_args)
 	return true
 end
 
+-----------------------------------------------------------------------
+-- query_str_iden is at least ''
+local compressSortByArgs = function (query_str_iden, sortby_args)
+	local strs = {}
+	for i, v in ipairs(sortby_args) do
+		local ctype = type(v)
+		if ctype == 'string' or ctype == 'nil' then
+			tinsert(strs, v)
+		elseif ctype == 'function' then
+			tinsert(strs, string.dump(v))
+		end
+	end
+	
+	local sortby_str_iden = table.concat(strs, ' ')
+	return query_str_iden .. rule_index_query_sortby_divider .. sortby_str_iden
+end
 
+local extractSortByArgs = function (sortby_str_iden)
+	local sortby_args = sortby_str_iden:split(' ')
+	-- [1] is string, [2] is nil or string, [3] is nil or function
+	-- [4] is nil or string, [5] is nil or string, [6] is nil or function
+	local key = sortby_args[1] ~= 'nil' and sortby_args[1] or nil
+	local direction = sortby_args[2] == 'desc' and 'desc' or 'asc'
+	local func = sortby_args[3] ~= 'nil' and loadstring(sortby_args[3]) or function (a, b)
+		local af = a[key] 
+		local bf = b[key]
+		if af and bf then
+			if direction == 'asc' then
+				return af < bf
+			elseif direction == 'desc' then
+				return af > bf
+			end
+		else
+			return nil
+		end
+	end
+	
+	return func
+end
+
+
+local canInstanceFitQueryRuleAndFindProperPosition = function (self, combine_str_iden)
+	local p
+	local id_list = {}
+	local query_str_iden, sortby_str_iden = combine_str_iden:splitout(rule_index_query_sortby_divider)
+	print(query_str_iden, sortby_str_iden)
+	
+	if query_str_iden == '' then return false end
+	
+	local flag = canInstanceFitQueryRule (self, query_str_iden)
+	if flag then
+		local manager_key = rule_query_result_pattern .. self.__name
+		local score = db:zscore(manager_key, query_str_iden)
+		local item_key = rule_result_pattern:format(self.__name, math.floor(score))
+		id_list = db:lrange(item_key, 0, -1)
+		local length = #id_list
+		
+		local func = extractSortByArgs(sortby_str_iden)
+		
+		local model = self:getClass()
+		local l, r = 1, #id_list
+		local left_obj
+		local right_obj
+		local bflag, left_flag, right_flag, pflag
+
+		left_obj = model:getById(id_list[l])
+		right_obj = model:getById(id_list[r])
+		bflag = func(left_obj, right_obj)
+		
+		p = l
+		while (l ~= r) do
+			
+			left_flag = func(left_obj, self)
+			right_flag = func(self, right_obj)
+			
+			if bflag == left_flag and bflag == right_flag then
+			-- between
+				p = math.floor((l + r)/2)
+			elseif bflag == left_flag then
+			-- on the right hand
+				p = r
+				break
+			elseif bflag == right_flag then
+			-- on the left hand
+				p = l
+				break
+			end
+			
+			pflag = func(model:getById(id_list[p]), self)
+			if pflag == bflag then
+				l = p
+			else
+				r = p
+			end
+
+			left_obj = model:getById(id_list[l])
+			right_obj = model:getById(id_list[r])
+		end
+	
+		-- now p is the insert position
+	end
+	
+	return flag, id_list[p], p
+end
+
+
+
+
+
+-------------------------------------------------------------------------
 local compressQueryArgs = function (query_args)
 	local out = {}
 	local qtype = type(query_args)
@@ -1068,7 +1182,7 @@ local compressQueryArgs = function (query_args)
 	return table.concat(out, rule_index_divider)
 end
 
-local extraQueryArgs = function (qstr)
+local extractQueryArgs = function (qstr)
 	local query_args
 	
 	--DEBUG(string.len(qstr))		
@@ -1167,7 +1281,7 @@ local checkLogicRelation = function (obj, query_args, logic_choice, model)
 end
 
 local canInstanceFitQueryRule = function (self, qstr)
-	local query_args = extraQueryArgs(qstr)
+	local query_args = extractQueryArgs(qstr)
 	--DEBUG(query_args)
 	local logic_choice = true
 	if type(query_args) == 'table' then logic_choice = (query_args[1] == 'and'); query_args[1]=nil end
@@ -1175,13 +1289,20 @@ local canInstanceFitQueryRule = function (self, qstr)
 end
 
 -- here, qstr rule exist surely
-local addInstanceToIndexOnRule = function (self, qstr)
+local addInstanceToIndexOnRule = function (self, qstr, rule_result_pattern)
 	local manager_key = rule_manager_prefix .. self.__name
 	--DEBUG(self, qstr, manager_key)	
 	local score = db:zscore(manager_key, qstr)
 	local item_key = rule_result_pattern:format(self.__name, math.floor(score))
 
-	local flag = canInstanceFitQueryRule(self, qstr)
+	local flag, cmpid
+	if rule_result_pattern == rule_query_result_pattern then
+		flag = canInstanceFitQueryRule(self, qstr) 
+		cmpid = self.id
+	else
+		flag, cmpid = canInstanceFitQueryRuleAndFindProperPosition(self, qstr)
+	end
+	
 	--DEBUG(flag)
 	if flag then
 		db:transaction(function(db)
@@ -1190,7 +1311,7 @@ local addInstanceToIndexOnRule = function (self, qstr)
 			--db:lrem(item_key, 0, self.id)
 			--db:rpush(item_key, self.id)
 			-- insert a new id after the old same id
-			db:linsert(item_key, 'AFTER', self.id, self.id)
+			db:linsert(item_key, 'AFTER', cmpid, self.id)
 			-- delete the old one id
 			db:lrem(item_key, 1, self.id)
 			-- update the float score to integer
@@ -1201,15 +1322,21 @@ local addInstanceToIndexOnRule = function (self, qstr)
 	return flag
 end
 
-local updateInstanceToIndexOnRule = function (self, qstr)
+local updateInstanceToIndexOnRule = function (self, qstr, rule_result_pattern)
 	local manager_key = rule_manager_prefix .. self.__name
 	local score = db:zscore(manager_key, qstr)
 	local item_key = rule_result_pattern:format(self.__name, math.floor(score))
 
-	local flag = canInstanceFitQueryRule(self, qstr)
+	local flag, cmpid
+	if rule_result_pattern == rule_query_result_pattern then
+		flag = canInstanceFitQueryRule(self, qstr) 
+		cmpid = self.id
+	else
+		flag, cmpid = canInstanceFitQueryRuleAndFindProperPosition(self, qstr)
+	end
 	db:transaction(function(db)
 		if flag then
-			db:linsert(item_key, 'AFTER', self.id, self.id)
+			db:linsert(item_key, 'AFTER', cmpid, self.id)
 		end
 		-- delete the old one id
 		db:lrem(item_key, 1, self.id)
@@ -1224,7 +1351,7 @@ local updateInstanceToIndexOnRule = function (self, qstr)
 	return flag
 end
 
-local delInstanceToIndexOnRule = function (self, qstr)
+local delInstanceToIndexOnRule = function (self, qstr, rule_result_pattern)
 	local manager_key = rule_manager_prefix .. self.__name
 	local score = db:zscore(manager_key, qstr)
 	local item_key = rule_result_pattern:format(self.__name, math.floor(score))
@@ -1248,20 +1375,20 @@ local INDEX_ACTIONS = {
 	['del'] = delInstanceToIndexOnRule
 }
 
-local updateIndexByRules = function (self, action)
+local updateIndexByRules = function (self, action, rule_result_pattern)
 	local manager_key = rule_manager_prefix .. self.__name
 	local qstr_list = db:zrange(manager_key, 0, -1)
 	local action_func = INDEX_ACTIONS[action]
 	for _, qstr in ipairs(qstr_list) do
-		action_func(self, qstr)
+		action_func(self, qstr, rule_result_pattern)
 	end
 end
 
 -- can be reentry
-local addIndexToManager = function (self, query_str_iden, obj_list)
+local addIndexToManager = function (self, str_iden, obj_list, rule_result_pattern)
 	local manager_key = rule_manager_prefix .. self.__name
 	-- add to index manager
-	local score = db:zscore(manager_key, query_str_iden)
+	local score = db:zscore(manager_key, str_iden)
 	-- if score then return end
 	local new_score
 	if not score then
@@ -1269,7 +1396,7 @@ local addIndexToManager = function (self, query_str_iden, obj_list)
 		new_score = db:zcard(manager_key) + 1
 		-- use float score represent empty rule result index
 		if #obj_list == 0 then new_score = new_score + 0.1 end
-		db:zadd(manager_key, new_score, query_str_iden)
+		db:zadd(manager_key, new_score, str_iden)
 	else
 		-- when rule result is expired, re enter this function
 		new_score = score
@@ -1288,10 +1415,10 @@ local addIndexToManager = function (self, query_str_iden, obj_list)
 	end)
 end
 
-local getIndexFromManager = function (self, query_str_iden, getnum)
+local getIndexFromManager = function (self, str_iden, getnum, rule_result_pattern)
 	local manager_key = rule_manager_prefix .. self.__name
 	-- get this rule's socre
-	local score = db:zscore(manager_key, query_str_iden)
+	local score = db:zscore(manager_key, str_iden)
 	-- if has no score, means it is not rule indexed, 
 	-- return nil directly
 	if not score then 
@@ -1531,6 +1658,13 @@ Model = Object:extend {
 		return getFromRedis(self, key)
 	end;
 	
+	getByIds = function (self, ids)
+		I_AM_CLASS(self)
+		assert(type(ids) == 'table')
+		
+		return getFromRedisPipeline(self, ids)
+	end;
+
 	-- return instance object by name
 	--
 	getByIndex = function (self, name)
@@ -1656,7 +1790,7 @@ Model = Object:extend {
 
 				-- check index
 				-- XXX: Only support class now, don't support query set, maybe query set doesn't need this feature
-				local id_list = getIndexFromManager(self, query_str_iden)
+				local id_list = getIndexFromManager(self, query_str_iden, nil, rule_query_result_pattern)
 				if type(id_list) == 'table' then
 					if #id_list == 0 then
 						return QuerySet()
@@ -1818,7 +1952,7 @@ Model = Object:extend {
 		
 		if #query_set == 0 then
 			if not is_query_set and is_using_rule_index and is_capable_press_rule then
-				addIndexToManager(self, query_str_iden, {})
+				addIndexToManager(self, query_str_iden, {}, rule_query_result_pattern)
 			end
 		else
 			if is_get == 'get' then
@@ -1838,7 +1972,7 @@ Model = Object:extend {
 				end
 				-- add to index, here, we index all instances fit to query_args, rather than results applied extra limitation conditions
 				if is_using_rule_index and is_capable_press_rule then
-					addIndexToManager(self, query_str_iden, id_list)
+					addIndexToManager(self, query_str_iden, id_list, rule_query_result_pattern)
 				end
 				
 				-- if partially got previously, need to get the integrated objects now
@@ -1853,6 +1987,10 @@ Model = Object:extend {
 			end
 		end
 		
+		local query_set_meta = getmetatable(query_set)
+		-- passing this query_str_iden to later chains method call
+		query_set_meta['query_str_iden'] = query_str_iden ~= '' and query_str_iden or ''
+		
 		return query_set
 	end;
     
@@ -1860,7 +1998,7 @@ Model = Object:extend {
 	count = function (self, query_args)
 		I_AM_CLASS(self)	
 		local query_str_iden = compressQueryArgs(query_args)
-		local ret = getIndexFromManager(self, query_str_iden, 'getnum')
+		local ret = getIndexFromManager(self, query_str_iden, 'getnum', rule_query_result_pattern)
 		if not ret then
 			ret = #self:filter(query_args)
 		end
@@ -2453,7 +2591,8 @@ Model = Object:extend {
 			makeFulltextIndexes(self)
 		end
 		if isUsingRuleIndex(self) then
-			updateIndexByRules(self, 'save')
+			updateIndexByRules(self, 'save', rule_query_result_pattern)
+			updateIndexByRules(self, 'save', rule_sortby_result_pattern)
 		end
 
 		return self
@@ -2519,7 +2658,8 @@ Model = Object:extend {
 			makeFulltextIndexes(self)
 		end
 		if isUsingRuleIndex(self) then
-			updateIndexByRules(self, 'update')
+			updateIndexByRules(self, 'update', rule_query_result_pattern)
+			updateIndexByRules(self, 'update', rule_sortby_result_pattern)
 		end
 		
 
@@ -2970,7 +3110,11 @@ Model = Object:extend {
 	-- do sort on query set by some field
 	sortBy = function (self, field, direction, sort_func, ...)
 		I_AM_QUERY_SET(self)
-		-- checkType(field, 'string')
+
+		local query_set_meta = getmetatable(self)
+		local query_str_iden = query_set_meta['query_str_iden']
+		local sortby_args = {field, direction, sort_func, ...}
+		local sortby_str_iden = compressSortByArgs(query_str_iden, sortby_args)
 		
 		local direction = direction or 'asc'
 		
@@ -2983,9 +3127,9 @@ Model = Object:extend {
 					return af < bf
 				elseif direction == 'desc' then
 					return af > bf
-				else
-					return nil
 				end
+			else
+				return nil
 			end
 		end
 		
