@@ -1915,8 +1915,32 @@ Model = Object:extend {
 			local store_module = getStoreModule(st)
 			store_module.save(custom_key, val, scores)
 		end
+		
+		return self
 	end;
 
+	setCustomQuerySet = function (self, key, query_set, scores)
+		I_AM_CLASS_OR_INSTANCE(self)
+		I_AM_QUERY_SET(query_set)
+		checkType(key, 'string')
+
+		if type(scores) == 'table' then
+			local ids = {}
+			for i, v in ipairs(query_set) do
+				tinsert(ids, v.id)
+			end
+			self:setCustom(key, ids, 'zset', scores)
+		else
+			local ids = {}
+			for i, v in ipairs(query_set) do
+				tinsert(ids, v.id)
+			end
+			self:setCustom(key, ids, 'list')
+		end
+		
+		return self
+	end;
+	
 	-- 
 	getCustomKey = function (self, key)
 		I_AM_CLASS_OR_INSTANCE(self)
@@ -1927,7 +1951,7 @@ Model = Object:extend {
 	end;
 
 	-- 
-	getCustom = function (self, key, atype)
+	getCustom = function (self, key, atype, start, stop, is_rev)
 		I_AM_CLASS_OR_INSTANCE(self)
 		checkType(key, 'string')
 		local custom_key = self:isClass() and getCustomKey(self, key) or getCustomIdKey(self, key)
@@ -1946,9 +1970,39 @@ Model = Object:extend {
 		local store_type = db:type(custom_key)
 		if atype then assert(store_type == atype, '[Error] @getCustom - The specified type is not equal the type stored in db.') end
 		local store_module = getStoreModule(store_type)
-		return store_module.retrieve(custom_key), store_type
+		local ids, scores = store_module.retrieve(custom_key)
+		
+		if type(ids) == 'table' and (start or stop) then
+			ids = ids:slice(start, stop, is_rev)
+			if type(scores) == 'table' then
+				scores = scores:slice(start, stop, is_rev)
+			end
+		end
+		
+		return ids, scores
 	end;
 
+	getCustomQuerySet = function (self, key, start, stop, is_rev)
+		I_AM_CLASS_OR_INSTANCE(self)
+		checkType(key, 'string')
+		local query_set_ids, scores = self:getCustom(key, nil, start, stop, is_rev)
+		if isFalse(query_set_ids) then
+			return QuerySet(), nil
+		else
+			local query_set, nils = getFromRedisPipeline(self, query_set_ids)
+			
+			if bamboo.config.auto_clear_index_when_get_failed then
+				if not isFalse(nils) then
+					for _, v in ipairs(nils) do
+						self:removeCustomMember(key, v)
+					end
+				end
+			end	
+
+			return query_set, scores
+		end
+	end;
+	
 	delCustom = function (self, key)
 		I_AM_CLASS_OR_INSTANCE(self)
 		checkType(key, 'string')
@@ -3114,6 +3168,18 @@ Model = Object:extend {
 			ids:append(v.id)
 		end
 		return ids
+	end;
+	
+	pipeline = function (self, func)
+		I_AM_QUERY_SET(self)
+		db:pipeline(function (db)
+			for _, v in ipairs(self) do
+				func(v)
+			end
+		end)
+		-- at this abstract level, pipeline's returned value is not stable
+		
+		return self
 	end;
 	
 	-- for fulltext index API
