@@ -416,92 +416,6 @@ local getFromRedisPipeline2 = function (pattern_list)
 	return objs, nils
 end 
 
---------------------------------------------------------------
--- this function can be called by instance or class
---
-local delFromRedis = function (self, id)
-	assert(self.id or id, '[Error] @delFromRedis - must specify an id of instance.')
-	local model_key = id and getNameIdPattern2(self, id) or getNameIdPattern(self)
-	local index_key = getIndexKey(self)
-
-    --del hash index 
-    if bamboo.config.index_hash then 
-        mih.indexDel(self);
-    end
-	
-	local fields = self.__fields
-	-- in redis, delete the associated foreign key-value store
-	for k, v in pairs(self) do
-		local fld = fields[k]
-		if fld and fld.foreign then
-			local key = model_key + ':' + k
-			db:del(key)
-		end
-	end
-
-	-- delete the key self
-	db:del(model_key)
-	-- delete the index in the global model index zset
-	db:zremrangebyscore(index_key, self.id or id, self.id or id)
-	
-	-- clear fulltext index, only when it is instance
-	if isUsingFulltextIndex(self) and self.id then
-		clearFtIndexesOnDeletion(self)
-	end
-	if isUsingRuleIndex(self) and self.id then
-		updateIndexByRules(self, 'del', 'query')
-		updateIndexByRules(self, 'del', 'sortby')
-	end
-				
-	-- release the lua object
-	self = nil
-end
-
---------------------------------------------------------------
--- Fake Deletion
---  called by instance
-local fakedelFromRedis = function (self, id)
-	assert(self.id or id, '[Error] @fakedelFromRedis - must specify an id of instance.')
-	local model_key = id and getNameIdPattern2(self, id) or getNameIdPattern(self)
-	local index_key = getIndexKey(self)
-
-    --del hash index 
-    if bamboo.config.index_hash then 
-        mih.indexDel(self);
-    end
-	
-	local fields = self.__fields
-	-- in redis, delete the associated foreign key-value store
-	for k, v in pairs(self) do
-		local fld = fields[k]
-		if fld and fld.foreign then
-			local key = model_key + ':' + k
-			if db:exists(key) then
-				db:rename(key, 'DELETED:' + key)
-			end
-		end
-	end
-
-	-- rename the key self
-	db:rename(model_key, 'DELETED:' + model_key)
-	-- delete the index in the global model index zset
-	-- when deleted, the instance's index cache was cleaned.
-	db:zremrangebyscore(index_key, self.id or id, self.id or id)
-	-- add to deleted collector
-	rdzset.add(dcollector, model_key)
-	
-	-- clear fulltext index
-	if isUsingFulltextIndex(self) and self.id then
-		clearFtIndexesOnDeletion(self)
-	end
-	if isUsingRuleIndex(self) and self.id then
-		updateIndexByRules(self, 'del', 'query')
-		updateIndexByRules(self, 'del', 'sortby')
-	end
-
-	-- release the lua object
-	self = nil
-end
 
 --------------------------------------------------------------
 -- Restore Fake Deletion
@@ -1049,7 +963,7 @@ local extractSortByArgs = function (sortby_str_iden)
 	-- [4] is nil or string, [5] is nil or string, [6] is nil or function
 	local key = sortby_args[1] ~= 'nil' and sortby_args[1] or nil
 	local direction = sortby_args[2] == 'desc' and 'desc' or 'asc'
-	local func = sortby_args[3] ~= 'nil' and loadstring(sortby_args[3]) or function (a, b)
+	local func = (sortby_args[3] ~= nil and sortby_args[3] ~= 'nil') and loadstring(sortby_args[3]) or function (a, b)
 		local af = a[key] 
 		local bf = b[key]
 		if af and bf then
@@ -1068,24 +982,30 @@ end
 
 
 local canInstanceFitQueryRuleAndFindProperPosition = function (self, combine_str_iden)
+	print('enter canInstanceFitQueryRuleAndFindProperPosition')
 	local p
 	local id_list = {}
 	local query_str_iden, sortby_str_iden = combine_str_iden:splitout(rule_index_query_sortby_divider)
 	print(query_str_iden, sortby_str_iden)
+	local flag = true
+
+	-- how to separate the can't fit rule and the all rule ({})
+	if query_str_iden ~= '' then
+		flag = canInstanceFitQueryRule (self, query_str_iden)
+	end
 	
-	if query_str_iden == '' then return false end
-	
-	local flag = canInstanceFitQueryRule (self, query_str_iden)
+	print(flag)
 	if flag then
-		local manager_key = rule_query_result_pattern .. self.__name
-		local score = db:zscore(manager_key, query_str_iden)
-		local item_key = rule_result_pattern:format(self.__name, math.floor(score))
+		local manager_key = rule_sortby_manager_prefix .. self.__name
+		local score = db:zscore(manager_key, combine_str_iden)
+		local item_key = rule_sortby_result_pattern:format(self.__name, math.floor(score))
 		id_list = db:lrange(item_key, 0, -1)
 		local length = #id_list
-		
-		local func = extractSortByArgs(sortby_str_iden)
-		
 		local model = self:getClass()
+		print(model)			
+		local func = extractSortByArgs(sortby_str_iden)
+		print(func)
+
 		local l, r = 1, #id_list
 		local left_obj
 		local right_obj
@@ -1093,11 +1013,17 @@ local canInstanceFitQueryRuleAndFindProperPosition = function (self, combine_str
 
 		left_obj = model:getById(id_list[l])
 		right_obj = model:getById(id_list[r])
+		if left_obj == nil or right_obj == nil then 
+			return nil, id_list[#id_list], #id_list 
+		end
 		bflag = func(left_obj, right_obj)
 		
 		p = l
-		while (l ~= r) do
-			
+		while (r ~= l) do
+			print('in sort auto, l, r, p', l, r, p)
+			if left_obj == nil or right_obj == nil then 
+				return nil, id_list[#id_list], #id_list 
+			end
 			left_flag = func(left_obj, self)
 			right_flag = func(self, right_obj)
 			
@@ -1106,15 +1032,20 @@ local canInstanceFitQueryRuleAndFindProperPosition = function (self, combine_str
 				p = math.floor((l + r)/2)
 			elseif bflag == left_flag then
 			-- on the right hand
-				p = r
+				p = r + 1
 				break
 			elseif bflag == right_flag then
 			-- on the left hand
-				p = l
+				p = l - 1
 				break
 			end
 			
-			pflag = func(model:getById(id_list[p]), self)
+			local mobj = model:getById(id_list[p])
+			if mobj == nil then 
+				return nil, id_list[#id_list], #id_list 
+			end
+			
+			pflag = func(mobj, self)
 			if pflag == bflag then
 				l = p
 			else
@@ -1123,11 +1054,21 @@ local canInstanceFitQueryRuleAndFindProperPosition = function (self, combine_str
 
 			left_obj = model:getById(id_list[l])
 			right_obj = model:getById(id_list[r])
+			if r - l <= 1 then r = l end
 		end
 	
 		-- now p is the insert position
+		local mobj = model:getById(id_list[p])
+		if mobj then
+			pflag = func(mobj, self)
+			if pflag ~= bflag then
+				p = p - 1
+			end
+		end
 	end
 	
+
+	print(id_list[p], p)
 	return flag, id_list[p], p
 end
 
@@ -1140,7 +1081,8 @@ local compressQueryArgs = function (query_args)
 	local out = {}
 	local qtype = type(query_args)
 	if qtype == 'table' then
-	
+		if table.isEmpty(query_args) then return '' end
+		
 		if query_args[1] == 'or' then tinsert(out, 'or')
 		else tinsert(out, 'and')
 		end
@@ -1227,12 +1169,15 @@ local extractQueryArgs = function (qstr)
 	
 		local endpoint = -1
 		qstr = qstr:sub(1, endpoint - 1)
+		print('qstr---', qstr)
 		local _qqstr = qstr:split('|')
 		local logic = _qqstr[1]:sub(1, -6)
 		query_args = {logic}
+		ptable(_qqstr)
 		for i=2, #_qqstr do
 			local str = _qqstr[i]
 			local kt = str:splittrim(rule_index_divider):slice(2, -2)
+			ptable(kt)
 			-- kt[1] is 'key', [2] is 'closure', [3] .. are closure's parameters
 			local key = kt[1]
 			local closure = kt[2]
@@ -1306,14 +1251,15 @@ local addInstanceToIndexOnRule = function (self, qstr, rule_type)
 	local score = db:zscore(manager_key, qstr)
 	local item_key = rule_result_pattern:format(self.__name, math.floor(score))
 
-	local flag, cmpid
+	local flag, cmpid, p
 	if rule_result_pattern == rule_query_result_pattern then
 		flag = canInstanceFitQueryRule(self, qstr) 
 		cmpid = self.id
 	else
-		flag, cmpid = canInstanceFitQueryRuleAndFindProperPosition(self, qstr)
+		flag, cmpid, p = canInstanceFitQueryRuleAndFindProperPosition(self, qstr)
 	end
 	
+	local success = 1
 	if flag then
 		local options = { watch = item_key, cas = true, retry = 2 }
 		db:transaction(options, function(db)
@@ -1321,8 +1267,16 @@ local addInstanceToIndexOnRule = function (self, qstr, rule_type)
 			-- but this may change the default object index orders
 			--db:lrem(item_key, 0, self.id)
 			--db:rpush(item_key, self.id)
+			if cmpid == nil then
+				if p < 1 then
+					db:lpush(item_key, self.id)
+				else
+					db:rpush(item_key, self.id)
+				end
+			else
 			-- insert a new id after the old same id
-			local success = db:linsert(item_key, 'AFTER', cmpid, self.id)
+				success = db:linsert(item_key, 'AFTER', cmpid, self.id)
+			end
 			--print('success----', success)
 			-- success == -1, means no cmpid found, means self.id is a new item
 			if success == -1 then
@@ -1351,24 +1305,34 @@ local updateInstanceToIndexOnRule = function (self, qstr, rule_type)
 	local score = db:zscore(manager_key, qstr)
 	local item_key = rule_result_pattern:format(self.__name, math.floor(score))
 
-	local flag, cmpid
+	local flag, cmpid, p
 	if rule_result_pattern == rule_query_result_pattern then
 		flag = canInstanceFitQueryRule(self, qstr) 
 		cmpid = self.id
 	else
-		flag, cmpid = canInstanceFitQueryRuleAndFindProperPosition(self, qstr)
+		flag, cmpid, p = canInstanceFitQueryRuleAndFindProperPosition(self, qstr)
 	end
 	db:transaction(function(db)
 		if flag then
-			-- self's compared value has been changed
-			if cmpid ~= self.id then
-				-- delete old self first, insert self to proper position
+			-- consider the two end cases
+			if cmpid == nil then
 				db:lrem(item_key, 1, self.id)
-				db:linsert(item_key, 'AFTER', cmpid, self.id)
+				if p < 1 then
+					db:lpush(item_key, self.id)
+				else
+					db:rpush(item_key, self.id)
+				end
 			else
-				-- cmpid == self.id, means use query rule only, keep the old position
-				db:linsert(item_key, 'AFTER', cmpid, self.id)
-				db:lrem(item_key, 1, self.id)
+				-- self's compared value has been changed
+				if cmpid ~= self.id then
+					-- delete old self first, insert self to proper position
+					db:lrem(item_key, 1, self.id)
+					db:linsert(item_key, 'AFTER', cmpid, self.id)
+				else
+					-- cmpid == self.id, means use query rule only, keep the old position
+					db:linsert(item_key, 'AFTER', cmpid, self.id)
+					db:lrem(item_key, 1, self.id)
+				end
 			end
 		else
 			-- doesn't fit any more, delete the old one id
@@ -1392,19 +1356,16 @@ local delInstanceToIndexOnRule = function (self, qstr, rule_type)
 	local score = db:zscore(manager_key, qstr)
 	local item_key = rule_result_pattern:format(self.__name, math.floor(score))
 
-	local flag = canInstanceFitQueryRule(self, qstr) 
-	if flag then
-		local options = { watch = item_key, cas = true, retry = 2 }
-		db:transaction(options, function(db)
-			db:lrem(item_key, 0, self.id)
-			-- if delete to empty list, update the rule score to float
-			if not db:exists(item_key) then   
-				db:zadd(manager_key, score + 0.1, qstr)
-			end
-			db:expire(item_key, bamboo.config.rule_expiration or bamboo.RULE_LIFE)
-		end)
-	end
-	return flag
+	local options = { watch = item_key, cas = true, retry = 2 }
+	db:transaction(options, function(db)
+		db:lrem(item_key, 0, self.id)
+		-- if delete to empty list, update the rule score to float
+		if not db:exists(item_key) then   
+			db:zadd(manager_key, score + 0.1, qstr)
+		end
+		db:expire(item_key, bamboo.config.rule_expiration or bamboo.RULE_LIFE)
+	end)
+	return self
 end
 
 local INDEX_ACTIONS = {
@@ -1492,6 +1453,95 @@ local getIndexFromManager = function (self, str_iden, getnum, rule_type)
 		return db:llen(item_key)
 	end
 end
+
+
+--------------------------------------------------------------
+-- this function can be called by instance or class
+--
+local delFromRedis = function (self, id)
+	assert(self.id or id, '[Error] @delFromRedis - must specify an id of instance.')
+	local model_key = id and getNameIdPattern2(self, id) or getNameIdPattern(self)
+	local index_key = getIndexKey(self)
+
+    --del hash index 
+    if bamboo.config.index_hash then 
+        mih.indexDel(self);
+    end
+	
+	local fields = self.__fields
+	-- in redis, delete the associated foreign key-value store
+	for k, v in pairs(self) do
+		local fld = fields[k]
+		if fld and fld.foreign then
+			local key = model_key + ':' + k
+			db:del(key)
+		end
+	end
+
+	-- delete the key self
+	db:del(model_key)
+	-- delete the index in the global model index zset
+	db:zremrangebyscore(index_key, self.id or id, self.id or id)
+	
+	-- clear fulltext index, only when it is instance
+	if isUsingFulltextIndex(self) and self.id then
+		clearFtIndexesOnDeletion(self)
+	end
+	if isUsingRuleIndex(self) and self.id then
+		updateIndexByRules(self, 'del', 'query')
+		updateIndexByRules(self, 'del', 'sortby')
+	end
+				
+	-- release the lua object
+	self = nil
+end
+
+--------------------------------------------------------------
+-- Fake Deletion
+--  called by instance
+local fakedelFromRedis = function (self, id)
+	assert(self.id or id, '[Error] @fakedelFromRedis - must specify an id of instance.')
+	local model_key = id and getNameIdPattern2(self, id) or getNameIdPattern(self)
+	local index_key = getIndexKey(self)
+
+    --del hash index 
+    if bamboo.config.index_hash then 
+        mih.indexDel(self);
+    end
+	
+	local fields = self.__fields
+	-- in redis, delete the associated foreign key-value store
+	for k, v in pairs(self) do
+		local fld = fields[k]
+		if fld and fld.foreign then
+			local key = model_key + ':' + k
+			if db:exists(key) then
+				db:rename(key, 'DELETED:' + key)
+			end
+		end
+	end
+
+	-- rename the key self
+	db:rename(model_key, 'DELETED:' + model_key)
+	-- delete the index in the global model index zset
+	-- when deleted, the instance's index cache was cleaned.
+	db:zremrangebyscore(index_key, self.id or id, self.id or id)
+	-- add to deleted collector
+	rdzset.add(dcollector, model_key)
+	
+	-- clear fulltext index
+	if isUsingFulltextIndex(self) and self.id then
+		clearFtIndexesOnDeletion(self)
+	end
+	if isUsingRuleIndex(self) and self.id then
+		updateIndexByRules(self, 'del', 'query')
+		updateIndexByRules(self, 'del', 'sortby')
+	end
+
+	-- release the lua object
+	self = nil
+end
+
 
 -- called by save
 -- self is instance
@@ -2033,8 +2083,10 @@ Model = Object:extend {
 		
 		local query_set_meta = getmetatable(query_set)
 		-- passing this query_str_iden to later chains method call
-		query_set_meta['query_str_iden'] = query_str_iden ~= '' and query_str_iden or ''
-		
+		query_set_meta['query_str_iden'] = query_str_iden ~= '' and query_str_iden or false
+
+		print('in filter ------------')
+		ptable(query_set_meta)
 		return query_set
 	end;
     
@@ -2858,7 +2910,7 @@ Model = Object:extend {
 				
 				local obj = link_model:getById (linked_id)
 				if not isValidInstance(obj) then
-					print('[Warning] invalid ONE foreign id or object.')
+					print('[Warning] invalid ONE foreign id or object for field: '..field)
 					
 					if bamboo.config.auto_clear_index_when_get_failed then
 						-- clear invalid foreign value
@@ -3159,12 +3211,22 @@ Model = Object:extend {
 		local query_str_iden
 		local sortby_args
 		local sortby_str_iden
+		local can_use_sortby_rule = true
 		
 		local is_using_rule_index = isUsingRuleIndex()
 		if is_using_rule_index then
 			query_set_meta = getmetatable(self)
+			print('in sortby');ptable(query_set_meta)
 			query_str_iden = query_set_meta['query_str_iden']
+			if query_str_iden == false then
+				-- for rule can't fit
+				can_use_sortby_rule = false
+			else
+				-- for general rule or 'all()' rule
+				query_str_iden = query_str_iden or ''
+			end
 			sortby_args = {field, direction, sort_func, ...}
+			ptable(sortby_args)
 			sortby_str_iden = compressSortByArgs(query_str_iden, sortby_args)
 		end
 		
@@ -3223,7 +3285,7 @@ Model = Object:extend {
 			self = flat
 		end
 
-		if is_using_rule_index then
+		if is_using_rule_index and can_use_sortby_rule then
 			local id_list = {}
 			for _, v in ipairs(self) do
 				tinsert(id_list, v.id)
@@ -3235,6 +3297,40 @@ Model = Object:extend {
 
 		return self		
 	end;
+	
+	getRuleIndexIds = function (self, query_args, sortby_args, start, stop, is_rev)
+		I_AM_CLASS(self)
+		assert(type(query_args) == 'table' or type(query_args) == 'function')
+		assert(type(sortby_args) == 'table')
+		
+		local query_str_iden = compressQueryArgs(query_args)
+		local sortby_str_iden = compressSortByArgs(query_str_iden, sortby_args)
+		
+		local id_list = getIndexFromManager(self, sortby_str_iden, nil, 'sortby')
+		if id_list then
+			if #id_list == 0 then
+				return id_list
+			else
+				return id_list:slice(start, stop, is_rev)
+			end
+		else
+			return List()
+		end
+		
+	end;
+	
+	getRuleIndexQuerySet = function (self, query_args, sortby_args, start, stop, is_rev)
+		I_AM_CLASS(self)
+		local id_list = self:getRuleIndexIds(query_args, sortby_args, start, stop, is_rev)
+		
+		if #id_list == 0 then
+			return QuerySet()
+		else
+			return getFromRedisPipeline(self, id_list)
+		end
+	
+	end;
+	
 	
 	addToCacheAndSortBy = function (self, cache_key, field, sort_func)
 		I_AM_INSTANCE(self)
@@ -3385,17 +3481,16 @@ Model = Object:extend {
 		return ids
 	end;
 	
-	pipeline = function (self, func)
-		I_AM_QUERY_SET(self)
-		db:pipeline(function (db)
-			for _, v in ipairs(self) do
-				func(v)
-			end
-		end)
-		-- at this abstract level, pipeline's returned value is not stable
-		
-		return self
-	end;
+--	pipeline = function (self, func)
+--		I_AM_QUERY_SET(self)
+--		local ret = db:pipeline(function (db)
+--			for _, v in ipairs(self) do
+--				func(v)
+--			end
+--		end)
+--		-- at this abstract level, pipeline's returned value is not stable
+--		return self
+--	end;
 	
 	-- for fulltext index API
 	fulltextSearch = function (self, ask_str, n)
