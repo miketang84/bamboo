@@ -1174,6 +1174,7 @@ local canInstanceFitQueryRule = function (self, qstr)
 	return checkLogicRelation(self, query_args, logic_choice)
 end
 
+--[[
 -- here, qstr rule exist surely
 local addInstanceToIndexOnRule = function (self, qstr)
 	local manager_key = rule_manager_prefix .. self.__name
@@ -1203,6 +1204,7 @@ local addInstanceToIndexOnRule = function (self, qstr)
 	end
 	return self
 end
+--]]
 
 local updateInstanceToIndexOnRule = function (self, qstr)
 	local manager_key = rule_manager_prefix .. self.__name
@@ -1210,18 +1212,24 @@ local updateInstanceToIndexOnRule = function (self, qstr)
 	local item_key = rule_result_pattern:format(self.__name, math.floor(score))
 
 	local flag = canInstanceFitQueryRule(self, qstr)
-	db:transaction(function(db)
+	local success
+	local options = { watch = item_key, cas = true, retry = 2 }
+	db:transaction(options, function(db)
 		if flag then
-			db:linsert(item_key, 'AFTER', self.id, self.id)
+			success = db:linsert(item_key, 'AFTER', self.id, self.id)
+			-- no this id in index before
+			if success == -1 then
+				db:rpush(item_key, self.id)
+			else
+				db:lrem(item_key, 1, self.id)
+			end
+			-- update the float score to integer
+			db:zadd(manager_key, math.floor(score), qstr)
+		else
+			-- delete the old one id
+			db:lrem(item_key, 1, self.id)
 		end
-		-- delete the old one id
-		db:lrem(item_key, 1, self.id)
-			
-		-- this may change the default object index orders
---		db:lrem(item_key, 0, self.id)
---		if flag then
---			db:rpush(item_key, self.id)	
---		end
+
 		db:expire(item_key, bamboo.config.rule_expiration or bamboo.RULE_LIFE)
 	end)
 	return self
@@ -1246,7 +1254,7 @@ local delInstanceToIndexOnRule = function (self, qstr)
 end
 
 local INDEX_ACTIONS = {
-	['save'] = addInstanceToIndexOnRule,
+--	['save'] = addInstanceToIndexOnRule,
 	['update'] = updateInstanceToIndexOnRule,
 	['del'] = delInstanceToIndexOnRule
 }
@@ -2456,7 +2464,7 @@ Model = Object:extend {
 			makeFulltextIndexes(self)
 		end
 		if isUsingRuleIndex(self) then
-			updateIndexByRules(self, 'save')
+			updateIndexByRules(self, 'update')
 		end
 
 		return self
