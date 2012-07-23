@@ -3209,17 +3209,6 @@ Model = Object:extend {
 		return ids
 	end;
 	
-	pipeline = function (self, func)
-		I_AM_QUERY_SET(self)
-		db:pipeline(function (db)
-			for _, v in ipairs(self) do
-				func(v)
-			end
-		end)
-		-- at this abstract level, pipeline's returned value is not stable
-		
-		return self
-	end;
 	
 	-- for fulltext index API
 	fulltextSearch = function (self, ask_str, n)
