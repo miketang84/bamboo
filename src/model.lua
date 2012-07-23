@@ -1184,15 +1184,18 @@ local addInstanceToIndexOnRule = function (self, qstr)
 	local flag = canInstanceFitQueryRule(self, qstr)
 	--DEBUG(flag)
 	if flag then
-		db:transaction(function(db)
-			-- if previously added, remove it first, if no, just no effects
-			-- but this may change the default object index orders
-			--db:lrem(item_key, 0, self.id)
-			--db:rpush(item_key, self.id)
-			-- insert a new id after the old same id
-			db:linsert(item_key, 'AFTER', self.id, self.id)
-			-- delete the old one id
-			db:lrem(item_key, 1, self.id)
+		local options = { watch = item_key, cas = true, retry = 2 }
+		db:transaction(options, function(db)
+			local success = db:linsert(item_key, 'AFTER', self.id, self.id)
+			-- print('success----', success)
+			-- success == -1, means no cmpid found, means self.id is a new item
+			if success == -1 then
+				db:rpush(item_key, self.id)
+			else
+				-- delete the old one id
+				db:lrem(item_key, 1, self.id)
+			end
+
 			-- update the float score to integer
 			db:zadd(manager_key, math.floor(score), qstr)
 			db:expire(item_key, bamboo.config.rule_expiration or bamboo.RULE_LIFE)
@@ -1230,15 +1233,17 @@ local delInstanceToIndexOnRule = function (self, qstr)
 	local item_key = rule_result_pattern:format(self.__name, math.floor(score))
 
 	local flag = canInstanceFitQueryRule(self, qstr)
-	local options = { watch = item_key, cas = true, retry = 2 }
-	db:transaction(options, function(db)
-		db:lrem(item_key, 0, self.id)
-		-- if delete to empty list, update the rule score to float
-		if not db:exists(item_key) then   
-			db:zadd(manager_key, score + 0.1, qstr)
-		end
-		db:expire(item_key, bamboo.config.rule_expiration or bamboo.RULE_LIFE)
-	end)
+	if flag then
+		local options = { watch = item_key, cas = true, retry = 2 }
+		db:transaction(options, function(db)
+			db:lrem(item_key, 0, self.id)
+			-- if delete to empty list, update the rule score to float
+			if not db:exists(item_key) then   
+				db:zadd(manager_key, score + 0.1, qstr)
+			end
+			db:expire(item_key, bamboo.config.rule_expiration or bamboo.RULE_LIFE)
+		end)
+	end
 	return flag
 end
 
