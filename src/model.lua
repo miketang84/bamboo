@@ -206,6 +206,15 @@ local isUsingRuleIndex = function ()
 	return true
 end
 
+local specifiedRulePrefix = function (rule_type)
+	if rule_type == 'query' then
+		return rule_manager_prefix, rule_query_result_pattern
+	else
+		--  rule_type == 'sortby'
+		return rule_sortby_manager_prefix, rule_sortby_result_pattern
+	end
+end
+
 -- in model global index cache (backend is zset),
 -- check the existance of some member by its id (score)
 --
@@ -440,8 +449,8 @@ local delFromRedis = function (self, id)
 		clearFtIndexesOnDeletion(self)
 	end
 	if isUsingRuleIndex(self) and self.id then
-		updateIndexByRules(self, 'del', rule_query_result_pattern)
-		updateIndexByRules(self, 'del', rule_sortby_result_pattern)
+		updateIndexByRules(self, 'del', 'query')
+		updateIndexByRules(self, 'del', 'sortby')
 	end
 				
 	-- release the lua object
@@ -486,8 +495,8 @@ local fakedelFromRedis = function (self, id)
 		clearFtIndexesOnDeletion(self)
 	end
 	if isUsingRuleIndex(self) and self.id then
-		updateIndexByRules(self, 'del', rule_query_result_pattern)
-		updateIndexByRules(self, 'del', rule_sortby_result_pattern)
+		updateIndexByRules(self, 'del', 'query')
+		updateIndexByRules(self, 'del', 'sortby')
 	end
 
 	-- release the lua object
@@ -1289,7 +1298,9 @@ local canInstanceFitQueryRule = function (self, qstr)
 end
 
 -- here, qstr rule exist surely
-local addInstanceToIndexOnRule = function (self, qstr, rule_result_pattern)
+local addInstanceToIndexOnRule = function (self, qstr, rule_type)
+	local rule_manager_prefix, rule_result_pattern = specifiedRulePrefix(rule_type)
+
 	local manager_key = rule_manager_prefix .. self.__name
 	--DEBUG(self, qstr, manager_key)	
 	local score = db:zscore(manager_key, qstr)
@@ -1333,7 +1344,9 @@ local addInstanceToIndexOnRule = function (self, qstr, rule_result_pattern)
 	return flag
 end
 
-local updateInstanceToIndexOnRule = function (self, qstr, rule_result_pattern)
+local updateInstanceToIndexOnRule = function (self, qstr, rule_type)
+	local rule_manager_prefix, rule_result_pattern = specifiedRulePrefix(rule_type)
+
 	local manager_key = rule_manager_prefix .. self.__name
 	local score = db:zscore(manager_key, qstr)
 	local item_key = rule_result_pattern:format(self.__name, math.floor(score))
@@ -1372,7 +1385,9 @@ local updateInstanceToIndexOnRule = function (self, qstr, rule_result_pattern)
 	return flag
 end
 
-local delInstanceToIndexOnRule = function (self, qstr, rule_result_pattern)
+local delInstanceToIndexOnRule = function (self, qstr, rule_type)
+	local rule_manager_prefix, rule_result_pattern = specifiedRulePrefix(rule_type)
+
 	local manager_key = rule_manager_prefix .. self.__name
 	local score = db:zscore(manager_key, qstr)
 	local item_key = rule_result_pattern:format(self.__name, math.floor(score))
@@ -1398,17 +1413,21 @@ local INDEX_ACTIONS = {
 	['del'] = delInstanceToIndexOnRule
 }
 
-local updateIndexByRules = function (self, action, rule_result_pattern)
+local updateIndexByRules = function (self, action, rule_type)
+	local rule_manager_prefix, rule_result_pattern = specifiedRulePrefix(rule_type)
+
 	local manager_key = rule_manager_prefix .. self.__name
 	local qstr_list = db:zrange(manager_key, 0, -1)
 	local action_func = INDEX_ACTIONS[action]
 	for _, qstr in ipairs(qstr_list) do
-		action_func(self, qstr, rule_result_pattern)
+		action_func(self, qstr, rule_type)
 	end
 end
 
 -- can be reentry
-local addIndexToManager = function (self, str_iden, obj_list, rule_result_pattern)
+local addIndexToManager = function (self, str_iden, obj_list, rule_type)
+	local rule_manager_prefix, rule_result_pattern = specifiedRulePrefix(rule_type)
+	
 	local manager_key = rule_manager_prefix .. self.__name
 	-- add to index manager
 	local score = db:zscore(manager_key, str_iden)
@@ -1438,7 +1457,9 @@ local addIndexToManager = function (self, str_iden, obj_list, rule_result_patter
 	end)
 end
 
-local getIndexFromManager = function (self, str_iden, getnum, rule_result_pattern)
+local getIndexFromManager = function (self, str_iden, getnum, rule_type)
+	local rule_manager_prefix, rule_result_pattern = specifiedRulePrefix(rule_type)
+
 	local manager_key = rule_manager_prefix .. self.__name
 	-- get this rule's socre
 	local score = db:zscore(manager_key, str_iden)
@@ -1813,7 +1834,7 @@ Model = Object:extend {
 
 				-- check index
 				-- XXX: Only support class now, don't support query set, maybe query set doesn't need this feature
-				local id_list = getIndexFromManager(self, query_str_iden, nil, rule_query_result_pattern)
+				local id_list = getIndexFromManager(self, query_str_iden, nil, 'query')
 				if type(id_list) == 'table' then
 					if #id_list == 0 then
 						return QuerySet()
@@ -1975,7 +1996,7 @@ Model = Object:extend {
 		
 		if #query_set == 0 then
 			if not is_query_set and is_using_rule_index and is_capable_press_rule then
-				addIndexToManager(self, query_str_iden, {}, rule_query_result_pattern)
+				addIndexToManager(self, query_str_iden, {}, 'query')
 			end
 		else
 			if is_get == 'get' then
@@ -1995,7 +2016,7 @@ Model = Object:extend {
 				end
 				-- add to index, here, we index all instances fit to query_args, rather than results applied extra limitation conditions
 				if is_using_rule_index and is_capable_press_rule then
-					addIndexToManager(self, query_str_iden, id_list, rule_query_result_pattern)
+					addIndexToManager(self, query_str_iden, id_list, 'query')
 				end
 				
 				-- if partially got previously, need to get the integrated objects now
@@ -2021,7 +2042,7 @@ Model = Object:extend {
 	count = function (self, query_args)
 		I_AM_CLASS(self)	
 		local query_str_iden = compressQueryArgs(query_args)
-		local ret = getIndexFromManager(self, query_str_iden, 'getnum', rule_query_result_pattern)
+		local ret = getIndexFromManager(self, query_str_iden, 'getnum', 'query')
 		if not ret then
 			ret = #self:filter(query_args)
 		end
@@ -2614,8 +2635,8 @@ Model = Object:extend {
 			makeFulltextIndexes(self)
 		end
 		if isUsingRuleIndex(self) then
-			updateIndexByRules(self, 'save', rule_query_result_pattern)
-			updateIndexByRules(self, 'save', rule_sortby_result_pattern)
+			updateIndexByRules(self, 'save', 'query')
+			updateIndexByRules(self, 'save', 'sortby')
 		end
 
 		return self
@@ -2681,8 +2702,8 @@ Model = Object:extend {
 			makeFulltextIndexes(self)
 		end
 		if isUsingRuleIndex(self) then
-			updateIndexByRules(self, 'update', rule_query_result_pattern)
-			updateIndexByRules(self, 'update', rule_sortby_result_pattern)
+			updateIndexByRules(self, 'update', 'query')
+			updateIndexByRules(self, 'update', 'sortby')
 		end
 		
 
@@ -3134,13 +3155,20 @@ Model = Object:extend {
 	sortBy = function (self, field, direction, sort_func, ...)
 		I_AM_QUERY_SET(self)
 
-		local query_set_meta = getmetatable(self)
-		local query_str_iden = query_set_meta['query_str_iden']
-		local sortby_args = {field, direction, sort_func, ...}
-		local sortby_str_iden = compressSortByArgs(query_str_iden, sortby_args)
+		local query_set_meta
+		local query_str_iden
+		local sortby_args
+		local sortby_str_iden
+		
+		local is_using_rule_index = isUsingRuleIndex()
+		if is_using_rule_index then
+			query_set_meta = getmetatable(self)
+			query_str_iden = query_set_meta['query_str_iden']
+			sortby_args = {field, direction, sort_func, ...}
+			sortby_str_iden = compressSortByArgs(query_str_iden, sortby_args)
+		end
 		
 		local direction = direction or 'asc'
-		
 		local byfield = field
 		local sort_func = sort_func or function (a, b)
 			local af = a[byfield] 
@@ -3194,7 +3222,17 @@ Model = Object:extend {
 
 			self = flat
 		end
-		
+
+		if is_using_rule_index then
+			local id_list = {}
+			for _, v in ipairs(self) do
+				tinsert(id_list, v.id)
+			end
+			local model = self[1]:getClass()
+			-- add to index
+			addIndexToManager(model, sortby_str_iden, id_list, 'sortby')
+		end
+
 		return self		
 	end;
 	
