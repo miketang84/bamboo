@@ -1232,19 +1232,17 @@ local delInstanceToIndexOnRule = function (self, qstr)
 	local score = db:zscore(manager_key, qstr)
 	local item_key = rule_result_pattern:format(self.__name, math.floor(score))
 
-	local flag = canInstanceFitQueryRule(self, qstr)
-	if flag then
-		local options = { watch = item_key, cas = true, retry = 2 }
-		db:transaction(options, function(db)
-			db:lrem(item_key, 0, self.id)
-			-- if delete to empty list, update the rule score to float
-			if not db:exists(item_key) then   
-				db:zadd(manager_key, score + 0.1, qstr)
-			end
-			db:expire(item_key, bamboo.config.rule_expiration or bamboo.RULE_LIFE)
-		end)
-	end
-	return flag
+	local options = { watch = item_key, cas = true, retry = 2 }
+	db:transaction(options, function(db)
+		db:lrem(item_key, 0, self.id)
+		-- if delete to empty list, update the rule score to float
+		if not db:exists(item_key) then   
+			db:zadd(manager_key, score + 0.1, qstr)
+		end
+		db:expire(item_key, bamboo.config.rule_expiration or bamboo.RULE_LIFE)
+	end)
+
+	return self
 end
 
 local INDEX_ACTIONS = {
