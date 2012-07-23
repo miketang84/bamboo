@@ -1201,7 +1201,7 @@ local addInstanceToIndexOnRule = function (self, qstr)
 			db:expire(item_key, bamboo.config.rule_expiration or bamboo.RULE_LIFE)
 		end)
 	end
-	return flag
+	return self
 end
 
 local updateInstanceToIndexOnRule = function (self, qstr)
@@ -1224,7 +1224,7 @@ local updateInstanceToIndexOnRule = function (self, qstr)
 --		end
 		db:expire(item_key, bamboo.config.rule_expiration or bamboo.RULE_LIFE)
 	end)
-	return flag
+	return self
 end
 
 local delInstanceToIndexOnRule = function (self, qstr)
@@ -2641,6 +2641,10 @@ Model = Object:extend {
 			-- but use getForeign, we retrieve them from high to low, so newest is at left of result
 		end
 		
+		if isUsingRuleIndex() then
+			updateIndexByRules(self, 'update')
+		end
+		
 		-- update the lastmodified_time
 		self.lastmodified_time = socket.gettime()
 		db:hset(model_key, 'lastmodified_time', self.lastmodified_time)
@@ -2834,6 +2838,10 @@ Model = Object:extend {
 			store_module.remove(key, new_id)
 		end
 	
+		if isUsingRuleIndex() then
+			updateIndexByRules(self, 'update')
+		end
+
 		-- update the lastmodified_time
 		self.lastmodified_time = socket.gettime()
 		db:hset(model_key, 'lastmodified_time', self.lastmodified_time)
@@ -2853,12 +2861,17 @@ Model = Object:extend {
 		if fld.st == 'ONE' then
 			-- maybe here is rude
 			db:hdel(model_key, field)
+			self[field] = nil
 		else
 			local key = getFieldPattern(self, field)		
 			-- delete the foreign key
 			db:del(key)
 		end
 		
+		if isUsingRuleIndex() then
+			updateIndexByRules(self, 'update')
+		end
+
 		-- update the lastmodified_time
 		self.lastmodified_time = socket.gettime()
 		db:hset(model_key, 'lastmodified_time', self.lastmodified_time)
@@ -2881,12 +2894,17 @@ Model = Object:extend {
 		if fld.st == 'ONE' then
 			-- maybe here is rude
 			db:hdel(model_key, field)
+			self[field] = nil
 		else
 			local key = getFieldPattern(self, field)		
 			-- delete the foreign key
 			db:del(key)
 		end
 		
+		if isUsingRuleIndex() then
+			updateIndexByRules(self, 'update')
+		end
+
 		-- update the lastmodified_time
 		self.lastmodified_time = socket.gettime()
 		db:hset(model_key, 'lastmodified_time', self.lastmodified_time)

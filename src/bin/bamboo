@@ -3,7 +3,7 @@
 require 'posix'
 require 'signal'
 require 'bamboo'
-require 'redis'
+local redis = require 'redis'
 
 local util = require 'bamboo.util'
 local readSettings = util.readSettings
@@ -605,7 +605,7 @@ host = "%s"
         }
         local which = settings.which_db or 0
 
-        local redis_db = Redis.connect(params)
+        local redis_db = redis.connect(params)
         if config.AUTH then redis_db:auth(config.AUTH) end
 		redis_db:select(which)
 
