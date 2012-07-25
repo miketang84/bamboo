@@ -404,6 +404,8 @@ local getFromRedisPipeline2 = function (pattern_list)
 	return objs, nils
 end 
 
+
+local updateIndexByRules
 --------------------------------------------------------------
 -- this function can be called by instance or class
 --
@@ -1263,7 +1265,7 @@ local INDEX_ACTIONS = {
 	['del'] = delInstanceToIndexOnRule
 }
 
-local updateIndexByRules = function (self, action)
+updateIndexByRules = function (self, action)
 	local manager_key = rule_manager_prefix .. self.__name
 	local qstr_list = db:zrange(manager_key, 0, -1)
 	local action_func = INDEX_ACTIONS[action]

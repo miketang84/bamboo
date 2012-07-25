@@ -87,8 +87,10 @@ local User = Model:extend {
 	logout = function (self)
 		-- I_AM_CLASS(self)
 		-- Class and instance can both call this function
-		Session:delUserHash(req.user)
-		return Session:delKey('user_id')
+		if req.user then
+			Session:delUserHash(req.user)
+			return Session:delKey('user_id')
+		end
 	end;
 
 	register = function (self, params)
