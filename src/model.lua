@@ -1228,6 +1228,10 @@ local updateInstanceToIndexOnRule = function (self, qstr)
 		else
 			-- delete the old one id
 			db:lrem(item_key, 1, self.id)
+			-- if delete to empty list, update the rule score to float
+			if not db:exists(item_key) then   
+				db:zadd(manager_key, score + 0.1, qstr)
+			end
 		end
 
 		db:expire(item_key, bamboo.config.rule_expiration or bamboo.RULE_LIFE)
