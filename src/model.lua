@@ -1216,9 +1216,11 @@ local updateInstanceToIndexOnRule = function (self, qstr)
 	local flag = canInstanceFitQueryRule(self, qstr)
 	local success
 	local options = { watch = item_key, cas = true, retry = 2 }
-	db:transaction(options, function(db)
+	db:transaction(function(db)
 		if flag then
 			success = db:linsert(item_key, 'AFTER', self.id, self.id)
+			
+			db:multi()
 			-- no this id in index before
 			if success == -1 then
 				db:rpush(item_key, self.id)
@@ -1227,6 +1229,7 @@ local updateInstanceToIndexOnRule = function (self, qstr)
 			end
 			-- update the float score to integer
 			db:zadd(manager_key, math.floor(score), qstr)
+			db:exec()
 		else
 			if db:exists(item_key) then
 				-- delete the old one id
@@ -1239,7 +1242,7 @@ local updateInstanceToIndexOnRule = function (self, qstr)
 		end
 
 		db:expire(item_key, bamboo.config.rule_expiration or bamboo.RULE_LIFE)
-	end)
+	end, options)
 	return self
 end
 
@@ -1249,7 +1252,7 @@ local delInstanceToIndexOnRule = function (self, qstr)
 	local item_key = rule_result_pattern:format(self.__name, math.floor(score))
 
 	local options = { watch = item_key, cas = true, retry = 2 }
-	db:transaction(options, function(db)
+	db:transaction(function(db)
 		if db:exists(item_key) then
 			db:lrem(item_key, 0, self.id)
 			-- if delete to empty list, update the rule score to float
@@ -1258,7 +1261,7 @@ local delInstanceToIndexOnRule = function (self, qstr)
 			end
 		end
 		db:expire(item_key, bamboo.config.rule_expiration or bamboo.RULE_LIFE)
-	end)
+	end, options)
 
 	return self
 end
@@ -1299,14 +1302,14 @@ local addIndexToManager = function (self, query_str_iden, obj_list)
 	
 	local item_key = rule_result_pattern:format(self.__name, math.floor(new_score))
 	local options = { watch = item_key, cas = true, retry = 2 }
-	db:transaction(options, function(db)
+	db:transaction(function(db)
 		if not db:exists(item_key) then
 			-- generate the index item, use list
 			db:rpush(item_key, unpack(obj_list))
 		end
 		-- set expiration to each index item
 		db:expire(item_key, bamboo.config.rule_expiration or bamboo.RULE_LIFE)
-	end)
+	end, options)
 end
 
 local getIndexFromManager = function (self, query_str_iden, getnum)
@@ -1996,20 +1999,23 @@ Model = Object:extend {
 				return {}
 			end
 		end
-		
+		print( key, atype, start, stop, is_rev, custom_key, db, db.type)
 		-- get the store type in redis
 		local store_type = db:type(custom_key)
+		print( '--------000' )
 		if atype then assert(store_type == atype, '[Error] @getCustom - The specified type is not equal the type stored in db.') end
+		print( '--------111' )
 		local store_module = getStoreModule(store_type)
+		print( '--------222' )
 		local ids, scores = store_module.retrieve(custom_key)
-		
+		print( '--------www' )
 		if type(ids) == 'table' and (start or stop) then
 			ids = ids:slice(start, stop, is_rev)
 			if type(scores) == 'table' then
 				scores = scores:slice(start, stop, is_rev)
 			end
 		end
-		
+		print( '--------YY' )
 		return ids, scores
 	end;
 
@@ -2424,7 +2430,7 @@ Model = Object:extend {
 		if new_case then
 			local countername = getCounterName(self)
 			local options = { watch = {countername, index_key}, cas = true, retry = 2 }
-			replies = db:transaction(options, function(db)
+			replies = db:transaction(function(db)
 				-- increase the instance counter
 				db:incr(countername)
 				self.id = db:get(countername)
@@ -2440,7 +2446,7 @@ Model = Object:extend {
 				if bamboo.config.index_hash then 
 					mih.index(self,true);--create hash index
 				end
-			end)
+			end, options)
 		else
 			-- update case
 			assert(tonumber(getCounter(self)) >= tonumber(self.id), '[Error] @save - invalid id.')
@@ -2449,24 +2455,24 @@ Model = Object:extend {
 			local model_key = getNameIdPattern(self)
 
 			local options = { watch = {index_key}, cas = true, retry = 2 }
-			replies = db:transaction(options, function(db)
-            if bamboo.config.index_hash then 
-                mih.index(self,false);--update hash index
-            end
+			replies = db:transaction(function(db)
+				if bamboo.config.index_hash then 
+					mih.index(self,false);--update hash index
+				end
 
-			local score = db:zscore(index_key, self[indexfd])
-			-- assert(score == self.id or score == nil, "[Error] save duplicate to an unique limited field, aborted!")
-			if not (score == self.id or score == nil) then print("[Warning] save duplicate to an unique limited field, canceled!") end
-			
-			-- if modified indexfd, score will be nil, remove the old id-indexfd pair, for later new save indexfd
-			if not score then
-				db:zremrangebyscore(index_key, self.id, self.id)
-			end
-			-- update __index score and member
-			db:zadd(index_key, self.id, self[indexfd])
-			-- update object hash store key
-			db:hmset(model_key, unpack(store_kv))
-			end)
+				local score = db:zscore(index_key, self[indexfd])
+				-- assert(score == self.id or score == nil, "[Error] save duplicate to an unique limited field, aborted!")
+				if not (score == self.id or score == nil) then print("[Warning] save duplicate to an unique limited field, canceled!") end
+				
+				-- if modified indexfd, score will be nil, remove the old id-indexfd pair, for later new save indexfd
+				if not score then
+					db:zremrangebyscore(index_key, self.id, self.id)
+				end
+				-- update __index score and member
+				db:zadd(index_key, self.id, self[indexfd])
+				-- update object hash store key
+				db:hmset(model_key, unpack(store_kv))
+			end, options)
 		end
 			
 		-- make fulltext indexes
