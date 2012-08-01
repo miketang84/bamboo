@@ -310,15 +310,12 @@ end
 
 local getFromRedisPipeline = function (self, ids)
 	local key_list = makeModelKeyList(self, ids)
-	--DEBUG(key_list)
-	
 	-- all fields are strings
 	local data_list = db:pipeline(function (p) 
 		for _, v in ipairs(key_list) do
 			p:hgetall(v)
 		end
 	end)
-
 	local objs = QuerySet()
 	local nils = {}
 	local obj
@@ -1576,13 +1573,8 @@ Model = Object:extend {
 		else
 			all_ids = db:zrange(index_key, 0, -1, 'withscores')
 		end
-		local ids = List()
-		for _, v in ipairs(all_ids) do
-			-- v[1] is the 'index value', v[2] is the 'id'
-			ids:append(v[2])
-		end
-		
-		return ids
+
+		return List(all_ids)
 	end;
 	
 	-- slice the ids list, start from 1, support negative index (-1)
@@ -1836,7 +1828,7 @@ Model = Object:extend {
                 end
             end
 		end
-		
+	
 		-- here, _t_query_set is the all instance fit to query_args now
 		local _t_query_set = query_set
 		
@@ -1999,23 +1991,17 @@ Model = Object:extend {
 				return {}
 			end
 		end
-		print( key, atype, start, stop, is_rev, custom_key, db, db.type)
 		-- get the store type in redis
 		local store_type = db:type(custom_key)
-		print( '--------000' )
 		if atype then assert(store_type == atype, '[Error] @getCustom - The specified type is not equal the type stored in db.') end
-		print( '--------111' )
 		local store_module = getStoreModule(store_type)
-		print( '--------222' )
 		local ids, scores = store_module.retrieve(custom_key)
-		print( '--------www' )
 		if type(ids) == 'table' and (start or stop) then
 			ids = ids:slice(start, stop, is_rev)
 			if type(scores) == 'table' then
 				scores = scores:slice(start, stop, is_rev)
 			end
 		end
-		print( '--------YY' )
 		return ids, scores
 	end;
 
