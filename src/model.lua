@@ -112,7 +112,7 @@ end
 
 local function getCounterName(self)
 	return self.__name + ':__counter'
-end 
+end
 
 -- return a string
 local function getCounter(self)
@@ -129,11 +129,11 @@ end
 
 local function getFieldPattern(self, field)
 	return getNameIdPattern(self) + ':' + field
-end 
+end
 
 local function getFieldPattern2(self, id, field)
 	return getNameIdPattern2(self, id) + ':' + field
-end 
+end
 
 -- return the key of some string like 'User'
 --
@@ -209,7 +209,7 @@ end
 local function checkExistanceById(self, id)
 	local index_key = getIndexKey(self)
 	local r = db:zrangebyscore(index_key, id, id)
-	if #r == 0 then 
+	if #r == 0 then
 		return false, ''
 	else
 		-- return the first element, for r is a list
@@ -219,7 +219,7 @@ end
 
 -- return the model part and the id part
 -- if normal case, get the model string and return item directly
--- if UNFIXED case, split the UNFIXED model:id and return  
+-- if UNFIXED case, split the UNFIXED model:id and return
 -- this function doesn't suite ANYSTRING case
 local function seperateModelAndId(item)
 	local link_model, linked_id
@@ -235,19 +235,19 @@ end
 
 local makeObject = function (self, data)
 	-- if data is invalid, return nil
-	if not isValidInstance(data) then 
+	if not isValidInstance(data) then
 		print("[Warning] @makeObject - Object is invalid.")
 		-- print(debug.traceback())
-		return nil 
+		return nil
 	end
 	-- XXX: keep id as string for convienent, because http and database are all string
-	
+
 	local fields = self.__fields
 	for k, fld in pairs(fields) do
 		-- ensure the correction of field description table
 		checkType(fld, 'table')
 		-- convert the number type field
-			
+
     	if fld.foreign then
 			local st = fld.st
 			-- in redis, we don't save MANY foreign key in db, but we want to fill them when
@@ -300,18 +300,18 @@ end
 --
 local getFromRedis = function (self, model_key)
 	-- here, the data table contain ordinary field, ONE foreign key, but not MANY foreign key
-	-- all fields are strings 
+	-- all fields are strings
 	local data = db:hgetall(model_key)
 	return makeObject(self, data)
 
-end 
+end
 
--- 
+--
 
 local getFromRedisPipeline = function (self, ids)
 	local key_list = makeModelKeyList(self, ids)
 	-- all fields are strings
-	local data_list = db:pipeline(function (p) 
+	local data_list = db:pipeline(function (p)
 		for _, v in ipairs(key_list) do
 			p:hgetall(v)
 		end
@@ -327,20 +327,20 @@ local getFromRedisPipeline = function (self, ids)
 	end
 
 	return objs, nils
-end 
+end
 
--- fields must not be empty 
+-- fields must not be empty
 local getPartialFromRedisPipeline = function (self, ids, fields)
 	tinsert(fields, 'id')
 	local key_list = makeModelKeyList(self, ids)
 	-- DEBUG('key_list', key_list, 'fields', fields)
-	
-	local data_list = db:pipeline(function (p) 
+
+	local data_list = db:pipeline(function (p)
 		for _, v in ipairs(key_list) do
 			p:hmget(v, unpack(fields))
 		end
 	end)
-	
+
 	local proto_fields = self.__fields
 	-- all fields are strings
 	-- every item is data_list now is the values according to 'fields'
@@ -351,7 +351,7 @@ local getPartialFromRedisPipeline = function (self, ids, fields)
 		for i, key in ipairs(fields) do
 			-- v[i] is the value of ith key
 			item[key] = v[i]
-			
+
 			local fdt = proto_fields[key]
 			if fdt and fdt.type then
 				if fdt.type == 'number' then
@@ -370,7 +370,7 @@ local getPartialFromRedisPipeline = function (self, ids, fields)
 	end
 
 	return objs
-end 
+end
 
 -- for use in "User:id" as each item key
 local getFromRedisPipeline2 = function (pattern_list)
@@ -380,9 +380,9 @@ local getFromRedisPipeline2 = function (pattern_list)
 		local model, id = seperateModelAndId(v)
 		model_list:append(model)
 	end
-	
+
 	-- all fields are strings
-	local data_list = db:pipeline(function (p) 
+	local data_list = db:pipeline(function (p)
 		for _, v in ipairs(pattern_list) do
 			p:hgetall(v)
 		end
@@ -393,13 +393,13 @@ local getFromRedisPipeline2 = function (pattern_list)
 	local obj
 	for i, model in ipairs(model_list) do
 		obj = makeObject(model, data_list[i])
-		if obj then tinsert(objs, obj) 
+		if obj then tinsert(objs, obj)
 		else tinsert(nils, pattern_list[i])
 		end
 	end
 
 	return objs, nils
-end 
+end
 
 
 local updateIndexByRules
@@ -411,11 +411,11 @@ local delFromRedis = function (self, id)
 	local model_key = id and getNameIdPattern2(self, id) or getNameIdPattern(self)
 	local index_key = getIndexKey(self)
 
-    --del hash index 
-    if bamboo.config.index_hash then 
+    --del hash index
+    if bamboo.config.index_hash then
         mih.indexDel(self);
     end
-	
+
 	local fields = self.__fields
 	-- in redis, delete the associated foreign key-value store
 	for k, v in pairs(self) do
@@ -430,7 +430,7 @@ local delFromRedis = function (self, id)
 	db:del(model_key)
 	-- delete the index in the global model index zset
 	db:zremrangebyscore(index_key, self.id or id, self.id or id)
-	
+
 	-- clear fulltext index, only when it is instance
 	if isUsingFulltextIndex(self) and self.id then
 		clearFtIndexesOnDeletion(self)
@@ -438,7 +438,7 @@ local delFromRedis = function (self, id)
 	if isUsingRuleIndex(self) and self.id then
 		updateIndexByRules(self, 'del')
 	end
-				
+
 	-- release the lua object
 	self = nil
 end
@@ -451,11 +451,11 @@ local fakedelFromRedis = function (self, id)
 	local model_key = id and getNameIdPattern2(self, id) or getNameIdPattern(self)
 	local index_key = getIndexKey(self)
 
-    --del hash index 
-    if bamboo.config.index_hash then 
+    --del hash index
+    if bamboo.config.index_hash then
         mih.indexDel(self);
     end
-	
+
 	local fields = self.__fields
 	-- in redis, delete the associated foreign key-value store
 	for k, v in pairs(self) do
@@ -475,7 +475,7 @@ local fakedelFromRedis = function (self, id)
 	db:zremrangebyscore(index_key, self.id or id, self.id or id)
 	-- add to deleted collector
 	rdzset.add(dcollector, model_key)
-	
+
 	-- clear fulltext index
 	if isUsingFulltextIndex(self) and self.id then
 		clearFtIndexesOnDeletion(self)
@@ -517,7 +517,7 @@ local restoreFakeDeletedInstance = function (self, id)
 	-- remove from deleted collector
 	db:zrem(dcollector, model_key)
 
-    if bamboo.config.index_hash then 
+    if bamboo.config.index_hash then
         mih.index(instance,true);--create hash index
     end
 
@@ -536,7 +536,7 @@ local retrieveObjectsByForeignType = function (foreign, list)
 		local model = getModelByName(foreign)
 		return getFromRedisPipeline(model, list)
 	end
-	
+
 end
 
 
@@ -545,7 +545,7 @@ if bamboo.config.fulltext_index_support then require 'mmseg' end
 -- Full Text Search utilities
 -- @param instance the object to be full text indexes
 local makeFulltextIndexes = function (instance)
-	
+
 	local ftindex_fields = instance['__fulltext_index_fields']
 	if isFalse(ftindex_fields) then return false end
 
@@ -565,8 +565,8 @@ local makeFulltextIndexes = function (instance)
 			end
 		end
 	end
-	
-	return true	
+
+	return true
 end
 
 local wordSegmentOnFtIndex = function (self, ask_str)
@@ -583,7 +583,7 @@ end
 
 local searchOnFulltextIndexes = function (self, tags, n)
 	if #tags == 0 then return List() end
-	
+
 	local rlist = List()
 	local _tmp_key = "__tmp_ftkey"
 	if #tags == 1 then
@@ -596,7 +596,7 @@ local searchOnFulltextIndexes = function (self, tags, n)
 		-- XXX, some afraid
 		db:sinterstore(_tmp_key, unpack(_args))
 	end
-	
+
 	local limits
 	if n and type(n) == 'number' and n > 0 then
 		limits = {0, n}
@@ -622,22 +622,22 @@ _G['isClass'] = function (t)
 		else
 			return false
 		end
-	else 
+	else
 		return false
 	end
 end
 
 -------------------------------------------
 -- judge if it is an instance
--- 
+--
 _G['isInstance'] = function (t)
-	if t.isInstance then 
+	if t.isInstance then
 		if type(t.isInstance) == 'function' then
 			return t:isInstance()
 		else
 			return false
 		end
-	else 
+	else
 		return false
 	end
 end
@@ -645,11 +645,11 @@ end
 ---------------------------------------------------------------
 -- judge if it is an empty object.
 -- the empty rules are defined by ourselves, see follows.
--- 
+--
 _G['isValidInstance'] = function (obj)
 	if isFalse(obj) then return false end
 	checkType(obj, 'table')
-	
+
 	for k, v in pairs(obj) do
 		if type(k) == 'string' then
 			if k ~= 'id' then
@@ -657,14 +657,14 @@ _G['isValidInstance'] = function (obj)
 			end
 		end
 	end
-	
+
 	return false
 end;
 
 
 _G['isQuerySet'] = function (self)
 	if isList(self)
-	and rawget(self, '__spectype') == nil and self.__spectype == 'QuerySet' 
+	and rawget(self, '__spectype') == nil and self.__spectype == 'QuerySet'
 	and self.__tag == 'Object.Model'
 	then return true
 	else return false
@@ -679,7 +679,7 @@ end
 
 _G['I_AM_CLASS'] = function (self)
 	assert(self.isClass, '[Error] The caller is not a valid class.')
-	assert(self:isClass(), '[Error] This function is only allowed to be called by class.') 
+	assert(self:isClass(), '[Error] This function is only allowed to be called by class.')
 end
 
 _G['I_AM_CLASS_OR_QUERY_SET'] = function (self)
@@ -715,7 +715,7 @@ _G['eq'] = function ( cmp_obj )
 	local t = function (v)
 	-- XXX: here we should not open the below line. v can be nil
 		if v == uglystr then return nil, 'eq', cmp_obj; end--only return params
-		
+
         if v == cmp_obj then
 			return true
 		else
@@ -808,7 +808,7 @@ end
 
 _G['bt'] = function (small, big)
 	small = tonumber(small) or small
-	big = tonumber(big) or big	
+	big = tonumber(big) or big
 	local t = function (v)
         if v == uglystr then return nil, 'bt', {small, big}; end
 
@@ -825,7 +825,7 @@ end
 
 _G['be'] = function (small, big)
 	small = tonumber(small) or small
-	big = tonumber(big) or big	
+	big = tonumber(big) or big
 	local t = function (v)
         if v == uglystr then return nil, 'be', {small,big}; end
 
@@ -842,7 +842,7 @@ end
 
 _G['outside'] = function (small, big)
 	small = tonumber(small) or small
-	big = tonumber(big) or big	
+	big = tonumber(big) or big
 	local t = function (v)
         if v == uglystr then return nil, 'outside',{small,big}; end
 
@@ -862,7 +862,7 @@ _G['contains'] = function (substr)
         if v == uglystr then return nil, 'contains', substr; end
 
 		v = tostring(v)
-		if v:contains(substr) then 
+		if v:contains(substr) then
 			return true
 		else
 			return false
@@ -877,7 +877,7 @@ _G['uncontains'] = function (substr)
         if v == uglystr then return nil, 'uncontains', substr; end
 
 		v = tostring(v)
-		if not v:contains(substr) then 
+		if not v:contains(substr) then
 			return true
 		else
 			return false
@@ -893,7 +893,7 @@ _G['startsWith'] = function (substr)
         if v == uglystr then return nil, 'startsWith', substr; end
 
 		v = tostring(v)
-		if v:startsWith(substr) then 
+		if v:startsWith(substr) then
 			return true
 		else
 			return false
@@ -908,7 +908,7 @@ _G['unstartsWith'] = function (substr)
         if v == uglystr then return nil, 'unstartsWith', substr; end
 
 		v = tostring(v)
-		if not v:startsWith(substr) then 
+		if not v:startsWith(substr) then
 			return true
 		else
 			return false
@@ -923,7 +923,7 @@ _G['endsWith'] = function (substr)
 	local t = function (v)
         if v == uglystr then return nil, 'endsWith', substr; end
 		v = tostring(v)
-		if v:endsWith(substr) then 
+		if v:endsWith(substr) then
 			return true
 		else
 			return false
@@ -937,7 +937,7 @@ _G['unendsWith'] = function (substr)
 	local t = function (v)
         if v == uglystr then return nil, 'unendsWith', substr; end
 		v = tostring(v)
-		if not v:endsWith(substr) then 
+		if not v:endsWith(substr) then
 			return true
 		else
 			return false
@@ -958,7 +958,7 @@ _G['inset'] = function (...)
 				return true
 			end
 		end
-		
+
 		return false
 	end
 	closure_collector[t] = {'inset', ...}
@@ -976,7 +976,7 @@ _G['uninset'] = function (...)
 				return false
 			end
 		end
-		
+
 		return true
 	end
 	closure_collector[t] = {'uninset', ...}
@@ -996,18 +996,18 @@ local collectRuleFunctionUpvalues = function (query_args)
 			table_has_metatable = getmetatable(v) and true or false
 		end
 		-- because we could not collect the upvalues whose type is 'table', print warning here
-		if type(v) == 'function' or table_has_metatable then 
+		if type(v) == 'function' or table_has_metatable then
 			print"[Warning] @collectRuleFunctionUpvalues of filter - bamboo has no ability to collect the function upvalue whose type is 'function' or 'table' with metatable."
 			return false
 		end
-			
+
 		if ctype == 'table' then
 			upvalues[#upvalues + 1] = { name, serialize(v), type(v) }
 		else
 			upvalues[#upvalues + 1] = { name, tostring(v), type(v) }
 		end
 	end
-	
+
 	return true
 end
 
@@ -1016,47 +1016,47 @@ local compressQueryArgs = function (query_args)
 	local out = {}
 	local qtype = type(query_args)
 	if qtype == 'table' then
-	
+
 		if query_args[1] == 'or' then tinsert(out, 'or')
 		else tinsert(out, 'and')
 		end
 		query_args[1] = nil
 		tinsert(out, '|')
-	
+
 		local queryfs = {}
 		for kf in pairs(query_args) do
 			tinsert(queryfs, kf)
 		end
 		table.sort(queryfs)
-	
+
 		for _, k in ipairs(queryfs) do
 			v = query_args[k]
 			tinsert(out, k)
 			if type(v) == 'string' then
-				tinsert(out, v)			
+				tinsert(out, v)
 			else
 				local queryt_iden = closure_collector[v]
 				for _, item in ipairs(queryt_iden) do
-					tinsert(out, item)		
+					tinsert(out, item)
 				end
 			end
-			tinsert(out, '|')		
+			tinsert(out, '|')
 		end
 		-- clear the closure_collector
 		closure_collector = {}
-		
+
 		-- restore the first element, avoiding side effect
-		query_args[1] = out[1]	
+		query_args[1] = out[1]
 
 	elseif qtype == 'function' then
 		tinsert(out, 'function')
-		tinsert(out, '|')	
+		tinsert(out, '|')
 		tinsert(out, string.dump(query_args))
-		tinsert(out, '|')			
+		tinsert(out, '|')
 		for _, pair in ipairs(upvalue_collector) do
 			tinsert(out, pair[1])	-- key
 			tinsert(out, pair[2])	-- value
-			tinsert(out, pair[3])	-- value type			
+			tinsert(out, pair[3])	-- value type
 		end
 
 		-- clear the upvalue_collector
@@ -1069,8 +1069,8 @@ end
 
 local extraQueryArgs = function (qstr)
 	local query_args
-	
-	--DEBUG(string.len(qstr))		
+
+	--DEBUG(string.len(qstr))
 	if qstr:startsWith('function') then
 		local startpoint = qstr:find('|') or 1
 		local endpoint = qstr:rfind('|') or -1
@@ -1080,7 +1080,7 @@ local extraQueryArgs = function (qstr)
 		query_args = loadstring(fpart)
 		-- now query_args is query function
 		if not isFalse(apart) then
-			-- item 1 is key, item 2 is value, item 3 is value type, item 4 is key .... 
+			-- item 1 is key, item 2 is value, item 3 is value type, item 4 is key ....
 			local flat_upvalues = apart:split(rule_index_divider)
 			for i=1, #flat_upvalues / 3 do
 				local vtype = flat_upvalues[3*i]
@@ -1100,7 +1100,7 @@ local extraQueryArgs = function (qstr)
 			end
 		end
 	else
-	
+
 		local endpoint = -1
 		qstr = qstr:sub(1, endpoint - 1)
 		local _qqstr = qstr:split('|')
@@ -1125,14 +1125,14 @@ local extraQueryArgs = function (qstr)
 			end
 		end
 	end
-	
-	return query_args	
+
+	return query_args
 end
 
 
 local checkLogicRelation = function (obj, query_args, logic_choice, model)
 	-- NOTE: query_args can't contain [1]
-	-- here, obj may be object or string 
+	-- here, obj may be object or string
 	-- when obj is string, query_args must be function;
 	-- when query_args is table, obj must be table, and must be real object.
 	local flag = logic_choice
@@ -1161,7 +1161,7 @@ local checkLogicRelation = function (obj, query_args, logic_choice, model)
 		-- call this query args function
 		flag = query_args(obj)
 	end
-	
+
 	return flag
 end
 
@@ -1177,7 +1177,7 @@ end
 -- here, qstr rule exist surely
 local addInstanceToIndexOnRule = function (self, qstr)
 	local manager_key = rule_manager_prefix .. self.__name
-	--DEBUG(self, qstr, manager_key)	
+	--DEBUG(self, qstr, manager_key)
 	local score = db:zscore(manager_key, qstr)
 	local item_key = rule_result_pattern:format(self.__name, math.floor(score))
 
@@ -1216,7 +1216,7 @@ local updateInstanceToIndexOnRule = function (self, qstr)
 	db:transaction(function(db)
 		if flag then
 			success = db:linsert(item_key, 'AFTER', self.id, self.id)
-			
+
 			db:multi()
 			-- no this id in index before
 			if success == -1 then
@@ -1232,7 +1232,7 @@ local updateInstanceToIndexOnRule = function (self, qstr)
 				-- delete the old one id
 				db:lrem(item_key, 1, self.id)
 				-- if delete to empty list, update the rule score to float
-				if not db:exists(item_key) then   
+				if not db:exists(item_key) then
 					db:zadd(manager_key, score + 0.1, qstr)
 				end
 			end
@@ -1253,7 +1253,7 @@ local delInstanceToIndexOnRule = function (self, qstr)
 		if db:exists(item_key) then
 			db:lrem(item_key, 0, self.id)
 			-- if delete to empty list, update the rule score to float
-			if not db:exists(item_key) then   
+			if not db:exists(item_key) then
 				db:zadd(manager_key, score + 0.1, qstr)
 			end
 		end
@@ -1286,7 +1286,7 @@ local addIndexToManager = function (self, query_str_iden, obj_list)
 	-- if score then return end
 	local new_score
 	if not score then
-		-- when it is a new rule 
+		-- when it is a new rule
 		new_score = db:zcard(manager_key) + 1
 		-- use float score represent empty rule result index
 		if #obj_list == 0 then new_score = new_score + 0.1 end
@@ -1296,7 +1296,7 @@ local addIndexToManager = function (self, query_str_iden, obj_list)
 		new_score = score
 	end
 	if #obj_list == 0 then return end
-	
+
 	local item_key = rule_result_pattern:format(self.__name, math.floor(new_score))
 	local options = { watch = item_key, cas = true, retry = 2 }
 	db:transaction(function(db)
@@ -1313,24 +1313,24 @@ local getIndexFromManager = function (self, query_str_iden, getnum)
 	local manager_key = rule_manager_prefix .. self.__name
 	-- get this rule's socre
 	local score = db:zscore(manager_key, query_str_iden)
-	-- if has no score, means it is not rule indexed, 
+	-- if has no score, means it is not rule indexed,
 	-- return nil directly
-	if not score then 
+	if not score then
 		return nil
 	end
-	
+
 	-- if score is float, means its rule result is empty, return empty query set
 	if score % 1 ~= 0 then
 		return (not getnum) and List() or 0
 	end
-	
+
 	-- score is integer, not float, and rule result doesn't exist, means its rule result is expired now,
 	-- need to retreive again, so return nil
 	local item_key = rule_result_pattern:format(self.__name, score)
-	if not db:exists(item_key) then 
+	if not db:exists(item_key) then
 		return nil
 	end
-	
+
 	-- update expiration
 	db:expire(item_key, bamboo.config.rule_expiration or bamboo.RULE_LIFE)
 	-- rule result is not empty, and not expired, retrieve them
@@ -1352,7 +1352,7 @@ local processBeforeSave = function (self, params)
     --- save an hash object
     -- 'id' are essential in an object instance
     tinsert(store_kv, 'id')
-    tinsert(store_kv, self.id)		
+    tinsert(store_kv, self.id)
 
     -- if parameters exist, update it
     if params and type(params) == 'table' then
@@ -1363,7 +1363,7 @@ local processBeforeSave = function (self, params)
 		end
     end
 
-    assert(not isFalse(self[indexfd]) , 
+    assert(not isFalse(self[indexfd]) ,
     	format("[Error] instance's index field %s's value must not be nil. Please check your model defination.", indexfd))
 
 	-- check required field
@@ -1373,7 +1373,7 @@ local processBeforeSave = function (self, params)
 			assert(self[field], format("[Error] @processBeforeSave - this field '%s' is required but its' value is nil.", field))
 		end
 	end
-		
+
     for k, v in pairs(self) do
 		-- when save, need to check something
 		-- 1. only save fields defined in model defination
@@ -1386,7 +1386,7 @@ local processBeforeSave = function (self, params)
 			if not fdt['foreign'] or ( fdt['foreign'] and fdt['st'] == 'ONE') then
 				-- save
 				tinsert(store_kv, k)
-				tinsert(store_kv, v)		
+				tinsert(store_kv, v)
 			end
 		end
     end
@@ -1396,7 +1396,7 @@ end
 
 
 ------------------------------------------------------------------------
--- 
+--
 ------------------------------------------------------------------------
 
 
@@ -1415,7 +1415,7 @@ Model = Object:extend {
 	    -- here, we don't put 'id' as a field
 	    ['created_time'] = { type="number" },
 	    ['lastmodified_time'] = { type="number" },
-	    
+
 	};
 	__indexfd = "id";
 
@@ -1423,7 +1423,7 @@ Model = Object:extend {
 	init = function (self, t)
 		local t = t or {}
 		local fields = self.__fields
-		
+
 		for field, fdt in pairs(fields) do
 			-- assign to default value if exsits
 			local tmp = t[field] or fdt.default
@@ -1433,18 +1433,18 @@ Model = Object:extend {
 				self[field] = tmp
 			end
 		end
-	
+
 		self.created_time = socket.gettime()
 		self.lastmodified_time = self.created_time
-		
-		return self 
+
+		return self
 	end;
-    
+
 
 	toHtml = function (self, params)
 		 I_AM_INSTANCE(self)
 		 params = params or {}
-		 
+
 		 if params.field and type(params.field) == 'string' then
 			 for k, v in pairs(params.attached) do
 				 if v == 'html_class' then
@@ -1453,12 +1453,12 @@ Model = Object:extend {
 					 self.__fields[params.field][k] = v
 				 end
 			 end
-			 
+
 			 return (self.__fields[params.field]):toHtml(self, params.field, params.format)
 		 end
-		 
+
 		 params.attached = params.attached or {}
-		 
+
 		 local output = ''
 		 for field, fdt_old in pairs(self.__fields) do
 			 local fdt = table.copy(fdt_old)
@@ -1523,12 +1523,12 @@ Model = Object:extend {
 		local idstr = db:zscore(index_key, tostring(name))
 		return tonumber(idstr)
     end;
-    
+
     -- return name query by id
-	-- 
+	--
     getIndexById = function (self, id)
 		I_AM_CLASS(self)
-		if type(tonumber(id)) ~= 'number' then return nil end		
+		if type(tonumber(id)) ~= 'number' then return nil end
 
 		local flag, name = checkExistanceById(self, id)
 		if isFalse(flag) or isFalse(name) then return nil end
@@ -1542,7 +1542,7 @@ Model = Object:extend {
 		I_AM_CLASS(self)
 		--DEBUG(id)
 		if type(tonumber(id)) ~= 'number' then return nil end
-		
+
 		-- check the existance in the index cache
 		if not checkExistanceById(self, id) then return nil end
 		-- and then check the existance in the key set
@@ -1551,7 +1551,7 @@ Model = Object:extend {
 		--DEBUG(key)
 		return getFromRedis(self, key)
 	end;
-	
+
 	-- return instance object by name
 	--
 	getByIndex = function (self, name)
@@ -1561,24 +1561,24 @@ Model = Object:extend {
 
 		return self:getById (id)
 	end;
-	
+
 	-- return a list containing all ids of all instances belong to this Model
 	--
 	allIds = function (self, find_rev)
 		I_AM_CLASS(self)
 		local index_key = getIndexKey(self)
-		local all_ids 
+		local all_ids
 		if find_rev == 'rev' then
-			all_ids = db:zrevrange(index_key, 0, -1, 'withscores')
+			_, all_ids = db:zrevrange(index_key, 0, -1, 'withscores')
 		else
-			all_ids = db:zrange(index_key, 0, -1, 'withscores')
+			_, all_ids = db:zrange(index_key, 0, -1, 'withscores')
 		end
 
 		return List(all_ids)
 	end;
-	
+
 	-- slice the ids list, start from 1, support negative index (-1)
-	-- 
+	--
 	sliceIds = function (self, start, stop, is_rev)
 		I_AM_CLASS(self)
 		checkType(start, stop, 'number', 'number')
@@ -1590,12 +1590,12 @@ Model = Object:extend {
 			-- v[1] is the 'index value', v[2] is the 'id'
 			ids:append(v[2])
 		end
-		
+
 		return ids
-	end;	
-	
+	end;
+
 	-- return all instance objects belong to this Model
-	-- 
+	--
 	all = function (self, find_rev)
 		I_AM_CLASS(self)
 		local all_ids = self:allIds(find_rev)
@@ -1603,14 +1603,14 @@ Model = Object:extend {
 	end;
 
 	-- slice instance object list, support negative index (-1)
-	-- 
+	--
 	slice = function (self, start, stop, is_rev)
 		-- !slice method won't be open to query set, because List has slice method too.
 		I_AM_CLASS(self)
 		local ids = self:sliceIds(start, stop, is_rev)
 		return getFromRedisPipeline(self, ids)
 	end;
-	
+
 	-- this is a magic function
 	-- return all the keys belong to this Model (or this model's parent model)
 	-- all elements in returning list are string
@@ -1619,21 +1619,21 @@ Model = Object:extend {
 		I_AM_CLASS(self)
 		return db:keys(self.__name + ':*')
 	end;
-	
+
 	-- return the actual number of the instances
 	--
 	numbers = function (self)
 		I_AM_CLASS(self)
 		return db:zcard(getIndexKey(self))
 	end;
-	
+
 	-- return the first instance found by query set
 	--
 	get = function (self, query_args, find_rev)
 		-- XXX: may cause effective problem
 		-- every time 'get' will cause the all objects' retrieving
 		local objs = self:filter(query_args, nil, nil, find_rev, 'get')
-		if objs then 
+		if objs then
 			return objs[1]
 		else
 			return obj
@@ -1642,7 +1642,7 @@ Model = Object:extend {
 
 	--- fitler some instances belong to this model
 	-- @param query_args: query arguments in a table
-	-- @param start: specify which index to start slice, note: this is the position after filtering 
+	-- @param start: specify which index to start slice, note: this is the position after filtering
 	-- @param stop: specify the end of slice
 	-- @param is_rev: specify the direction of the search result, 'rev'
 	-- @return: query_set, an object list (query set)
@@ -1653,19 +1653,19 @@ Model = Object:extend {
 		if start then assert(type(start) == 'number', '[Error] @filter - start must be number.') end
 		if stop then assert(type(stop) == 'number', '[Error] @filter - stop must be number.') end
 		if is_rev then assert(type(is_rev) == 'string', '[Error] @filter - is_rev must be string.') end
-		
+
 		local is_query_set = false
 		if isQuerySet(self) then is_query_set = true end
 		local is_args_table = (type(query_args) == 'table')
 		local logic = 'and'
-		
+
 		local query_str_iden, is_capable_press_rule = '', true
 		local is_using_rule_index = isUsingRuleIndex()
 		if is_using_rule_index then
 			if type(query_args) == 'function' then
 				is_capable_press_rule = collectRuleFunctionUpvalues(query_args)
 			end
-			
+
 			if is_capable_press_rule then
 				-- make query identification string
 				query_str_iden = compressQueryArgs(query_args)
@@ -1680,11 +1680,11 @@ Model = Object:extend {
 						-- #id_list > 0
 						if is_get == 'get' then
 							id_list = (is_rev == 'rev') and List{id_list[#id_list]} or List{id_list[1]}
-						else	
+						else
 							-- now id_list is a list containing all id of instances fit to this query_args rule, so need to slice
 							id_list = id_list:slice(start, stop, is_rev)
 						end
-						
+
 						-- if have this list, return objects directly
 						if #id_list > 0 then
 							return getFromRedisPipeline(self, id_list)
@@ -1694,7 +1694,7 @@ Model = Object:extend {
 				-- else go ahead
 			end
 		end
-		
+
 		if is_args_table then
 
 			if query_args and query_args['id'] then
@@ -1706,7 +1706,7 @@ Model = Object:extend {
 			end
 
 			-- if query table is empty, return slice instances
-			if isFalse(query_args) then 
+			if isFalse(query_args) then
 				local start = start or 1
 				local stop = stop or -1
 				local nums = self:numbers()
@@ -1715,7 +1715,7 @@ Model = Object:extend {
 
 			-- normalize the 'and' and 'or' logic
 			if query_args[1] then
-				assert(query_args[1] == 'or' or query_args[1] == 'and', 
+				assert(query_args[1] == 'or' or query_args[1] == 'and',
 					"[Error] The logic should be 'and' or 'or', rather than: " .. tostring(query_args[1]))
 				if query_args[1] == 'or' then
 					logic = 'or'
@@ -1723,16 +1723,16 @@ Model = Object:extend {
 				query_args[1] = nil
 			end
 		end
-		
+
 		local all_ids = {}
 		if is_query_set then
 			-- if self is query set, we think of all_ids as object list, rather than id string list
 			all_ids = self
 			-- nothing in id list, return empty table
 			if #all_ids == 0 then return QuerySet() end
-		
+
 		end
-		
+
 		-- create a query set
 		local query_set = QuerySet()
 		local logic_choice = (logic == 'and')
@@ -1743,19 +1743,19 @@ Model = Object:extend {
 			for i, obj in ipairs(objs) do
 				-- check the object's legalery, only act on valid object
 				local flag = checkLogicRelation(obj, query_args, logic_choice, model)
-				
-				-- if walk to this line, means find one 
+
+				-- if walk to this line, means find one
 				if flag then
 					tinsert(query_set, obj)
 				end
 			end
 		end
-		
+
 		--DEBUG('all_ids', all_ids)
 		if is_query_set then
 			local objs = all_ids
 			-- objs are already integrated instances
-			walkcheck(objs)			
+			walkcheck(objs)
 		else
             local hash_index_query_args = {};
             local hash_index_flag = false;
@@ -1765,10 +1765,10 @@ Model = Object:extend {
                 hash_index_flag = false;
                 raw_filter_flag = true;
             elseif bamboo.config.index_hash then
-                for field,value in pairs(query_args) do 
-                    if self.__fields[field].index_type ~= nil then 
+                for field,value in pairs(query_args) do
+                    if self.__fields[field].index_type ~= nil then
                         hash_index_query_args[field] = value;
-                        query_args[field] = nil; 
+                        query_args[field] = nil;
                         hash_index_flag = true;
                     else
                         raw_filter_flag = true;
@@ -1780,14 +1780,14 @@ Model = Object:extend {
             end
 
 
-            if hash_index_flag then 
+            if hash_index_flag then
                 all_ids = mih.filter(self,hash_index_query_args,logic);
             else
 			    -- all_ids is id string list
     			all_ids = self:allIds()
             end
 
-            if raw_filter_flag then 
+            if raw_filter_flag then
 	    		local qfs = {}
 	    		if is_args_table then
 		    		for k, _ in pairs(query_args) do
@@ -1795,7 +1795,7 @@ Model = Object:extend {
 				    end
 					table.sort(qfs)
     			end
-			
+
 				local objs, nils
 				if #qfs == 0 then
 					-- collect nothing, use 'hgetall' to retrieve, partially_got is false
@@ -1818,20 +1818,20 @@ Model = Object:extend {
 						for _, v in ipairs(nils) do
 							db:zremrangebyscore(index_key, v, v)
 						end
-					end		
+					end
 				end
             else
 		        -- here, all_ids is the all instance id to query_args now
                 --query_set = QuerySet(all_ids);
-                for i,v in ipairs(all_ids) do 
+                for i,v in ipairs(all_ids) do
                     tinsert(query_set,self:getById(tonumber(v)));
                 end
             end
 		end
-	
+
 		-- here, _t_query_set is the all instance fit to query_args now
 		local _t_query_set = query_set
-		
+
 		if #query_set == 0 then
 			if not is_query_set and is_using_rule_index and is_capable_press_rule then
 				addIndexToManager(self, query_str_iden, {})
@@ -1839,7 +1839,7 @@ Model = Object:extend {
 		else
 			if is_get == 'get' then
 				query_set = (is_rev == 'rev') and List {_t_query_set[#_t_query_set]} or List {_t_query_set[1]}
-			else	
+			else
 				-- now id_list is a list containing all id of instances fit to this query_args rule, so need to slice
 				query_set = _t_query_set:slice(start, stop, is_rev)
 			end
@@ -1856,7 +1856,7 @@ Model = Object:extend {
 				if is_using_rule_index and is_capable_press_rule then
 					addIndexToManager(self, query_str_iden, id_list)
 				end
-				
+
 				-- if partially got previously, need to get the integrated objects now
 				if partially_got then
 					id_list = {}
@@ -1868,13 +1868,13 @@ Model = Object:extend {
 				end
 			end
 		end
-		
+
 		return query_set
 	end;
-    
+
     -- count the number of instance fit to some rule
 	count = function (self, query_args)
-		I_AM_CLASS(self)	
+		I_AM_CLASS(self)
 		local query_str_iden = compressQueryArgs(query_args)
 		local ret = getIndexFromManager(self, query_str_iden, 'getnum')
 		if not ret then
@@ -1882,7 +1882,7 @@ Model = Object:extend {
 		end
 		return ret
 	end;
-	
+
 	-------------------------------------------------------------------
 	-- CUSTOM API
 	--- seven APIs
@@ -1907,17 +1907,17 @@ Model = Object:extend {
 	-- 5. hash
     -- 6. fifo   , scores is the length of fifo
 	-------------------------------------------------------------------
-    
+
 	-- store customize key-value pair to db
-	-- now: st is string, and value is number 
+	-- now: st is string, and value is number
     -- if no this key, the value is 0 before performing the operation
-    incrCustom = function(self,key,step) 
+    incrCustom = function(self,key,step)
 		I_AM_CLASS_OR_INSTANCE(self)
 		checkType(key, 'string')
 		local custom_key = self:isClass() and getCustomKey(self, key) or getCustomIdKey(self, key)
-        db:incrby(custom_key,step or 1) 
+        db:incrby(custom_key,step or 1)
     end;
-    decrCustom = function(self,key,step) 
+    decrCustom = function(self,key,step)
 		I_AM_CLASS_OR_INSTANCE(self)
 		checkType(key, 'string')
 		local custom_key = self:isClass() and getCustomKey(self, key) or getCustomIdKey(self, key)
@@ -1941,7 +1941,7 @@ Model = Object:extend {
 			local store_module = getStoreModule(st)
 			store_module.save(custom_key, val, scores)
 		end
-		
+
 		return self
 	end;
 
@@ -1963,20 +1963,20 @@ Model = Object:extend {
 			end
 			self:setCustom(key, ids, 'list')
 		end
-		
+
 		return self
 	end;
-	
-	-- 
+
+	--
 	getCustomKey = function (self, key)
 		I_AM_CLASS_OR_INSTANCE(self)
 		checkType(key, 'string')
 		local custom_key = self:isClass() and getCustomKey(self, key) or getCustomIdKey(self, key)
-		
+
 		return custom_key, db:type(custom_key)
 	end;
 
-	-- 
+	--
 	getCustom = function (self, key, atype, start, stop, is_rev)
 		I_AM_CLASS_OR_INSTANCE(self)
 		checkType(key, 'string')
@@ -2013,40 +2013,40 @@ Model = Object:extend {
 			return QuerySet(), nil
 		else
 			local query_set, nils = getFromRedisPipeline(self, query_set_ids)
-			
+
 			if bamboo.config.auto_clear_index_when_get_failed then
 				if not isFalse(nils) then
 					for _, v in ipairs(nils) do
 						self:removeCustomMember(key, v)
 					end
 				end
-			end	
+			end
 
 			return query_set, scores
 		end
 	end;
-	
+
 	delCustom = function (self, key)
 		I_AM_CLASS_OR_INSTANCE(self)
 		checkType(key, 'string')
 		local custom_key = self:isClass() and getCustomKey(self, key) or getCustomIdKey(self, key)
-		
-		return db:del(custom_key)		
+
+		return db:del(custom_key)
 	end;
-	
+
 	-- check whether exist custom key
 	existCustom = function (self, key)
 		I_AM_CLASS_OR_INSTANCE(self)
 		checkType(key, 'string')
 		local custom_key = self:isClass() and getCustomKey(self, key) or getCustomIdKey(self, key)
-		
+
 		if not db:exists(custom_key) then
 			return false
-		else 
+		else
 			return true
 		end
 	end;
-	
+
 	updateCustom = function (self, key, val)
 		I_AM_CLASS_OR_INSTANCE(self)
 		checkType(key, 'string')
@@ -2056,7 +2056,7 @@ Model = Object:extend {
 		local store_type = db:type(custom_key)
 		local store_module = getStoreModule(store_type)
 		return store_module.update(custom_key, val)
-				 
+
 	end;
 
 	removeCustomMember = function (self, key, val)
@@ -2068,26 +2068,26 @@ Model = Object:extend {
 		local store_type = db:type(custom_key)
 		local store_module = getStoreModule(store_type)
 		return store_module.remove(custom_key, val)
-		
+
 	end;
-	
+
 	addCustomMember = function (self, key, val, stype, score)
 		I_AM_CLASS_OR_INSTANCE(self)
 		checkType(key, 'string')
 		local custom_key = self:isClass() and getCustomKey(self, key) or getCustomIdKey(self, key)
-		
+
 		if not db:exists(custom_key) then print('[Warning] @addCustomMember - This custom key does not exist.'); end
 		local store_type = db:type(custom_key) ~= 'none' and db:type(custom_key) or stype
 		local store_module = getStoreModule(store_type)
 		return store_module.add(custom_key, val, score)
-		
+
 	end;
-	
+
 	hasCustomMember = function (self, key, mem)
 		I_AM_CLASS_OR_INSTANCE(self)
 		checkType(key, 'string')
 		local custom_key = self:isClass() and getCustomKey(self, key) or getCustomIdKey(self, key)
-		
+
 		if not db:exists(custom_key) then print('[Warning] @hasCustomMember - This custom key does not exist.'); return nil end
 		local store_type = db:type(custom_key)
 		local store_module = getStoreModule(store_type)
@@ -2105,7 +2105,7 @@ Model = Object:extend {
 		local store_module = getStoreModule(store_type)
 		return store_module.num(custom_key)
 	end;
-	
+
 	-----------------------------------------------------------------
 	-- Cache API
 	--- seven APIs
@@ -2124,7 +2124,7 @@ Model = Object:extend {
 		checkType(key, 'string')
 		local cache_key = getCacheKey(self, key)
 		local cachetype_key = getCachetypeKey(self, key)
-		
+
 		if type(vals) == 'string' or type(vals) == 'number' then
 			db:set(cache_key, vals)
 		else
@@ -2132,7 +2132,7 @@ Model = Object:extend {
 			local new_vals = {}
 			-- if `vals` is a list, insert its element's id into `new_vals`
 			-- ignore the uncorrent element
-			
+
 			-- elements in `vals` are ordered, but every element itself is not
 			-- nessesary containing enough order info.
 			-- for number, it contains enough
@@ -2144,30 +2144,30 @@ Model = Object:extend {
 					for i, v in ipairs(vals) do
 						table.insert(new_vals, v.id)
 					end
-					
+
 					db:set(cachetype_key, 'instance')
 				else
 					new_vals = vals
 					db:set(cachetype_key, 'general')
 				end
 			end
-				
+
 			rdzset.save(cache_key, new_vals, orders)
 		end
-		
+
 		-- set expiration
 		db:expire(cache_key, bamboo.config.cache_life or bamboo.CACHE_LIFE)
 		db:expire(cachetype_key, bamboo.config.cache_life or bamboo.CACHE_LIFE)
-		
+
 	end;
 
-	
+
 	getCache = function (self, key, start, stop, is_rev)
 		I_AM_CLASS(self)
 		checkType(key, 'string')
 		local cache_key = getCacheKey(self, key)
 		local cachetype_key = getCachetypeKey(self, key)
-		
+
 		local cache_data_type = db:type(cache_key)
 		local cache_data
 		if cache_data_type == 'string' then
@@ -2180,24 +2180,24 @@ Model = Object:extend {
 			end
 			if isFalse(cache_data) then return List() end
 		end
-		
-		
+
+
 		local cachetype = db:get(cachetype_key)
 		if cachetype and cachetype == 'instance' then
 			-- if cached instance, return instance list
 			local cache_objects = getFromRedisPipeline(self, cache_data)
-			
+
 			return cache_objects
 		else
 			-- else return element list directly
 			return cache_data
 		end
-		
+
 		db:expire(cache_key, bamboo.config.cache_life or bamboo.CACHE_LIFE)
 		db:expire(cachetype_key, bamboo.config.cache_life or bamboo.CACHE_LIFE)
-		
+
 	end;
-	
+
 	delCache = function (self, key)
 		I_AM_CLASS(self)
 		checkType(key, 'string')
@@ -2205,19 +2205,19 @@ Model = Object:extend {
 		local cachetype_key = getCachetypeKey(self, key)
 
 		db:del(cachetype_key)
-		return db:del(cache_key)	
-		
+		return db:del(cache_key)
+
 	end;
-	
+
 	-- check whether exist cache key
 	existCache = function (self, key)
 		I_AM_CLASS(self)
 		local cache_key = getCacheKey(self, key)
-		
+
 		return db:exists(cache_key)
 	end;
-	
-	-- 
+
+	--
 	addCacheMember = function (self, key, val, score)
 		I_AM_CLASS(self)
 		checkType(key, 'string')
@@ -2225,7 +2225,7 @@ Model = Object:extend {
 		local cachetype_key = getCachetypeKey(self, key)
 
 		local store_type = db:type(cache_key)
-		
+
 		if store_type == 'zset' then
 			if cachetype_key == 'instance' then
 				-- `val` is instance
@@ -2240,12 +2240,12 @@ Model = Object:extend {
 		elseif store_type == 'string' then
 			db:set(cache_key, val)
 		end
-	
+
 		db:expire(cache_key, bamboo.config.cache_life or bamboo.CACHE_LIFE)
 		db:expire(cachetype_key, bamboo.config.cache_life or bamboo.CACHE_LIFE)
-		
+
 	end;
-	
+
 	removeCacheMember = function (self, key, val)
 		I_AM_CLASS(self)
 		checkType(key, 'string')
@@ -2253,7 +2253,7 @@ Model = Object:extend {
 		local cachetype_key = getCachetypeKey(self, key)
 
 		local store_type = db:type(cache_key)
-		
+
 		if store_type == 'zset' then
 			if cachetype_key == 'instance' then
 				-- `val` is instance
@@ -2269,12 +2269,12 @@ Model = Object:extend {
 		elseif store_type == 'string' then
 			db:set(cache_key, '')
 		end
-		
+
 		db:expire(cache_key, bamboo.config.cache_life or bamboo.CACHE_LIFE)
 		db:expire(cachetype_key, bamboo.config.cache_life or bamboo.CACHE_LIFE)
-		
+
 	end;
-	
+
 	hasCacheMember = function (self, key, mem)
 		I_AM_CLASS(self)
 		checkType(key, 'string')
@@ -2282,7 +2282,7 @@ Model = Object:extend {
 		local cachetype_key = getCachetypeKey(self, key)
 
 		local store_type = db:type(cache_key)
-		
+
 		if store_type == 'zset' then
 			if cachetype_key == 'instance' then
 				-- `val` is instance
@@ -2298,11 +2298,11 @@ Model = Object:extend {
 		elseif store_type == 'string' then
 			return db:get(cache_key) == mem
 		end
-		
+
 		db:expire(cache_key, bamboo.config.cache_life or bamboo.CACHE_LIFE)
 		db:expire(cachetype_key, bamboo.config.cache_life or bamboo.CACHE_LIFE)
 	end;
-	
+
 	numCache = function (self, key)
 		I_AM_CLASS(self)
 
@@ -2311,7 +2311,7 @@ Model = Object:extend {
 
 		db:expire(cache_key, bamboo.config.cache_life or bamboo.CACHE_LIFE)
 		db:expire(cachetype_key, bamboo.config.cache_life or bamboo.CACHE_LIFE)
-		
+
 		local store_type = db:type(cache_key)
 		if store_type == 'zset' then
 			return rdzset.num(cache_key)
@@ -2319,15 +2319,15 @@ Model = Object:extend {
 			return 1
 		end
 	end;
-	
+
 	lifeCache = function (self, key)
 		I_AM_CLASS(self)
 		checkType(key, 'string')
 		local cache_key = getCacheKey(self, key)
-		
+
 		return db:ttl(cache_key)
 	end;
-	
+
 	-- delete self instance object
     -- self can be instance or query set
     delById = function (self, ids)
@@ -2338,39 +2338,39 @@ Model = Object:extend {
 			return self:trueDelById(ids)
 		end
     end;
-    
+
     fakeDelById = function (self, ids)
     	local idtype = type(ids)
     	if idtype == 'table' then
 	    for _, v in ipairs(ids) do
 		v = tostring(v)
 		fakedelFromRedis(self, v)
-		
+
 	    end
 	else
-	    fakedelFromRedis(self, tostring(ids))			
+	    fakedelFromRedis(self, tostring(ids))
     	end
     end;
-    
+
     trueDelById = function (self, ids)
     	local idtype = type(ids)
     	if idtype == 'table' then
 	    for _, v in ipairs(ids) do
 		v = tostring(v)
 		delFromRedis(self, v)
-		
+
 	    end
 	else
-	    delFromRedis(self, tostring(ids))			
+	    delFromRedis(self, tostring(ids))
     	end
     end;
-    
-	
-	
+
+
+
 	-----------------------------------------------------------------
 	-- validate form parameters by model defination
 	-- usually, params = Form:parse(req)
-	-- 
+	--
 	validate = function (self, params)
 		I_AM_CLASS(self)
 		checkType(params, 'table')
@@ -2379,7 +2379,7 @@ Model = Object:extend {
 		local is_valid = true
 		for k, v in pairs(fields) do
 			local ret, err_msg = v:validate(params[k], k)
-			if not ret then 
+			if not ret then
 				is_valid = false
 				for _, msg in ipairs(err_msg) do
 					table.insert(err_msgs, msg)
@@ -2388,9 +2388,9 @@ Model = Object:extend {
 		end
 		return is_valid, err_msgs
 	end;
-	
-	
-	
+
+
+
     --------------------------------------------------------------------
     -- Instance Functions
     --------------------------------------------------------------------
@@ -2428,8 +2428,8 @@ Model = Object:extend {
 				db:zadd(index_key, self.id, self[indexfd])
 				-- update object hash store key
 				db:hmset(model_key, unpack(store_kv))
-				
-				if bamboo.config.index_hash then 
+
+				if bamboo.config.index_hash then
 					mih.index(self,true);--create hash index
 				end
 			end, options)
@@ -2442,14 +2442,14 @@ Model = Object:extend {
 
 			local options = { watch = {index_key}, cas = true, retry = 2 }
 			replies = db:transaction(function(db)
-				if bamboo.config.index_hash then 
+				if bamboo.config.index_hash then
 					mih.index(self,false);--update hash index
 				end
 
 				local score = db:zscore(index_key, self[indexfd])
 				-- assert(score == self.id or score == nil, "[Error] save duplicate to an unique limited field, aborted!")
 				if not (score == self.id or score == nil) then print("[Warning] save duplicate to an unique limited field, canceled!") end
-				
+
 				-- if modified indexfd, score will be nil, remove the old id-indexfd pair, for later new save indexfd
 				if not score then
 					db:zremrangebyscore(index_key, self.id, self.id)
@@ -2460,7 +2460,7 @@ Model = Object:extend {
 				db:hmset(model_key, unpack(store_kv))
 			end, options)
 		end
-			
+
 		-- make fulltext indexes
 		if isUsingFulltextIndex(self) then
 			makeFulltextIndexes(self)
@@ -2471,7 +2471,7 @@ Model = Object:extend {
 
 		return self
     end;
-    
+
     -- partially update function, once one field
 	-- can only apply to none foreign field
     update = function (self, field, new_value)
@@ -2486,7 +2486,7 @@ Model = Object:extend {
 
 		local indexfd = self.__indexfd
 
-        --old indexfd 
+        --old indexfd
         -- apply to db
 	    -- if field is indexed, need to update the __index too
 		if field == indexfd then
@@ -2495,11 +2495,11 @@ Model = Object:extend {
 	    	db:zremrangebyscore(index_key, self.id, self.id)
 		   	db:zadd(index_key, self.id, new_value)
 	    end
-        
+
 		-- update the lua object
 		self[field] = new_value
         --hash index
-        if bamboo.config.index_hash then 
+        if bamboo.config.index_hash then
             mih.index(self,false,field);
         end
 
@@ -2517,16 +2517,16 @@ Model = Object:extend {
 				db:zremrangebyscore(index_key, self.id, self.id)
 				db:zadd(index_key, self.id, new_value)
 			end
-			
+
 		    db:hset(model_key, field, new_value)
 		end
 		-- update the lastmodified_time
 		self.lastmodified_time = socket.gettime()
 		db:hset(model_key, 'lastmodified_time', self.lastmodified_time)
-	    
+
 		-- apply to lua object
 		self[field] = new_value
-		
+
 		-- if fulltext index
 		if fld.fulltext_index and isUsingFulltextIndex(self) then
 			makeFulltextIndexes(self)
@@ -2534,15 +2534,15 @@ Model = Object:extend {
 		if isUsingRuleIndex(self) then
 			updateIndexByRules(self, 'update')
 		end
-		
+
 
 		return self
     end;
-    
+
     -- get the model's instance counter value
     -- this can be call by Class and Instance
-    getCounter = getCounter; 
-    
+    getCounter = getCounter;
+
     -- delete self instance object
     -- self can be instance or query set
     fakeDel = function (self)
@@ -2555,10 +2555,10 @@ Model = Object:extend {
 		else
 			fakedelFromRedis(self)
 		end
-		
+
 		self = nil
     end;
-	
+
 	-- delete self instance object
     -- self can be instance or query set
     trueDel = function (self)
@@ -2571,11 +2571,11 @@ Model = Object:extend {
 		else
 			delFromRedis(self)
 		end
-		
+
 		self = nil
     end;
-	
-	
+
+
 	-- delete self instance object
     -- self can be instance or query set
     del = function (self)
@@ -2592,7 +2592,7 @@ Model = Object:extend {
 		I_AM_CLASS(self)
 		return restoreFakeDeletedInstance(self, id)
 	end;
-	
+
 	-- clear all deleted instance and its foreign relations
 	sweepDeleted = function (self)
 		local deleted_keys = db:keys('DELETED:*')
@@ -2615,17 +2615,17 @@ Model = Object:extend {
 		assert(tonumber(getCounter(self)) >= tonumber(self.id), '[Error] before doing addForeign, you must save this instance.')
 		assert(type(obj) == 'table' or type(obj) == 'string', '[Error] "obj" should be table or string.')
 		if type(obj) == 'table' then checkType(tonumber(obj.id), 'number') end
-		
+
 		local fld = self.__fields[field]
 		assert(fld, ("[Error] Field %s doesn't be defined!"):format(field))
 		assert( fld.foreign, ("[Error] This field %s is not a foreign field."):format(field))
 		assert( fld.st, ("[Error] No store type setting for this foreign field %s."):format(field))
-		assert( fld.foreign == 'ANYSTRING' or obj.id, 
+		assert( fld.foreign == 'ANYSTRING' or obj.id,
 			"[Error] This object doesn't contain id, it's not a valid object!")
-		assert( fld.foreign == 'ANYSTRING' or fld.foreign == 'UNFIXED' or fld.foreign == getClassName(obj), 
+		assert( fld.foreign == 'ANYSTRING' or fld.foreign == 'UNFIXED' or fld.foreign == getClassName(obj),
 			("[Error] This foreign field '%s' can't accept the instance of model '%s'."):format(
 			field, getClassName(obj) or tostring(obj)))
-		
+
 		local new_id
 		if fld.foreign == 'ANYSTRING' then
 			checkType(obj, 'string')
@@ -2635,7 +2635,7 @@ Model = Object:extend {
 		else
 			new_id = obj.id
 		end
-		
+
 		local model_key = getNameIdPattern(self)
 		if fld.st == 'ONE' then
 			-- record in db
@@ -2650,20 +2650,20 @@ Model = Object:extend {
 			-- in zset, the newest member has the higher score
 			-- but use getForeign, we retrieve them from high to low, so newest is at left of result
 		end
-		
+
 		if isUsingRuleIndex() then
 			updateIndexByRules(self, 'update')
 		end
-		
+
 		-- update the lastmodified_time
 		self.lastmodified_time = socket.gettime()
 		db:hset(model_key, 'lastmodified_time', self.lastmodified_time)
 		return self
 	end;
-	
-	-- 
-	-- 
-	-- 
+
+	--
+	--
+	--
 	getForeign = function (self, field, start, stop, is_rev)
 		I_AM_INSTANCE(self)
 		checkType(field, 'string')
@@ -2671,7 +2671,7 @@ Model = Object:extend {
 		assert(fld, ("[Error] Field %s doesn't be defined!"):format(field))
 		assert(fld.foreign, ("[Error] This field %s is not a foreign field."):format(field))
 		assert(fld.st, ("[Error] No store type setting for this foreign field %s."):format(field))
-				
+
 		if fld.st == 'ONE' then
 			if isFalse(self[field]) then return nil end
 
@@ -2687,18 +2687,18 @@ Model = Object:extend {
 					-- normal case
 					link_model = getModelByName(fld.foreign)
 					linked_id = self[field]
-				end	
-				
+				end
+
 				local obj = link_model:getById (linked_id)
 				if not isValidInstance(obj) then
 					print('[Warning] invalid ONE foreign id or object.')
-					
+
 					if bamboo.config.auto_clear_index_when_get_failed then
 						-- clear invalid foreign value
 						db:hdel(model_key, field)
-						self[field] = nil 
+						self[field] = nil
 					end
-					
+
 					return nil
 				else
 					return obj
@@ -2706,9 +2706,9 @@ Model = Object:extend {
 			end
 		else
 			if isFalse(self[field]) then return QuerySet() end
-			
+
 			local key = getFieldPattern(self, field)
-		
+
 			local store_module = getStoreModule(fld.st)
 			-- scores may be nil
 			local list, scores = store_module.retrieve(key)
@@ -2717,7 +2717,7 @@ Model = Object:extend {
 			list = list:slice(start, stop, is_rev)
 			if list:isEmpty() then return QuerySet() end
 			if not isFalse(scores) then scores = scores:slice(start, stop, is_rev) end
-		
+
 			local objs, nils = retrieveObjectsByForeignType(fld.foreign, list, key)
 
 			if bamboo.config.auto_clear_index_when_get_failed then
@@ -2729,7 +2729,7 @@ Model = Object:extend {
 					end
 				end
 			end
-			
+
 			return objs, scores
 		end
 	end;
@@ -2741,7 +2741,7 @@ Model = Object:extend {
 		assert(fld, ("[Error] Field %s doesn't be defined!"):format(field))
 		assert(fld.foreign, ("[Error] This field %s is not a foreign field."):format(field))
 		assert(fld.st, ("[Error] No store type setting for this foreign field %s."):format(field))
-				
+
 		if fld.st == 'ONE' then
 			if isFalse(self[field]) then return nil end
 
@@ -2760,8 +2760,8 @@ Model = Object:extend {
 			return list, scores
 		end
 
-	end;    
-	
+	end;
+
 	-- rearrange the foreign index by input list
 	rearrangeForeign = function (self, field, inlist)
 		I_AM_INSTANCE(self)
@@ -2794,14 +2794,14 @@ Model = Object:extend {
 				tinsert(new_orders, v)
 			end
 		end
-		
+
 		local key = getFieldPattern(self, field)
 		-- override the original foreign zset value
 		rdzset.save(key, new_orders)
-		
+
 		return self
 	end;
-	
+
 	-- delelte a foreign member
 	-- obj can be instance object, also can be object's id, also can be anystring.
 	delForeign = function (self, field, obj)
@@ -2813,14 +2813,14 @@ Model = Object:extend {
 		assert(fld.foreign, ("[Error] This field %s is not a foreign field."):format(field))
 		assert(fld.st, ("[Error] No store type setting for this foreign field %s."):format(field))
 		--assert( fld.foreign == 'ANYSTRING' or obj.id, "[Error] This object doesn't contain id, it's not a valid object!")
-		assert(fld.foreign == 'ANYSTRING' 
-			or fld.foreign == 'UNFIXED' 
-			or (type(obj) == 'table' and fld.foreign == getClassName(obj)), 
+		assert(fld.foreign == 'ANYSTRING'
+			or fld.foreign == 'UNFIXED'
+			or (type(obj) == 'table' and fld.foreign == getClassName(obj)),
 			("[Error] This foreign field '%s' can't accept the instance of model '%s'."):format(field, getClassName(obj) or tostring(obj)))
 
 		-- if self[field] is nil, it must be wrong somewhere
 		if isFalse(self[field]) then return nil end
-		
+
 		local new_id
 		if isNumOrStr(obj) then
 			-- obj is id or anystring
@@ -2829,11 +2829,11 @@ Model = Object:extend {
 			checkType(obj, 'table')
 			if fld.foreign == 'UNFIXED' then
 				new_id = getNameIdPattern(obj)
-			else 
+			else
 				new_id = tostring(obj.id)
 			end
 		end
-		
+
 		local model_key = getNameIdPattern(self)
 		if fld.st == 'ONE' then
 			-- we must check the equality of self[filed] and new_id before perform delete action
@@ -2847,7 +2847,7 @@ Model = Object:extend {
 			local store_module = getStoreModule(fld.st)
 			store_module.remove(key, new_id)
 		end
-	
+
 		if isUsingRuleIndex() then
 			updateIndexByRules(self, 'update')
 		end
@@ -2857,7 +2857,7 @@ Model = Object:extend {
 		db:hset(model_key, 'lastmodified_time', self.lastmodified_time)
 		return self
 	end;
-	
+
 	clearForeign = function (self, field)
 		I_AM_INSTANCE(self)
 		checkType(field, 'string')
@@ -2873,11 +2873,11 @@ Model = Object:extend {
 			db:hdel(model_key, field)
 			self[field] = nil
 		else
-			local key = getFieldPattern(self, field)		
+			local key = getFieldPattern(self, field)
 			-- delete the foreign key
 			db:del(key)
 		end
-		
+
 		if isUsingRuleIndex() then
 			updateIndexByRules(self, 'update')
 		end
@@ -2885,7 +2885,7 @@ Model = Object:extend {
 		-- update the lastmodified_time
 		self.lastmodified_time = socket.gettime()
 		db:hset(model_key, 'lastmodified_time', self.lastmodified_time)
-		return self		
+		return self
 	end;
 
 	deepClearForeign = function (self, field)
@@ -2906,11 +2906,11 @@ Model = Object:extend {
 			db:hdel(model_key, field)
 			self[field] = nil
 		else
-			local key = getFieldPattern(self, field)		
+			local key = getFieldPattern(self, field)
 			-- delete the foreign key
 			db:del(key)
 		end
-		
+
 		if isUsingRuleIndex() then
 			updateIndexByRules(self, 'update')
 		end
@@ -2918,7 +2918,7 @@ Model = Object:extend {
 		-- update the lastmodified_time
 		self.lastmodified_time = socket.gettime()
 		db:hset(model_key, 'lastmodified_time', self.lastmodified_time)
-		return self		
+		return self
 	end;
 
 	-- check whether some obj is already in foreign list
@@ -2954,8 +2954,8 @@ Model = Object:extend {
 			local key = getFieldPattern(self, field)
 			local store_module = getStoreModule(fld.st)
 			return store_module.has(key, new_id)
-		end 
-	
+		end
+
 		return false
 	end;
 
@@ -2970,7 +2970,7 @@ Model = Object:extend {
 		assert( fld.st, ("[Error] No store type setting for this foreign field %s."):format(field))
 		-- if foreign field link is now null
 		if isFalse(self[field]) then return 0 end
-		
+
 		if fld.st == 'ONE' then
 			-- the ONE foreign field has only 1 element
 			return 1
@@ -2990,7 +2990,7 @@ Model = Object:extend {
 		if fld and fld.foreign then return true
 		else return false
 		end
-		
+
 	end;
 
 	--- return the class name of an instance
@@ -3002,12 +3002,12 @@ Model = Object:extend {
 	sortBy = function (self, field, direction, sort_func, ...)
 		I_AM_QUERY_SET(self)
 		-- checkType(field, 'string')
-		
+
 		local direction = direction or 'asc'
-		
+
 		local byfield = field
 		local sort_func = sort_func or function (a, b)
-			local af = a[byfield] 
+			local af = a[byfield]
 			local bf = b[byfield]
 			if af and bf then
 				if direction == 'asc' then
@@ -3019,9 +3019,9 @@ Model = Object:extend {
 				end
 			end
 		end
-		
+
 		table.sort(self, sort_func)
-		
+
 		-- secondary sort
 		local field2, dir2, sort_func2 = ...
 		if field2 then
@@ -3058,22 +3058,22 @@ Model = Object:extend {
 
 			self = flat
 		end
-		
-		return self		
+
+		return self
 	end;
-	
+
 	addToCacheAndSortBy = function (self, cache_key, field, sort_func)
 		I_AM_INSTANCE(self)
 		checkType(cache_key, field, 'string', 'string')
-		
+
 		--DEBUG(cache_key)
 		--DEBUG('entering addToCacheAndSortBy')
 		local cache_saved_key = getCacheKey(self, cache_key)
-		if not db:exists(cache_saved_key) then 
+		if not db:exists(cache_saved_key) then
 			print('[WARNING] The cache is missing or expired.')
 			return nil
 		end
-		
+
 		local cached_ids = db:zrange(cache_saved_key, 0, -1)
 		local head = db:hget(getNameIdPattern2(self, cached_ids[1]), field)
 		local tail = db:hget(getNameIdPattern2(self, cached_ids[#cached_ids]), field)
@@ -3082,7 +3082,7 @@ Model = Object:extend {
 		local order_type = 'asc'
 		local field_value, stop_id
 		local insert_position = 0
-		
+
 		if head > tail then order_type = 'desc' end
 		-- should always keep `a` and `b` have the same type
 		local sort_func = sort_func or function (a, b)
@@ -3092,7 +3092,7 @@ Model = Object:extend {
 				return a < b
 			end
 		end
-		
+
 		--DEBUG(order_type)
 		-- find the inserting position
 		-- FIXME: use 2-part searching method is better
@@ -3107,13 +3107,13 @@ Model = Object:extend {
 		--DEBUG(insert_position)
 
 		local new_score
-		if insert_position == 0 then 
+		if insert_position == 0 then
 			-- means till the end, all element is smaller than self.field
 			-- insert_position = #cached_ids
 			-- the last element's score + 1
 			local end_score = db:zrange(cache_saved_key, -1, -1, 'withscores')[1][2]
 			new_score = end_score + 1
-		
+
 		elseif insert_position == 1 then
 			-- get the half of the first element
 			local stop_score = db:zscore(cache_saved_key, stop_id)
@@ -3124,28 +3124,28 @@ Model = Object:extend {
 			local stopprev_rank = db:zrank(cache_saved_key, stop_id) - 1
 			local stopprev_score = db:zrange(cache_saved_key, stopprev_rank, stopprev_rank, 'withscores')[1][2]
 			new_score = tonumber(stop_score + stopprev_score) / 2
-		
+
 		end
-		
+
 		--DEBUG(new_score)
 		-- add new element to cache
 		db:zadd(cache_saved_key, new_score, self.id)
-			
-		
+
+
 		return self
 	end;
 
-	
+
 	--------------------------------------------------------------------------
 	-- Dynamic Field API
 	--------------------------------------------------------------------------
-	
+
 	-- called by model
 	addDynamicField = function (self, field_name, field_dt)
 		I_AM_CLASS(self)
 		checkType(field_name, field_dt, 'string', 'table')
-		
-		
+
+
 		local fields = self.__fields
 		if not fields then print('[Warning] This model has no __fields.'); return nil end
 		-- if already exist, can not override it
@@ -3160,9 +3160,9 @@ Model = Object:extend {
 			-- add to dynamic field index list
 			db:rpush(getDynamicFieldIndex(self), field_name)
 		end
-		
+
 	end;
-	
+
 	hasDynamicField = function (self)
 		I_AM_CLASS(self)
 		local dfindex = getDynamicFieldIndex(self)
@@ -3172,7 +3172,7 @@ Model = Object:extend {
 			return false
 		end
 	end;
-	
+
 	delDynamicField = function (self, field_name)
 		I_AM_CLASS(self)
 		checkType(field_name, 'string')
@@ -3182,7 +3182,7 @@ Model = Object:extend {
 		db:del(dfield)
 		db:lrem(dfindex, 0, field_name)
 		self.__fields[field_name] = nil
-		
+
 		return self
 	end;
 
@@ -3190,7 +3190,7 @@ Model = Object:extend {
 		I_AM_CLASS(self)
 		local dfindex = getDynamicFieldIndex(self)
 		local dfields_list = db:lrange(dfindex, 0, -1)
-		
+
 		for _, field_name in ipairs(dfields_list) do
 			local dfield = getDynamicFieldKey(self, field_name)
 			-- get field description table
@@ -3198,7 +3198,7 @@ Model = Object:extend {
 			-- add new field to __fields
 			self.__fields[field_name] = data
 		end
-		
+
 		return self
 	end;
 
@@ -3210,8 +3210,8 @@ Model = Object:extend {
 		end
 		return ids
 	end;
-	
-	
+
+
 	-- for fulltext index API
 	fulltextSearch = function (self, ask_str, n)
 		I_AM_CLASS(self)
@@ -3228,9 +3228,9 @@ Model = Object:extend {
 	getFDT = function (self, field)
 		I_AM_CLASS_OR_INSTANCE(self)
 		checkType(field, 'string')
-		
+
 		return self.__fields[field]
-		
+
 	end;
 
 }
@@ -3238,13 +3238,13 @@ Model = Object:extend {
 local QuerySetMeta = setProto({__spectype='QuerySet'}, Model)
 QuerySet = function (list)
 	local list = List(list)
-	-- create a query set	
+	-- create a query set
 	-- add it to fit the check of isClass function
 --	if not getmetatable(QuerySetMeta) then
 --		QuerySetMeta = setProto(QuerySetMeta, Model)
 --	end
 	local query_set = setProto(list, QuerySetMeta)
-	
+
 	return query_set
 end
 
