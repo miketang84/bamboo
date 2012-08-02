@@ -2718,7 +2718,7 @@ Model = Object:extend {
 			if list:isEmpty() then return QuerySet() end
 			if not isFalse(scores) then scores = scores:slice(start, stop, is_rev) end
 
-			local objs, nils = retrieveObjectsByForeignType(fld.foreign, list, key)
+			local objs, nils = retrieveObjectsByForeignType(fld.foreign, list)
 
 			if bamboo.config.auto_clear_index_when_get_failed then
 				-- clear the invalid foreign item value

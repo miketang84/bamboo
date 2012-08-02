@@ -12,26 +12,26 @@ function save(key, tbl, scores)
 		for _, v in ipairs(tbl) do
 			db:zadd(key, n + 1, tostring(v))
 			n = n + 1
-		end 
+		end
 	else
 		checkType(scores, 'table')
 		assert(#tbl == #scores, '[Error] the lengths of val and scores are not equal.')
-				
+
 		for i, v in ipairs(tbl) do
-			local score = scores[i] 
+			local score = scores[i]
 			assert(type(tonumber(score)) == 'number', '[Error] Some score in score list is not number.')
 			db:zadd(key, score, tostring(v))
-		end 
+		end
 	end
 end
 
 function update(key, tbl)
 	local n = db:zcard(key)
-	
+
 	for _, v in ipairs(tbl) do
 		db:zadd(key, n + 1, tostring(v))
 		n = n + 1
-	end 
+	end
 end
 
 
@@ -49,48 +49,37 @@ function add( key, val, score )
 			local lastscore = db:zrange(key, -1, -1, 'withscores')[1][2]
 			-- give the new added element score n+1
 			db:zadd(key, lastscore + 1, val)
-		end	
+		end
 	else
 		-- checkType(score, 'number')
 		db:zadd(key, score, val)
 	end
 
-	-- return the score 
+	-- return the score
 	return db:zscore(key, val)
 end
 
 
 function retrieve( key )
-
 	-- only have members, no scores
 	return List(db:zrange(key, 0, -1))
 end
 
 function retrieveReversely( key )
 	return List(db:zrevrange(key, 0, -1))
-end 
+end
 
 function retrieveWithScores( key )
 	-- [1] is member, [2] is score
-	local pair_list = db:zrange(key, 0, -1, 'withscores')
-	local value_list, score_list = List(), List()
-	for _, v in ipairs(pair_list) do
-		table.insert(value_list, v[1])
-		table.insert(score_list, v[2])
-	end
-	return value_list, score_list
+	local value_list, score_list = db:zrange(key, 0, -1, 'withscores')
+	return List(value_list), List(score_list)
 end
 
 function retrieveReverselyWithScores( key )
 	-- [1] is member, [2] is score
-	local pair_list = db:zrevrange(key, 0, -1, 'withscores')
-	local value_list, score_list = List(), List()
-	for _, v in ipairs(pair_list) do
-		table.insert(value_list, v[1])
-		table.insert(score_list, v[2])
-	end
+	local value_list, score_list = db:zrevrange(key, 0, -1, 'withscores')
 
-	return value_list, score_list
+	return List(value_list), List(score_list)
 end
 
 function remove( key, val )
@@ -102,12 +91,12 @@ function removeByScore(key, score)
 end
 
 function num( key )
-	
+
 	return db:zcard(key)
 end
 
 function del( key )
-	
+
 	return db:del(key)
 end
 
@@ -119,6 +108,6 @@ function has(key, obj)
 
 	local score = db:zscore(key, tostring(obj))
 
-	return (score ~= nil) 
+	return (score ~= nil)
 end
 
