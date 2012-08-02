@@ -2423,7 +2423,7 @@ Model = Object:extend {
 				local model_key = getNameIdPattern(self)
 				local self, store_kv = processBeforeSave(self, params)
 				-- assert(not db:zscore(index_key, self[indexfd]), "[Error] save duplicate to an unique limited field, aborted!")
-				if db:zscore(index_key, self[indexfd]) then print("[Warning] save duplicate to an unique limited field, canceled!") end
+				if db:zscore(index_key, self[indexfd]) then print(format("[Warning] save duplicate to an unique limited field: %s.", indexfd)); return nil end
 
 				db:zadd(index_key, self.id, self[indexfd])
 				-- update object hash store key
@@ -2448,7 +2448,7 @@ Model = Object:extend {
 
 				local score = db:zscore(index_key, self[indexfd])
 				-- assert(score == self.id or score == nil, "[Error] save duplicate to an unique limited field, aborted!")
-				if not (score == self.id or score == nil) then print("[Warning] save duplicate to an unique limited field, canceled!") end
+				if not (score == self.id or score == nil) then print(format("[Warning] save duplicate to an unique limited field: %s.", indexfd)); return nil  end
 
 				-- if modified indexfd, score will be nil, remove the old id-indexfd pair, for later new save indexfd
 				if not score then
