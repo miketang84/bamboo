@@ -46,8 +46,9 @@ function add( key, val, score )
 		if n == 0 then
 			db:zadd(key, 1, val)
 		else
-			local lastscore = db:zrange(key, -1, -1, 'withscores')[1][2]
-			-- give the new added element score n+1
+			local _, scores = db:zrange(key, -1, -1, 'withscores')
+			lastscore = scores[1]
+            -- give the new added element score n+1
 			db:zadd(key, lastscore + 1, val)
 		end
 	else

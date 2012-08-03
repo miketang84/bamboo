@@ -1583,15 +1583,10 @@ Model = Object:extend {
 		I_AM_CLASS(self)
 		checkType(start, stop, 'number', 'number')
 		local index_key = getIndexKey(self)
-		local all_ids = List(db:zrange(index_key, 0, -1, 'withscores'))
+		local _, all_ids = List(db:zrange(index_key, 0, -1, 'withscores'))
 		all_ids = all_ids:slice(start, stop, is_rev)
-		local ids = List()
-		for _, v in ipairs(all_ids) do
-			-- v[1] is the 'index value', v[2] is the 'id'
-			ids:append(v[2])
-		end
 
-		return ids
+		return all_ids
 	end;
 
 	-- return all instance objects belong to this Model
@@ -3112,7 +3107,8 @@ Model = Object:extend {
 			-- means till the end, all element is smaller than self.field
 			-- insert_position = #cached_ids
 			-- the last element's score + 1
-			local end_score = db:zrange(cache_saved_key, -1, -1, 'withscores')[1][2]
+			local _, scores = db:zrange(cache_saved_key, -1, -1, 'withscores')
+			local end_score = scores[1]
 			new_score = end_score + 1
 
 		elseif insert_position == 1 then
@@ -3123,7 +3119,8 @@ Model = Object:extend {
 			-- get the middle value of the left and right neighbours
 			local stop_score = db:zscore(cache_saved_key, stop_id)
 			local stopprev_rank = db:zrank(cache_saved_key, stop_id) - 1
-			local stopprev_score = db:zrange(cache_saved_key, stopprev_rank, stopprev_rank, 'withscores')[1][2]
+			local _, scores = db:zrange(cache_saved_key, stopprev_rank, stopprev_rank, 'withscores')
+			local stopprev_score = scores[1]
 			new_score = tonumber(stop_score + stopprev_score) / 2
 
 		end
