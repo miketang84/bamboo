@@ -1386,7 +1386,7 @@ local processBeforeSave = function (self, params)
 			if not fdt['foreign'] or ( fdt['foreign'] and fdt['st'] == 'ONE') then
 				-- save
 				tinsert(store_kv, k)
-				tinsert(store_kv, v)
+				tinsert(store_kv, tostring(v))
 			end
 		end
     end
@@ -2448,7 +2448,8 @@ Model = Object:extend {
 
 				local score = db:zscore(index_key, self[indexfd])
 				-- assert(score == self.id or score == nil, "[Error] save duplicate to an unique limited field, aborted!")
-				if not (score == self.id or score == nil) then print(format("[Warning] save duplicate to an unique limited field: %s.", indexfd)); return nil  end
+				-- score is number, self.id is string
+				if not (tostring(score) == self.id or score == nil) then print(format("[Warning] save duplicate to an unique limited field: %s.", indexfd)); return nil  end
 
 				-- if modified indexfd, score will be nil, remove the old id-indexfd pair, for later new save indexfd
 				if not score then
