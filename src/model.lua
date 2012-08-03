@@ -1583,8 +1583,8 @@ Model = Object:extend {
 		I_AM_CLASS(self)
 		checkType(start, stop, 'number', 'number')
 		local index_key = getIndexKey(self)
-		local _, all_ids = List(db:zrange(index_key, 0, -1, 'withscores'))
-		all_ids = all_ids:slice(start, stop, is_rev)
+		local _, all_ids = db:zrange(index_key, 0, -1, 'withscores')
+		all_ids = List(all_ids):slice(start, stop, is_rev)
 
 		return all_ids
 	end;
