@@ -666,12 +666,12 @@ _G['uneq'] = function ( cmp_obj )
 end
 
 _G['lt'] = function (limitation)
-	limitation = tonumber(limitation) or limitation
+--	limitation = tonumber(limitation) or limitation
 	local t = function (v)
         if v == uglystr then return nil, 'lt', limitation; end
 
-		local nv = tonumber(v) or v
-		if nv and nv < limitation then
+--		local nv = tonumber(v) or v
+		if v and v < limitation then
 			return true
 		else
 			return false
@@ -682,12 +682,12 @@ _G['lt'] = function (limitation)
 end
 
 _G['gt'] = function (limitation)
-	limitation = tonumber(limitation) or limitation
+--	limitation = tonumber(limitation) or limitation
 	local t = function (v)
         if v == uglystr then return nil, 'gt', limitation; end
 
-		local nv = tonumber(v) or v
-		if nv and nv > limitation then
+--		local nv = tonumber(v) or v
+		if v and v > limitation then
 			return true
 		else
 			return false
@@ -699,12 +699,12 @@ end
 
 
 _G['le'] = function (limitation)
-	limitation = tonumber(limitation) or limitation
+--	limitation = tonumber(limitation) or limitation
 	local t = function (v)
         if v == uglystr then return nil, 'le', limitation; end
 
-		local nv = tonumber(v) or v
-		if nv and nv <= limitation then
+--		local nv = tonumber(v) or v
+		if v and v <= limitation then
 			return true
 		else
 			return false
@@ -715,12 +715,12 @@ _G['le'] = function (limitation)
 end
 
 _G['ge'] = function (limitation)
-	limitation = tonumber(limitation) or limitation
+--	limitation = tonumber(limitation) or limitation
 	local t = function (v)
         if v == uglystr then return nil, 'ge', limitation; end
 
-		local nv = tonumber(v) or v
-		if nv and nv >= limitation then
+--		local nv = tonumber(v) or v
+		if v and v >= limitation then
 			return true
 		else
 			return false
@@ -731,13 +731,13 @@ _G['ge'] = function (limitation)
 end
 
 _G['bt'] = function (small, big)
-	small = tonumber(small) or small
-	big = tonumber(big) or big
+--	small = tonumber(small) or small
+--	big = tonumber(big) or big
 	local t = function (v)
         if v == uglystr then return nil, 'bt', {small, big}; end
 
-		local nv = tonumber(v) or v
-		if nv and nv > small and nv < big then
+--		local nv = tonumber(v) or v
+		if v and v > small and v < big then
 			return true
 		else
 			return false
@@ -748,13 +748,13 @@ _G['bt'] = function (small, big)
 end
 
 _G['be'] = function (small, big)
-	small = tonumber(small) or small
-	big = tonumber(big) or big
+--	small = tonumber(small) or small
+--	big = tonumber(big) or big
 	local t = function (v)
         if v == uglystr then return nil, 'be', {small,big}; end
 
-		local nv = tonumber(v) or v
-		if nv and nv >= small and nv <= big then
+--		local nv = tonumber(v) or v
+		if v and v >= small and v <= big then
 			return true
 		else
 			return false
@@ -765,13 +765,13 @@ _G['be'] = function (small, big)
 end
 
 _G['outside'] = function (small, big)
-	small = tonumber(small) or small
-	big = tonumber(big) or big
+--	small = tonumber(small) or small
+--	big = tonumber(big) or big
 	local t = function (v)
         if v == uglystr then return nil, 'outside',{small,big}; end
 
-		local nv = tonumber(v) or v
-		if nv and nv < small and nv > big then
+--		local nv = tonumber(v) or v
+		if v and v < small and v > big then
 			return true
 		else
 			return false
@@ -945,6 +945,7 @@ local compressSortByArgs = function (query_str_iden, sortby_args)
 		local ctype = type(v)
 		if ctype == 'string' then
             tinsert(strs, v)
+        -- may don't appear
         elseif ctype == 'nil' then
             tinsert(strs, 'nil')
         elseif ctype == 'function' then
@@ -958,28 +959,32 @@ end
 
 local extractSortByArgs = function (sortby_str_iden)
 	local sortby_args = sortby_str_iden:split(' ')
-	-- [1] is string, [2] is nil or string, [3] is nil or function
-	-- [4] is nil or string, [5] is nil or string, [6] is nil or function
-	local key = sortby_args[1] ~= 'nil' and sortby_args[1] or nil
-	local direction = sortby_args[2] == 'desc' and 'desc' or 'asc'
-	local func = (sortby_args[3] ~= nil and sortby_args[3] ~= 'nil') and loadstring(sortby_args[3]) or function (a, b)
-		local af = a[key]
-		local bf = b[key]
-		if af and bf then
-			if direction == 'asc' then
-				return af < bf
-			elseif direction == 'desc' then
-				return af > bf
+	-- [1] is string or function, [2] is nil or string, 
+	local first_arg = sortby_args[1]
+	if type(first_arg) == 'function' then
+		return loadstring(first_arg)
+	elseif type(first_arg) == 'string' then
+		local key = first_arg
+		local dir = (sortby_args[2] == 'desc' and 'desc' or 'asc')
+		return function (a, b)
+			local af = a[key]
+			local bf = b[key]
+			if af and bf then
+				if dir == 'asc' then
+					return af < bf
+				elseif dir == 'desc' then
+					return af > bf
+				end
+			else
+				return nil
 			end
-		else
-			return nil
 		end
+	else
+		return nil
 	end
-
-	return func
 end
 
-
+local canInstanceFitQueryRule
 local canInstanceFitQueryRuleAndFindProperPosition = function (self, combine_str_iden)
 	print('enter canInstanceFitQueryRuleAndFindProperPosition')
 	local p
@@ -1003,7 +1008,6 @@ local canInstanceFitQueryRuleAndFindProperPosition = function (self, combine_str
 		id_list = db:lrange(item_key, 0, -1)
 		local length = #id_list
 		local model = self:getClass()
-		print(model)
 		local func = extractSortByArgs(sortby_str_iden)
 		print(func)
 
@@ -1021,10 +1025,7 @@ local canInstanceFitQueryRuleAndFindProperPosition = function (self, combine_str
 
 		p = l
 		while (r ~= l) do
-			print('in sort auto, l, r, p', l, r, p)
-			if left_obj == nil or right_obj == nil then
-				return nil, id_list[#id_list], #id_list
-			end
+
 			left_flag = func(left_obj, self)
 			right_flag = func(self, right_obj)
 
@@ -1033,11 +1034,11 @@ local canInstanceFitQueryRuleAndFindProperPosition = function (self, combine_str
 				p = math.floor((l + r)/2)
 			elseif bflag == left_flag then
 			-- on the right hand
-				p = r + 1
+				p = r
 				break
 			elseif bflag == right_flag then
 			-- on the left hand
-				p = l - 1
+				p = l
 				break
 			end
 
@@ -1055,17 +1056,22 @@ local canInstanceFitQueryRuleAndFindProperPosition = function (self, combine_str
 
 			left_obj = model:getById(id_list[l])
 			right_obj = model:getById(id_list[r])
+			print('in sort auto, l, r, p', l, r, p)
+			if left_obj == nil or right_obj == nil then
+				return nil, id_list[#id_list], #id_list
+			end
+			
 			if r - l <= 1 then r = l end
 		end
 
 		-- now p is the insert position
-		local mobj = model:getById(id_list[p])
-		if mobj then
-			pflag = func(mobj, self)
-			if pflag ~= bflag then
-				p = p - 1
-			end
-		end
+--		local mobj = model:getById(id_list[p])
+--		if mobj then
+--			pflag = func(mobj, self)
+--			if pflag ~= bflag then
+--				p = p - 1
+--			end
+--		end
 	end
 
 
@@ -1236,7 +1242,7 @@ local checkLogicRelation = function (obj, query_args, logic_choice, model)
 	return flag
 end
 
-local canInstanceFitQueryRule = function (self, qstr)
+canInstanceFitQueryRule = function (self, qstr)
 	local query_args = extractQueryArgs(qstr)
 	--DEBUG(query_args)
 	local logic_choice = true
@@ -1477,8 +1483,7 @@ local delFromRedis = function (self, id)
 		clearFtIndexesOnDeletion(self)
 	end
 	if isUsingRuleIndex(self) and self.id then
-		updateIndexByRules(self, 'del', 'query')
-		updateIndexByRules(self, 'del', 'sortby')
+		updateIndexByRules(self, 'del')
 	end
 
 	-- release the lua object
@@ -1523,8 +1528,7 @@ local fakedelFromRedis = function (self, id)
 		clearFtIndexesOnDeletion(self)
 	end
 	if isUsingRuleIndex(self) and self.id then
-		updateIndexByRules(self, 'del', 'query')
-		updateIndexByRules(self, 'del', 'sortby')
+		updateIndexByRules(self, 'del')
 	end
 
 	-- release the lua object
@@ -1848,28 +1852,36 @@ Model = Object:extend {
 	-- @param is_rev: specify the direction of the search result, 'rev'
 	-- @return: query_set, an object list (query set)
 	-- @note: this function can be called by class object and query set
-	filter = function (self, query_args, start_or_field, stop_or_dir, is_rev_or_sort_func, start, stop, is_rev, is_get)
+	filter = function (self, query_args, ...)
 		I_AM_CLASS_OR_QUERY_SET(self)
 		assert(type(query_args) == 'table' or type(query_args) == 'function', '[Error] the query_args passed to filter must be table or function.')
+        local no_sort_rule
+        -- regular the args
+        local sort_field, sort_dir, sort_func, start, stop, is_rev, is_get
+        local first_arg = select(1, ...)
+        if type(first_arg) == 'function' then
+			sort_func = first_arg
+			start = select(2, ...)
+			stop = select(3, ...)
+			is_rev = select(4, ...)
+			is_get = select(5, ...)
+			no_sort_rule = false
+		elseif type(first_arg) == 'string' then
+			sort_field = first_arg
+			sort_dir = select(2, ...)
+			start = select(3, ...)
+			stop = select(4, ...)
+			is_rev = select(5, ...)
+			is_get = select(6, ...)
+			no_sort_rule = false
+        elseif type(first_arg) == 'number' then
+			start = first_arg
+			stop = select(2, ...)
+			is_rev = select(3, ...)
+			is_get = select(4, ...)
+			no_sort_rule = true
+        end
         
-		local no_sort_rule = type(start_or_field) == 'number'
-		if not no_sort_rule and start_or_field == nil then
-		  if type(is_rev_or_sort_func) == 'function' then
-		    -- has sort rule
-		    no_sort_rule = false
-		  else
-		    -- no sort rule
-		    no_sort_rule = true
-		  end
-		end
-
-print('no_rule_', no_sort_rule)
-		if no_sort_rule then
-		  start = start_or_field
-		  stop = stop_or_dir
-		  is_rev = is_rev_or_sort_func
-		end
-
         if start then assert(type(start) == 'number', '[Error] @filter - start must be number.') end
 		if stop then assert(type(stop) == 'number', '[Error] @filter - stop must be number.') end
 		if is_rev then assert(type(is_rev) == 'string', '[Error] @filter - is_rev must be string.') end
@@ -1890,7 +1902,7 @@ print('no_rule_', no_sort_rule)
 				-- make query identification string
 				query_str_iden = compressQueryArgs(query_args)
 				if not no_sort_rule then
-					 query_str_iden = compressSortByArgs(query_str_iden, {start_or_field, stop_or_dir, is_rev_or_sort_func})
+					 query_str_iden = compressSortByArgs(query_str_iden, {sort_field or sort_func, sort_dir})
 				end
 				print('query_str_iden', query_str_iden)
 				if #query_str_iden > 0 then
@@ -1911,6 +1923,7 @@ print('no_rule_', no_sort_rule)
 
 							-- if have this list, return objects directly
 							if #id_list > 0 then
+								print('in short....')
 								return getFromRedisPipeline(self, id_list)
 							end
 						end
@@ -1944,7 +1957,7 @@ print('no_rule_', no_sort_rule)
 				if no_sort_rule then
 					return self:slice(start, stop, is_rev)
 				else
-					query_set = self:all() --:sortBy(start_or_field, stop_or_dir, is_rev_or_sort_func)
+					query_set = self:all()
 				end
 			elseif query_args[1] then
 			-- normalize the 'and' and 'or' logic
@@ -2058,7 +2071,7 @@ print('no_rule_', no_sort_rule)
 				query_set = (is_rev == 'rev') and List {_t_query_set[#_t_query_set]} or List {_t_query_set[1]}
 			else
 				if not no_sort_rule then
-					query_set = query_set:sortBy(start_or_field, stop_or_dir, is_rev_or_sort_func)
+					query_set = query_set:sortBy(sort_field or sort_func, sort_dir)
 					_t_query_set = query_set
 				end
 				if start or stop then
@@ -2692,8 +2705,7 @@ print('no_rule_', no_sort_rule)
 			makeFulltextIndexes(self)
 		end
 		if isUsingRuleIndex(self) then
-			updateIndexByRules(self, 'save', 'query')
-			updateIndexByRules(self, 'save', 'sortby')
+			updateIndexByRules(self, 'save')
 		end
 
 		return self
@@ -2759,8 +2771,7 @@ print('no_rule_', no_sort_rule)
 			makeFulltextIndexes(self)
 		end
 		if isUsingRuleIndex(self) then
-			updateIndexByRules(self, 'update', 'query')
-			updateIndexByRules(self, 'update', 'sortby')
+			updateIndexByRules(self, 'update')
 		end
 
 
@@ -3209,18 +3220,42 @@ print('no_rule_', no_sort_rule)
 	end;
 
 	-- do sort on query set by some field
-	sortBy = function (self, field, direction, sort_func, ...)
+	sortBy = function (self, ...)
 		I_AM_QUERY_SET(self)
+		local field, dir, sort_func, field2, dir2, sort_func2
+		-- regular the args, 6 cases
+		local first_arg = select(1, ...)
+		if type(first_arg) == 'function' then
+			sort_func = first_arg
+			local second_arg = select(2, ...)
+			if type(second_arg) == 'function' then
+				sort_func2 = first_arg
+			elseif type(second_arg) == 'string' then
+				field2 = second_arg
+				dir2 = select(3, ...)
+			end
+		elseif type(first_arg) == 'string' then
+			field = first_arg
+			dir = select(2, ...)
+			local third_arg = select(3, ...)
+			if type(third_arg) == 'function' then
+				sort_func2 = third_arg
+			elseif type(third_arg) == 'string' then
+				filed2 = third_arg
+				dir2 = select(4, ...)
+			end
+		end
+		
 
-		local direction = direction or 'asc'
+		local dir = dir or 'asc'
 		local byfield = field
 		local sort_func = sort_func or function (a, b)
 			local af = a[byfield]
 			local bf = b[byfield]
 			if af and bf then
-				if direction == 'asc' then
+				if dir == 'asc' then
 					return af < bf
-				elseif direction == 'desc' then
+				elseif dir == 'desc' then
 					return af > bf
 				end
 			else
@@ -3231,7 +3266,6 @@ print('no_rule_', no_sort_rule)
 		table.sort(self, sort_func)
 
 		-- secondary sort
-		local field2, dir2, sort_func2 = ...
 		if field2 then
 			checkType(field2, 'string')
 
@@ -3249,7 +3283,7 @@ print('no_rule_', no_sort_rule)
 			-- sort each part
 			local result = {}
 			byfield = field2
-			direction = dir2 or 'asc'
+			dir = dir2 or 'asc'
 			sort_func = sort_func2 or sort_func
 			for i, val in ipairs(work_t) do
 				table.sort(val, sort_func)
