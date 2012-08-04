@@ -597,14 +597,13 @@ local searchOnFulltextIndexes = function (self, tags, n)
 		db:sinterstore(_tmp_key, unpack(_args))
 	end
 
-	local limits
+	local ids
 	if n and type(n) == 'number' and n > 0 then
-		limits = {0, n}
+		ids = db:sort(_tmp_key, 'LIMIT', 0, n, 'desc')
 	else
-		limits = nil
+		ids = db:sort(_tmp_key, 'desc')
 	end
-	-- sort and retrieve
-	local ids =  db:sort(_tmp_key, {limit=limits, sort="desc"})
+
 	-- return objects
 	return getFromRedisPipeline(self, ids)
 end
