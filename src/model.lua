@@ -939,9 +939,8 @@ end
 -- query_str_iden is at least ''
 local compressSortByArgs = function (query_str_iden, sortby_args)
 	local strs = {}
-	print('#sortby_args', #sortby_args)
 	for i = 1, #sortby_args do
-        local v = sortby_args[i]
+       local v = sortby_args[i]
 		local ctype = type(v)
 		if ctype == 'string' then
             tinsert(strs, v)
@@ -953,30 +952,55 @@ local compressSortByArgs = function (query_str_iden, sortby_args)
 		end
 	end
 
-	local sortby_str_iden = table.concat(strs, ' ')
+	local sortby_str_iden = table.concat(strs, rule_index_divider)
 	return query_str_iden .. rule_index_query_sortby_divider .. sortby_str_iden
 end
 
+function luasplit(str, pat)
+   local t = {}
+   local fpat = "(.-)" .. pat
+   local last_end = 1
+   local s, e, cap = str:find(fpat, 1)
+   while s do
+      if s ~= 1 or cap ~= "" then
+      		table.insert(t,cap)
+      end
+      last_end = e+1
+      s, e, cap = str:find(fpat, last_end)
+   end
+   if last_end <= #str then
+      cap = str:sub(last_end)
+      table.insert(t, cap)
+   end
+   return t
+end
+
 local extractSortByArgs = function (sortby_str_iden)
-	local sortby_args = sortby_str_iden:split(' ')
+	assert(sortby_str_iden ~= '', "[Error] @extractSortByArgs - sortby_str_iden should not be emply!")
+	local sortby_args = luasplit(sortby_str_iden, rule_index_divider)
+	--local sortby_args = sortby_str_iden:split(rule_index_divider)
 	-- [1] is string or function, [2] is nil or string, 
 	local first_arg = sortby_args[1]
-	if type(first_arg) == 'function' then
-		return loadstring(first_arg)
-	elseif type(first_arg) == 'string' then
-		local key = first_arg
-		local dir = (sortby_args[2] == 'desc' and 'desc' or 'asc')
-		return function (a, b)
-			local af = a[key]
-			local bf = b[key]
-			if af and bf then
-				if dir == 'asc' then
-					return af < bf
-				elseif dir == 'desc' then
-					return af > bf
+	local first_arg_compile = loadstring(first_arg)
+	if type(first_arg_compile) == 'function' then
+		return first_arg_compile
+	elseif not first_arg_compile then
+		-- if type(first_arg_compile) ~= 'function', first_arg_compile is a nil
+		if #first_arg > 0 then
+			local key = first_arg
+			local dir = (sortby_args[2] == 'desc' and 'desc' or 'asc')
+			return function (a, b)
+				local af = a[key]
+				local bf = b[key]
+				if af and bf then
+					if dir == 'asc' then
+						return af < bf
+					elseif dir == 'desc' then
+						return af > bf
+					end
+				else
+					return nil
 				end
-			else
-				return nil
 			end
 		end
 	else
@@ -986,16 +1010,22 @@ end
 
 local canInstanceFitQueryRule
 local canInstanceFitQueryRuleAndFindProperPosition = function (self, combine_str_iden)
-	print('enter canInstanceFitQueryRuleAndFindProperPosition')
-	local p
-	local query_str_iden, sortby_str_iden = combine_str_iden:splitout(rule_index_query_sortby_divider)
-	print(query_str_iden, sortby_str_iden)
+	local p = 0
+	local divider_start, divider_stop = combine_str_iden:find(rule_index_query_sortby_divider)
+	if divider_start then
+		query_str_iden = combine_str_iden:sub(1, divider_start - 1)
+		sortby_str_iden = combine_str_iden:sub(divider_stop + 1, -1)
+	else
+		query_str_iden = combine_str_iden
+		sortby_str_iden = nil
+	end
+	--local query_str_iden, sortby_str_iden = combine_str_iden:splitout(rule_index_query_sortby_divider)
 	local flag = true
 
 	if query_str_iden ~= '' then
 		flag = canInstanceFitQueryRule (self, query_str_iden)
 		-- if no sortby part, return directly
-		if not sortby_str_iden then
+		if isFalse(sortby_str_iden) then
 			return flag, self.id, -1
 		end
 	end
@@ -1009,7 +1039,6 @@ local canInstanceFitQueryRuleAndFindProperPosition = function (self, combine_str
 		local length = #id_list
 		local model = self:getClass()
 		local func = extractSortByArgs(sortby_str_iden)
-		print(func)
 
 		local l, r = 1, #id_list
 		local left_obj
@@ -1028,17 +1057,18 @@ local canInstanceFitQueryRuleAndFindProperPosition = function (self, combine_str
 
 			left_flag = func(left_obj, self)
 			right_flag = func(self, right_obj)
-
 			if bflag == left_flag and bflag == right_flag then
 			-- between
 				p = math.floor((l + r)/2)
 			elseif bflag == left_flag then
+			-- and unequal to right_flag
 			-- on the right hand
 				p = r
 				break
 			elseif bflag == right_flag then
+			-- and unequal to left_flag
 			-- on the left hand
-				p = l
+				p = l - 1
 				break
 			end
 
@@ -1049,33 +1079,19 @@ local canInstanceFitQueryRuleAndFindProperPosition = function (self, combine_str
 
 			pflag = func(mobj, self)
 			if pflag == bflag then
-				l = p
+				l = p + 1
 			else
-				r = p
+				r = p - 1
 			end
 
 			left_obj = model:getById(id_list[l])
 			right_obj = model:getById(id_list[r])
-			print('in sort auto, l, r, p', l, r, p)
 			if left_obj == nil or right_obj == nil then
 				return nil, id_list[#id_list], #id_list
 			end
-			
-			if r - l <= 1 then r = l end
 		end
-
-		-- now p is the insert position
---		local mobj = model:getById(id_list[p])
---		if mobj then
---			pflag = func(mobj, self)
---			if pflag ~= bflag then
---				p = p - 1
---			end
---		end
 	end
 
-
-	print(id_list[p], p)
 	return flag, id_list[p], p
 end
 
@@ -1262,20 +1278,14 @@ local addInstanceToIndexOnRule = function (self, qstr)
 	local flag, cmpid, p = canInstanceFitQueryRuleAndFindProperPosition(self, qstr)
 	local success = 1
 	if flag then
-		local options = { watch = item_key, cas = true, retry = 2 }
+		local options = { watch = item_key, retry = 2 }
 		db:transaction(options, function(db)
 			-- if previously added, remove it first, if no, just no effects
 			-- but this may change the default object index orders
-			--db:lrem(item_key, 0, self.id)
-			--db:rpush(item_key, self.id)
-			if cmpid == nil then
-				if p < 1 then
-					db:lpush(item_key, self.id)
-				else
-					db:rpush(item_key, self.id)
-				end
+			if cmpid == nil and p < 1 then
+				db:lpush(item_key, self.id)
 			else
-			-- insert a new id after the old same id
+				-- insert a new id after the old same id
 				success = db:linsert(item_key, 'AFTER', cmpid, self.id)
 			end
 			--print('success----', success)
@@ -1310,13 +1320,9 @@ local updateInstanceToIndexOnRule = function (self, qstr)
 	db:transaction(function(db)
 		if flag then
 			-- consider the two end cases
-			if cmpid == nil then
+			if cmpid == nil and p < 1 then
 				db:lrem(item_key, 1, self.id)
-				if p < 1 then
-					db:lpush(item_key, self.id)
-				else
-					db:rpush(item_key, self.id)
-				end
+				db:lpush(item_key, self.id)
 			else
 				-- self's compared value has been changed
 				if cmpid ~= self.id then
@@ -1334,11 +1340,6 @@ local updateInstanceToIndexOnRule = function (self, qstr)
 			db:lrem(item_key, 1, self.id)
 		end
 
-		-- this may change the default object index orders
---		db:lrem(item_key, 0, self.id)
---		if flag then
---			db:rpush(item_key, self.id)
---		end
 		db:expire(item_key, bamboo.config.rule_expiration or bamboo.RULE_LIFE)
 	end)
 	return flag
