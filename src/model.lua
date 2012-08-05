@@ -1193,15 +1193,12 @@ local extractQueryArgs = function (qstr)
 
 		local endpoint = -1
 		qstr = qstr:sub(1, endpoint - 1)
-		print('qstr---', qstr)
 		local _qqstr = qstr:split('|')
 		local logic = _qqstr[1]:sub(1, -6)
 		query_args = {logic}
-		ptable(_qqstr)
 		for i=2, #_qqstr do
 			local str = _qqstr[i]
 			local kt = str:splittrim(rule_index_divider):slice(2, -2)
-			ptable(kt)
 			-- kt[1] is 'key', [2] is 'closure', [3] .. are closure's parameters
 			local key = kt[1]
 			local closure = kt[2]
@@ -1288,7 +1285,6 @@ local addInstanceToIndexOnRule = function (self, qstr)
 				-- insert a new id after the old same id
 				success = db:linsert(item_key, 'AFTER', cmpid, self.id)
 			end
-			--print('success----', success)
 			-- success == -1, means no cmpid found, means self.id is a new item
 			if success == -1 then
 				db:rpush(item_key, self.id)
@@ -1419,7 +1415,6 @@ local getIndexFromManager = function (self, str_iden, getnum)
 	local manager_key = rule_manager_prefix .. self.__name
 	-- get this rule's socre
 	local score = db:zscore(manager_key, str_iden)
-  print('score', score)
 	-- if has no score, means it is not rule indexed,
 	-- return nil directly
 	if not score then
@@ -1905,7 +1900,6 @@ Model = Object:extend {
 				if not no_sort_rule then
 					 query_str_iden = compressSortByArgs(query_str_iden, {sort_field or sort_func, sort_dir})
 				end
-				print('query_str_iden', query_str_iden)
 				if #query_str_iden > 0 then
 					-- check index
 					-- XXX: Only support class now, don't support query set, maybe query set doesn't need this feature
@@ -1924,7 +1918,6 @@ Model = Object:extend {
 
 							-- if have this list, return objects directly
 							if #id_list > 0 then
-								print('in short....')
 								return getFromRedisPipeline(self, id_list)
 							end
 						end
