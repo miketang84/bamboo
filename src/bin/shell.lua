@@ -7,6 +7,7 @@ local util = require 'bamboo.util'
 -- load configuration
 local config = util.readSettings(bamboo.config)
 ptable(config)
+config.is_shell = true
 
 local DB_HOST = config.DB_HOST or arg[1] or '127.0.0.1'
 local DB_PORT = config.DB_PORT or arg[2] or '6379'
@@ -22,3 +23,4 @@ setfenv(assert(loadfile('app/handler_entry.lua') or loadfile('../app/handler_ent
 
 print('Entering bamboo shell.... OK')
 return true
+
