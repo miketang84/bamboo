@@ -21,7 +21,8 @@ local rdhash = require 'bamboo.redis.hash'
 local getModelByName  = bamboo.getModelByName
 local dcollector= 'DELETED:COLLECTOR'
 local rule_manager_prefix = '_RULE_INDEX_MANAGER:'
-local rule_result_pattern = '_RULE:%s:%s'   -- _RULE:Model:num
+local rule_query_result_pattern = '_RULE:%s:%s'   -- _RULE:Model:num
+local rule_index_query_sortby_divider = ' |^|^| '
 local rule_index_divider = ' ^_^ '
 local QuerySet
 local Model
@@ -201,6 +202,10 @@ local isUsingRuleIndex = function ()
 		return false
 	end
 	return true
+end
+
+local specifiedRulePrefix = function ()
+	return rule_manager_prefix, rule_query_result_pattern
 end
 
 -- in model global index cache (backend is zset),
@@ -741,12 +746,12 @@ _G['uneq'] = function ( cmp_obj )
 end
 
 _G['lt'] = function (limitation)
-	limitation = tonumber(limitation) or limitation
+--	limitation = tonumber(limitation) or limitation
 	local t = function (v)
         if v == uglystr then return nil, 'lt', limitation; end
 
-		local nv = tonumber(v) or v
-		if nv and nv < limitation then
+--		local nv = tonumber(v) or v
+		if v and v < limitation then
 			return true
 		else
 			return false
@@ -757,12 +762,12 @@ _G['lt'] = function (limitation)
 end
 
 _G['gt'] = function (limitation)
-	limitation = tonumber(limitation) or limitation
+--	limitation = tonumber(limitation) or limitation
 	local t = function (v)
         if v == uglystr then return nil, 'gt', limitation; end
 
-		local nv = tonumber(v) or v
-		if nv and nv > limitation then
+--		local nv = tonumber(v) or v
+		if v and v > limitation then
 			return true
 		else
 			return false
@@ -774,12 +779,12 @@ end
 
 
 _G['le'] = function (limitation)
-	limitation = tonumber(limitation) or limitation
+--	limitation = tonumber(limitation) or limitation
 	local t = function (v)
         if v == uglystr then return nil, 'le', limitation; end
 
-		local nv = tonumber(v) or v
-		if nv and nv <= limitation then
+--		local nv = tonumber(v) or v
+		if v and v <= limitation then
 			return true
 		else
 			return false
@@ -790,12 +795,12 @@ _G['le'] = function (limitation)
 end
 
 _G['ge'] = function (limitation)
-	limitation = tonumber(limitation) or limitation
+--	limitation = tonumber(limitation) or limitation
 	local t = function (v)
         if v == uglystr then return nil, 'ge', limitation; end
 
-		local nv = tonumber(v) or v
-		if nv and nv >= limitation then
+--		local nv = tonumber(v) or v
+		if v and v >= limitation then
 			return true
 		else
 			return false
@@ -806,13 +811,13 @@ _G['ge'] = function (limitation)
 end
 
 _G['bt'] = function (small, big)
-	small = tonumber(small) or small
-	big = tonumber(big) or big
+--	small = tonumber(small) or small
+--	big = tonumber(big) or big
 	local t = function (v)
         if v == uglystr then return nil, 'bt', {small, big}; end
 
-		local nv = tonumber(v) or v
-		if nv and nv > small and nv < big then
+--		local nv = tonumber(v) or v
+		if v and v > small and v < big then
 			return true
 		else
 			return false
@@ -823,13 +828,13 @@ _G['bt'] = function (small, big)
 end
 
 _G['be'] = function (small, big)
-	small = tonumber(small) or small
-	big = tonumber(big) or big
+--	small = tonumber(small) or small
+--	big = tonumber(big) or big
 	local t = function (v)
         if v == uglystr then return nil, 'be', {small,big}; end
 
-		local nv = tonumber(v) or v
-		if nv and nv >= small and nv <= big then
+--		local nv = tonumber(v) or v
+		if v and v >= small and v <= big then
 			return true
 		else
 			return false
@@ -840,13 +845,13 @@ _G['be'] = function (small, big)
 end
 
 _G['outside'] = function (small, big)
-	small = tonumber(small) or small
-	big = tonumber(big) or big
+--	small = tonumber(small) or small
+--	big = tonumber(big) or big
 	local t = function (v)
         if v == uglystr then return nil, 'outside',{small,big}; end
 
-		local nv = tonumber(v) or v
-		if nv and nv < small and nv > big then
+--		local nv = tonumber(v) or v
+		if v and v < small and v > big then
 			return true
 		else
 			return false
@@ -1010,11 +1015,176 @@ local collectRuleFunctionUpvalues = function (query_args)
 	return true
 end
 
+-----------------------------------------------------------------------
+-- query_str_iden is at least ''
+local compressSortByArgs = function (query_str_iden, sortby_args)
+	local strs = {}
+	for i = 1, #sortby_args do
+       local v = sortby_args[i]
+		local ctype = type(v)
+		if ctype == 'string' then
+            tinsert(strs, v)
+        -- may don't appear
+        elseif ctype == 'nil' then
+            tinsert(strs, 'nil')
+        elseif ctype == 'function' then
+			tinsert(strs, string.dump(v))
+		end
+	end
 
+	local sortby_str_iden = table.concat(strs, rule_index_divider)
+	return query_str_iden .. rule_index_query_sortby_divider .. sortby_str_iden
+end
+
+function luasplit(str, pat)
+   local t = {}
+   local fpat = "(.-)" .. pat
+   local last_end = 1
+   local s, e, cap = str:find(fpat, 1)
+   while s do
+      if s ~= 1 or cap ~= "" then
+      		table.insert(t,cap)
+      end
+      last_end = e+1
+      s, e, cap = str:find(fpat, last_end)
+   end
+   if last_end <= #str then
+      cap = str:sub(last_end)
+      table.insert(t, cap)
+   end
+   return t
+end
+
+local extractSortByArgs = function (sortby_str_iden)
+	assert(sortby_str_iden ~= '', "[Error] @extractSortByArgs - sortby_str_iden should not be emply!")
+	local sortby_args = luasplit(sortby_str_iden, rule_index_divider)
+	--local sortby_args = sortby_str_iden:split(rule_index_divider)
+	-- [1] is string or function, [2] is nil or string, 
+	local first_arg = sortby_args[1]
+	local first_arg_compile = loadstring(first_arg)
+	if type(first_arg_compile) == 'function' then
+		return first_arg_compile
+	elseif not first_arg_compile then
+		-- if type(first_arg_compile) ~= 'function', first_arg_compile is a nil
+		if #first_arg > 0 then
+			local key = first_arg
+			local dir = (sortby_args[2] == 'desc' and 'desc' or 'asc')
+			return function (a, b)
+				local af = a[key]
+				local bf = b[key]
+				if af and bf then
+					if dir == 'asc' then
+						return af < bf
+					elseif dir == 'desc' then
+						return af > bf
+					end
+				else
+					return nil
+				end
+			end
+		end
+	else
+		return nil
+	end
+end
+
+local canInstanceFitQueryRule
+local canInstanceFitQueryRuleAndFindProperPosition = function (self, combine_str_iden)
+	local p = 0
+	local divider_start, divider_stop = combine_str_iden:find(rule_index_query_sortby_divider)
+	if divider_start then
+		query_str_iden = combine_str_iden:sub(1, divider_start - 1)
+		sortby_str_iden = combine_str_iden:sub(divider_stop + 1, -1)
+	else
+		query_str_iden = combine_str_iden
+		sortby_str_iden = nil
+	end
+	--local query_str_iden, sortby_str_iden = combine_str_iden:splitout(rule_index_query_sortby_divider)
+	local flag = true
+
+	if query_str_iden ~= '' then
+		flag = canInstanceFitQueryRule (self, query_str_iden)
+		-- if no sortby part, return directly
+		if isFalse(sortby_str_iden) then
+			return flag, self.id, -1
+		end
+	end
+
+	local id_list = {}
+	if flag then
+		local manager_key = rule_manager_prefix .. self.__name
+		local score = db:zscore(manager_key, combine_str_iden)
+		local item_key = rule_query_result_pattern:format(self.__name, math.floor(score))
+		id_list = db:lrange(item_key, 0, -1)
+		local length = #id_list
+		local model = self:getClass()
+		local func = extractSortByArgs(sortby_str_iden)
+
+		local l, r = 1, #id_list
+		local left_obj
+		local right_obj
+		local bflag, left_flag, right_flag, pflag
+
+		left_obj = model:getById(id_list[l])
+		right_obj = model:getById(id_list[r])
+		if left_obj == nil or right_obj == nil then
+			return nil, id_list[#id_list], #id_list
+		end
+		bflag = func(left_obj, right_obj)
+
+		p = l
+		while (r ~= l) do
+
+			left_flag = func(left_obj, self)
+			right_flag = func(self, right_obj)
+			if bflag == left_flag and bflag == right_flag then
+			-- between
+				p = math.floor((l + r)/2)
+			elseif bflag == left_flag then
+			-- and unequal to right_flag
+			-- on the right hand
+				p = r
+				break
+			elseif bflag == right_flag then
+			-- and unequal to left_flag
+			-- on the left hand
+				p = l - 1
+				break
+			end
+
+			local mobj = model:getById(id_list[p])
+			if mobj == nil then
+				return nil, id_list[#id_list], #id_list
+			end
+
+			pflag = func(mobj, self)
+			if pflag == bflag then
+				l = p + 1
+			else
+				r = p - 1
+			end
+
+			left_obj = model:getById(id_list[l])
+			right_obj = model:getById(id_list[r])
+			if left_obj == nil or right_obj == nil then
+				return nil, id_list[#id_list], #id_list
+			end
+		end
+	end
+
+	return flag, id_list[p], p
+end
+
+
+
+
+
+-------------------------------------------------------------------------
 local compressQueryArgs = function (query_args)
 	local out = {}
 	local qtype = type(query_args)
 	if qtype == 'table' then
+		if table.isEmpty(query_args) then return '' end
 
 		if query_args[1] == 'or' then tinsert(out, 'or')
 		else tinsert(out, 'and')
@@ -1035,7 +1205,8 @@ local compressQueryArgs = function (query_args)
 				tinsert(out, v)
 			else
 				local queryt_iden = closure_collector[v]
-				for _, item in ipairs(queryt_iden) do
+				-- XXX: here, queryt_iden[2] may be nil, this will be stored now
+                for _, item in ipairs(queryt_iden) do
 					tinsert(out, item)
 				end
 			end
@@ -1066,7 +1237,7 @@ local compressQueryArgs = function (query_args)
 	return table.concat(out, rule_index_divider)
 end
 
-local extraQueryArgs = function (qstr)
+local extractQueryArgs = function (qstr)
 	local query_args
 
 	--DEBUG(string.len(qstr))
@@ -1205,23 +1376,37 @@ end
 --]]
 
 local updateInstanceToIndexOnRule = function (self, qstr)
+	local rule_manager_prefix, rule_result_pattern = specifiedRulePrefix()
+
 	local manager_key = rule_manager_prefix .. self.__name
 	local score = db:zscore(manager_key, qstr)
 	local item_key = rule_result_pattern:format(self.__name, math.floor(score))
 
-	local flag = canInstanceFitQueryRule(self, qstr)
+	local flag, cmpid, p = canInstanceFitQueryRuleAndFindProperPosition(self, qstr)
 	local success
-	local options = { watch = item_key, cas = true, retry = 2 }
+	local options = { watch = item_key, retry = 2 }
 	db:transaction(function(db)
 		if flag then
-			success = db:linsert(item_key, 'AFTER', self.id, self.id)
+			-- consider the left end case
+			if cmpid == nil and p < 1 then
+				db:lrem(item_key, 1, self.id)
+				db:lpush(item_key, self.id)
+			else			
+				if cmpid ~= self.id then
+					-- delete old self first, insert self to proper position
+					db:lrem(item_key, 1, self.id)
+					success = db:linsert(item_key, 'AFTER', cmpid, self.id)
+				else
+					-- cmpid == self.id, means use query rule only, keep the old position
+					success = db:linsert(item_key, 'AFTER', cmpid, self.id)
+					db:lrem(item_key, 1, self.id)
+				end
+			end
 
 			db:multi()
 			-- no this id in index before
 			if success == -1 then
 				db:rpush(item_key, self.id)
-			else
-				db:lrem(item_key, 1, self.id)
 			end
 			-- update the float score to integer
 			db:zadd(manager_key, math.floor(score), qstr)
@@ -1243,11 +1428,13 @@ local updateInstanceToIndexOnRule = function (self, qstr)
 end
 
 local delInstanceToIndexOnRule = function (self, qstr)
+	local rule_manager_prefix, rule_result_pattern = specifiedRulePrefix()
+
 	local manager_key = rule_manager_prefix .. self.__name
 	local score = db:zscore(manager_key, qstr)
 	local item_key = rule_result_pattern:format(self.__name, math.floor(score))
 
-	local options = { watch = item_key, cas = true, retry = 2 }
+	local options = { watch = item_key, retry = 2 }
 	db:transaction(function(db)
 		if db:exists(item_key) then
 			db:lrem(item_key, 0, self.id)
@@ -1269,6 +1456,7 @@ local INDEX_ACTIONS = {
 }
 
 updateIndexByRules = function (self, action)
+	local rule_manager_prefix, rule_result_pattern = specifiedRulePrefix()
 	local manager_key = rule_manager_prefix .. self.__name
 	local qstr_list = db:zrange(manager_key, 0, -1)
 	local action_func = INDEX_ACTIONS[action]
@@ -1278,10 +1466,11 @@ updateIndexByRules = function (self, action)
 end
 
 -- can be reentry
-local addIndexToManager = function (self, query_str_iden, obj_list)
+local addIndexToManager = function (self, str_iden, obj_list)
+	local rule_manager_prefix, rule_result_pattern = specifiedRulePrefix()
 	local manager_key = rule_manager_prefix .. self.__name
 	-- add to index manager
-	local score = db:zscore(manager_key, query_str_iden)
+	local score = db:zscore(manager_key, str_iden)
 	-- if score then return end
 	local new_score
 	if not score then
@@ -1289,7 +1478,7 @@ local addIndexToManager = function (self, query_str_iden, obj_list)
 		new_score = db:zcard(manager_key) + 1
 		-- use float score represent empty rule result index
 		if #obj_list == 0 then new_score = new_score + 0.1 end
-		db:zadd(manager_key, new_score, query_str_iden)
+		db:zadd(manager_key, new_score, str_iden)
 	else
 		-- when rule result is expired, re enter this function
 		new_score = score
@@ -1308,10 +1497,12 @@ local addIndexToManager = function (self, query_str_iden, obj_list)
 	end, options)
 end
 
-local getIndexFromManager = function (self, query_str_iden, getnum)
+local getIndexFromManager = function (self, str_iden, getnum)
+	local rule_manager_prefix, rule_result_pattern = specifiedRulePrefix()
+
 	local manager_key = rule_manager_prefix .. self.__name
 	-- get this rule's socre
-	local score = db:zscore(manager_key, query_str_iden)
+	local score = db:zscore(manager_key, str_iden)
 	-- if has no score, means it is not rule indexed,
 	-- return nil directly
 	if not score then
@@ -1550,6 +1741,13 @@ Model = Object:extend {
 		return getFromRedis(self, key)
 	end;
 
+	getByIds = function (self, ids)
+		I_AM_CLASS(self)
+		assert(type(ids) == 'table')
+
+		return getFromRedisPipeline(self, ids)
+	end;
+
 	-- return instance object by name
 	--
 	getByIndex = function (self, name)
@@ -1622,14 +1820,14 @@ Model = Object:extend {
 
 	-- return the first instance found by query set
 	--
-	get = function (self, query_args, find_rev)
+	get = function (self, query_args, find_rev, nocache)
 		-- XXX: may cause effective problem
 		-- every time 'get' will cause the all objects' retrieving
-		local objs = self:filter(query_args, nil, nil, find_rev, 'get')
+		local objs = self:filter(query_args, nil, nil, find_rev, nocache, 'get')
 		if objs then
 			return objs[1]
 		else
-			return obj
+			return nil
 		end
 	end;
 
@@ -1640,10 +1838,40 @@ Model = Object:extend {
 	-- @param is_rev: specify the direction of the search result, 'rev'
 	-- @return: query_set, an object list (query set)
 	-- @note: this function can be called by class object and query set
-	filter = function (self, query_args, start, stop, is_rev, is_get)
+	filter = function (self, query_args, ...)
 		I_AM_CLASS_OR_QUERY_SET(self)
 		assert(type(query_args) == 'table' or type(query_args) == 'function', '[Error] the query_args passed to filter must be table or function.')
-		if start then assert(type(start) == 'number', '[Error] @filter - start must be number.') end
+       local no_sort_rule
+       -- regular the args
+       local sort_field, sort_dir, sort_func, start, stop, is_rev, nocache, is_get
+       local first_arg = select(1, ...)
+       if type(first_arg) == 'function' then
+			sort_func = first_arg
+			start = select(2, ...)
+			stop = select(3, ...)
+			is_rev = select(4, ...)
+			nocache = select(5, ...)
+			is_get = select(6, ...)
+			no_sort_rule = false
+		elseif type(first_arg) == 'string' then
+			sort_field = first_arg
+			sort_dir = select(2, ...)
+			start = select(3, ...)
+			stop = select(4, ...)
+			is_rev = select(5, ...)
+			nocache = select(6, ...)
+			is_get = select(7, ...)
+			no_sort_rule = false
+       elseif type(first_arg) == 'number' then
+			start = first_arg
+			stop = select(2, ...)
+			is_rev = select(3, ...)
+			nocache = select(4, ...)
+			is_get = select(5, ...)
+			no_sort_rule = true
+       end
+        
+       if start then assert(type(start) == 'number', '[Error] @filter - start must be number.') end
 		if stop then assert(type(stop) == 'number', '[Error] @filter - stop must be number.') end
 		if is_rev then assert(type(is_rev) == 'string', '[Error] @filter - is_rev must be string.') end
 
@@ -1653,8 +1881,8 @@ Model = Object:extend {
 		local logic = 'and'
 
 		local query_str_iden, is_capable_press_rule = '', true
-		local is_using_rule_index = isUsingRuleIndex()
-		if is_using_rule_index then
+		local do_rule_index_cache = (not is_query_set) and isUsingRuleIndex() and (nocache ~= 'nocache')
+		if do_rule_index_cache then
 			if type(query_args) == 'function' then
 				is_capable_press_rule = collectRuleFunctionUpvalues(query_args)
 			end
@@ -1662,25 +1890,29 @@ Model = Object:extend {
 			if is_capable_press_rule then
 				-- make query identification string
 				query_str_iden = compressQueryArgs(query_args)
-
-				-- check index
-				-- XXX: Only support class now, don't support query set, maybe query set doesn't need this feature
-				local id_list = getIndexFromManager(self, query_str_iden)
-				if type(id_list) == 'table' then
-					if #id_list == 0 then
-						return QuerySet()
-					else
-						-- #id_list > 0
-						if is_get == 'get' then
-							id_list = (is_rev == 'rev') and List{id_list[#id_list]} or List{id_list[1]}
+				if not no_sort_rule then
+					 query_str_iden = compressSortByArgs(query_str_iden, {sort_field or sort_func, sort_dir})
+				end
+				if #query_str_iden > 0 then
+					-- check index
+					-- XXX: Only support class now, don't support query set, maybe query set doesn't need this feature
+					local id_list = getIndexFromManager(self, query_str_iden)
+					if type(id_list) == 'table' then
+						if #id_list == 0 then
+							return QuerySet()
 						else
-							-- now id_list is a list containing all id of instances fit to this query_args rule, so need to slice
-							id_list = id_list:slice(start, stop, is_rev)
-						end
+							-- #id_list > 0
+							if is_get == 'get' then
+								id_list = (is_rev == 'rev') and List{id_list[#id_list]} or List{id_list[1]}
+							elseif start or stop then
+								-- now id_list is a list containing all id of instances fit to this query_args rule, so need to slice
+								id_list = id_list:slice(start, stop, is_rev)
+							end
 
-						-- if have this list, return objects directly
-						if #id_list > 0 then
-							return getFromRedisPipeline(self, id_list)
+							-- if have this list, return objects directly
+							if #id_list > 0 then
+								return getFromRedisPipeline(self, id_list)
+							end
 						end
 					end
 				end
@@ -1688,34 +1920,6 @@ Model = Object:extend {
 			end
 		end
 
-		if is_args_table then
-
-			if query_args and query_args['id'] then
-				-- remove 'id' query argument
-				print("[Warning] get and filter don't support search by id, please use getById.")
-				-- print(debug.traceback())
-				-- query_args['id'] = nil
-				return nil
-			end
-
-			-- if query table is empty, return slice instances
-			if isFalse(query_args) then
-				local start = start or 1
-				local stop = stop or -1
-				local nums = self:numbers()
-				return self:slice(start, stop, is_rev)
-			end
-
-			-- normalize the 'and' and 'or' logic
-			if query_args[1] then
-				assert(query_args[1] == 'or' or query_args[1] == 'and',
-					"[Error] The logic should be 'and' or 'or', rather than: " .. tostring(query_args[1]))
-				if query_args[1] == 'or' then
-					logic = 'or'
-				end
-				query_args[1] = nil
-			end
-		end
 
 		local all_ids = {}
 		if is_query_set then
@@ -1723,7 +1927,35 @@ Model = Object:extend {
 			all_ids = self
 			-- nothing in id list, return empty table
 			if #all_ids == 0 then return QuerySet() end
+		end
 
+		-- create a query set
+		local query_set = QuerySet()
+
+		if is_args_table then
+			if query_args and query_args['id'] then
+				-- remove 'id' query argument
+				print("[Warning] get and filter don't support search by id, please use getById.")
+				return nil
+			end
+
+			-- if query table is empty, return slice instances
+			if isFalse(query_args) then
+				-- need to participate sort, if has
+				if no_sort_rule then
+					return self:slice(start, stop, is_rev)
+				else
+					query_set = self:all()
+				end
+			elseif query_args[1] then
+			-- normalize the 'and' and 'or' logic
+				assert(query_args[1] == 'or' or query_args[1] == 'and',
+					"[Error] The logic should be 'and' or 'or', rather than: " .. tostring(query_args[1]))
+				if query_args[1] == 'or' then
+					logic = 'or'
+				end
+				query_args[1] = nil
+			end
 		end
 
 		-- create a query set
@@ -1780,7 +2012,7 @@ Model = Object:extend {
     			all_ids = self:allIds()
             end
 
-            if raw_filter_flag then
+            if raw_filter_flag and #query_set == 0 then
 	    		local qfs = {}
 	    		if is_args_table then
 		    		for k, _ in pairs(query_args) do
@@ -1815,10 +2047,7 @@ Model = Object:extend {
 				end
             else
 		        -- here, all_ids is the all instance id to query_args now
-                --query_set = QuerySet(all_ids);
-                for i,v in ipairs(all_ids) do
-                    tinsert(query_set,self:getById(tonumber(v)));
-                end
+                query_set = getFromRedisPipeline(self, all_ids)
             end
 		end
 
@@ -1826,15 +2055,21 @@ Model = Object:extend {
 		local _t_query_set = query_set
 
 		if #query_set == 0 then
-			if not is_query_set and is_using_rule_index and is_capable_press_rule then
+			if do_rule_index_cache and is_capable_press_rule and #query_str_iden > 0 then
 				addIndexToManager(self, query_str_iden, {})
 			end
 		else
 			if is_get == 'get' then
 				query_set = (is_rev == 'rev') and List {_t_query_set[#_t_query_set]} or List {_t_query_set[1]}
 			else
-				-- now id_list is a list containing all id of instances fit to this query_args rule, so need to slice
-				query_set = _t_query_set:slice(start, stop, is_rev)
+				if not no_sort_rule then
+					query_set = query_set:sortBy(sort_field or sort_func, sort_dir)
+					_t_query_set = query_set
+				end
+				if start or stop then
+					-- now id_list is a list containing all id of instances fit to this query_args rule, so need to slice
+					query_set = _t_query_set:slice(start, stop, is_rev)
+				end
 			end
 
 			-- if self is query set, its' element is always integrated
@@ -1846,7 +2081,7 @@ Model = Object:extend {
 					tinsert(id_list, v.id)
 				end
 				-- add to index, here, we index all instances fit to query_args, rather than results applied extra limitation conditions
-				if is_using_rule_index and is_capable_press_rule then
+				if do_rule_index_cache and is_capable_press_rule and #query_str_iden > 0 then
 					addIndexToManager(self, query_str_iden, id_list)
 				end
 
@@ -1984,17 +2219,20 @@ Model = Object:extend {
 				return {}
 			end
 		end
+
 		-- get the store type in redis
 		local store_type = db:type(custom_key)
 		if atype then assert(store_type == atype, '[Error] @getCustom - The specified type is not equal the type stored in db.') end
 		local store_module = getStoreModule(store_type)
 		local ids, scores = store_module.retrieve(custom_key)
+
 		if type(ids) == 'table' and (start or stop) then
 			ids = ids:slice(start, stop, is_rev)
 			if type(scores) == 'table' then
 				scores = scores:slice(start, stop, is_rev)
 			end
 		end
+
 		return ids, scores
 	end;
 
@@ -2685,7 +2923,7 @@ Model = Object:extend {
 
 				local obj = link_model:getById (linked_id)
 				if not isValidInstance(obj) then
-					print('[Warning] invalid ONE foreign id or object.')
+					print('[Warning] invalid ONE foreign id or object for field: '..field)
 
 					if bamboo.config.auto_clear_index_when_get_failed then
 						-- clear invalid foreign value
@@ -2993,31 +3231,52 @@ Model = Object:extend {
 	end;
 
 	-- do sort on query set by some field
-	sortBy = function (self, field, direction, sort_func, ...)
+	sortBy = function (self, ...)
 		I_AM_QUERY_SET(self)
-		-- checkType(field, 'string')
+		local field, dir, sort_func, field2, dir2, sort_func2
+		-- regular the args, 6 cases
+		local first_arg = select(1, ...)
+		if type(first_arg) == 'function' then
+			sort_func = first_arg
+			local second_arg = select(2, ...)
+			if type(second_arg) == 'function' then
+				sort_func2 = first_arg
+			elseif type(second_arg) == 'string' then
+				field2 = second_arg
+				dir2 = select(3, ...)
+			end
+		elseif type(first_arg) == 'string' then
+			field = first_arg
+			dir = select(2, ...)
+			local third_arg = select(3, ...)
+			if type(third_arg) == 'function' then
+				sort_func2 = third_arg
+			elseif type(third_arg) == 'string' then
+				filed2 = third_arg
+				dir2 = select(4, ...)
+			end
+		end
+		
 
-		local direction = direction or 'asc'
-
+		local dir = dir or 'asc'
 		local byfield = field
 		local sort_func = sort_func or function (a, b)
 			local af = a[byfield]
 			local bf = b[byfield]
 			if af and bf then
-				if direction == 'asc' then
+				if dir == 'asc' then
 					return af < bf
-				elseif direction == 'desc' then
+				elseif dir == 'desc' then
 					return af > bf
-				else
-					return nil
 				end
+			else
+				return nil
 			end
 		end
 
 		table.sort(self, sort_func)
 
 		-- secondary sort
-		local field2, dir2, sort_func2 = ...
 		if field2 then
 			checkType(field2, 'string')
 
@@ -3035,7 +3294,7 @@ Model = Object:extend {
 			-- sort each part
 			local result = {}
 			byfield = field2
-			direction = dir2 or 'asc'
+			dir = dir2 or 'asc'
 			sort_func = sort_func2 or sort_func
 			for i, val in ipairs(work_t) do
 				table.sort(val, sort_func)
