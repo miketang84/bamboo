@@ -1830,14 +1830,14 @@ Model = Object:extend {
 
 	-- return the first instance found by query set
 	--
-	get = function (self, query_args, find_rev)
+	get = function (self, query_args, find_rev, nocache)
 		-- XXX: may cause effective problem
 		-- every time 'get' will cause the all objects' retrieving
-		local objs = self:filter(query_args, nil, nil, find_rev, 'get')
+		local objs = self:filter(query_args, nil, nil, find_rev, nocache, 'get')
 		if objs then
 			return objs[1]
 		else
-			return obj
+			return nil
 		end
 	end;
 
@@ -1851,16 +1851,17 @@ Model = Object:extend {
 	filter = function (self, query_args, ...)
 		I_AM_CLASS_OR_QUERY_SET(self)
 		assert(type(query_args) == 'table' or type(query_args) == 'function', '[Error] the query_args passed to filter must be table or function.')
-        local no_sort_rule
-        -- regular the args
-        local sort_field, sort_dir, sort_func, start, stop, is_rev, is_get
-        local first_arg = select(1, ...)
-        if type(first_arg) == 'function' then
+       local no_sort_rule
+       -- regular the args
+       local sort_field, sort_dir, sort_func, start, stop, is_rev, nocache, is_get
+       local first_arg = select(1, ...)
+       if type(first_arg) == 'function' then
 			sort_func = first_arg
 			start = select(2, ...)
 			stop = select(3, ...)
 			is_rev = select(4, ...)
-			is_get = select(5, ...)
+			nocache = select(5, ...)
+			is_get = select(6, ...)
 			no_sort_rule = false
 		elseif type(first_arg) == 'string' then
 			sort_field = first_arg
@@ -1868,17 +1869,19 @@ Model = Object:extend {
 			start = select(3, ...)
 			stop = select(4, ...)
 			is_rev = select(5, ...)
-			is_get = select(6, ...)
+			nocache = select(6, ...)
+			is_get = select(7, ...)
 			no_sort_rule = false
-        elseif type(first_arg) == 'number' then
+       elseif type(first_arg) == 'number' then
 			start = first_arg
 			stop = select(2, ...)
 			is_rev = select(3, ...)
-			is_get = select(4, ...)
+			nocache = select(4, ...)
+			is_get = select(5, ...)
 			no_sort_rule = true
-        end
+       end
         
-        if start then assert(type(start) == 'number', '[Error] @filter - start must be number.') end
+       if start then assert(type(start) == 'number', '[Error] @filter - start must be number.') end
 		if stop then assert(type(stop) == 'number', '[Error] @filter - stop must be number.') end
 		if is_rev then assert(type(is_rev) == 'string', '[Error] @filter - is_rev must be string.') end
 
@@ -1888,8 +1891,8 @@ Model = Object:extend {
 		local logic = 'and'
 
 		local query_str_iden, is_capable_press_rule = '', true
-		local is_using_rule_index = isUsingRuleIndex()
-		if not is_query_set and is_using_rule_index then
+		local do_rule_index_cache = (not is_query_set) and isUsingRuleIndex() and (nocache ~= 'nocache')
+		if do_rule_index_cache then
 			if type(query_args) == 'function' then
 				is_capable_press_rule = collectRuleFunctionUpvalues(query_args)
 			end
@@ -2057,7 +2060,7 @@ Model = Object:extend {
 		local _t_query_set = query_set
 
 		if #query_set == 0 then
-			if not is_query_set and is_using_rule_index and is_capable_press_rule and #query_str_iden > 0 then
+			if do_rule_index_cache and is_capable_press_rule and #query_str_iden > 0 then
 				addIndexToManager(self, query_str_iden, {})
 			end
 		else
@@ -2083,7 +2086,7 @@ Model = Object:extend {
 					tinsert(id_list, v.id)
 				end
 				-- add to index, here, we index all instances fit to query_args, rather than results applied extra limitation conditions
-				if is_using_rule_index and is_capable_press_rule and #query_str_iden > 0 then
+				if do_rule_index_cache and is_capable_press_rule and #query_str_iden > 0 then
 					addIndexToManager(self, query_str_iden, id_list)
 				end
 
@@ -2106,7 +2109,7 @@ Model = Object:extend {
 	count = function (self, query_args)
 		I_AM_CLASS(self)
 		local query_str_iden = compressQueryArgs(query_args)
-		local ret = getIndexFromManager(self, query_str_iden, 'getnum', 'query')
+		local ret = getIndexFromManager(self, query_str_iden, 'getnum')
 		if not ret then
 			ret = #self:filter(query_args)
 		end
