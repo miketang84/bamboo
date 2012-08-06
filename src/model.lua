@@ -1335,8 +1335,8 @@ local checkLogicRelation = function (obj, query_args, logic_choice, model)
 	return flag
 end
 
-local canInstanceFitQueryRule = function (self, qstr)
-	local query_args = extraQueryArgs(qstr)
+canInstanceFitQueryRule = function (self, qstr)
+	local query_args = extractQueryArgs(qstr)
 	--DEBUG(query_args)
 	local logic_choice = true
 	if type(query_args) == 'table' then logic_choice = (query_args[1] == 'and'); query_args[1]=nil end
@@ -1424,6 +1424,7 @@ local INDEX_ACTIONS = {
 
 updateIndexByRules = function (self, action)
 	local rule_manager_prefix, rule_result_pattern = specifiedRulePrefix()
+
 	local manager_key = rule_manager_prefix .. self.__name
 	local qstr_list = db:zrange(manager_key, 0, -1)
 	local action_func = INDEX_ACTIONS[action]
@@ -1925,8 +1926,6 @@ Model = Object:extend {
 			end
 		end
 
-		-- create a query set
-		local query_set = QuerySet()
 		local logic_choice = (logic == 'and')
 		local partially_got = false
 

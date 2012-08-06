@@ -67,6 +67,21 @@ _G['View'] = require 'bamboo.view'
 _G['Form'] = require 'bamboo.form'
 _G['Model'] = require 'bamboo.model'
 _G['Session'] = require 'bamboo.session'
+
+
+config.config_file = config.config_file or "config.lua"
+if config.monserver_dir then
+	-- format full directory of config_file, to find mongrel2's configuration
+	config.config_file = config.monserver_dir + '/' + config.config_file
+end
+
+
+local m2 = require 'bamboo.m2'
+m2.loadConfig(config)
+-- make a connection as the pipe interact with mongrel2
+local conn = assert(m2.connect(config), "Failed to connect to monserver. ")
+bamboo.conn = conn
+
 local Web = require 'bamboo.web'
 
 ------------------------------------------------------------------------
@@ -379,7 +394,7 @@ local function run(conn, config)
     print('Bamboo main loop aborted!')
 end
 
-local m2 = require 'bamboo.m2'
+
 
 local function collectConfig(config)
 
@@ -426,10 +441,6 @@ end
 -- @return:			none
 ------------------------------------------------------------------------
 local function start(config)
-	-- load sqlite3 configuration, update to config table
-    m2.loadConfig(config)
-	-- make a connection as the pipe interact with mongrel2
-    local conn = assert(m2.connect(config), "Failed to connect to monserver. ")
 
     -- boot main loop
     run(conn, config)
