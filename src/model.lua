@@ -1343,38 +1343,6 @@ local canInstanceFitQueryRule = function (self, qstr)
 	return checkLogicRelation(self, query_args, logic_choice)
 end
 
---[[
--- here, qstr rule exist surely
-local addInstanceToIndexOnRule = function (self, qstr)
-	local manager_key = rule_manager_prefix .. self.__name
-	--DEBUG(self, qstr, manager_key)
-	local score = db:zscore(manager_key, qstr)
-	local item_key = rule_result_pattern:format(self.__name, math.floor(score))
-
-	local flag = canInstanceFitQueryRule(self, qstr)
-	--DEBUG(flag)
-	if flag then
-		local options = { watch = item_key, cas = true, retry = 2 }
-		db:transaction(options, function(db)
-			local success = db:linsert(item_key, 'AFTER', self.id, self.id)
-			-- print('success----', success)
-			-- success == -1, means no cmpid found, means self.id is a new item
-			if success == -1 then
-				db:rpush(item_key, self.id)
-			else
-				-- delete the old one id
-				db:lrem(item_key, 1, self.id)
-			end
-
-			-- update the float score to integer
-			db:zadd(manager_key, math.floor(score), qstr)
-			db:expire(item_key, bamboo.config.rule_expiration or bamboo.RULE_LIFE)
-		end)
-	end
-	return self
-end
---]]
-
 local updateInstanceToIndexOnRule = function (self, qstr)
 	local rule_manager_prefix, rule_result_pattern = specifiedRulePrefix()
 
@@ -1401,16 +1369,16 @@ local updateInstanceToIndexOnRule = function (self, qstr)
 					success = db:linsert(item_key, 'AFTER', cmpid, self.id)
 					db:lrem(item_key, 1, self.id)
 				end
-			end
 
-			db:multi()
-			-- no this id in index before
-			if success == -1 then
-				db:rpush(item_key, self.id)
+				db:multi()
+				-- no this id in index before
+				if success == -1 then
+					db:rpush(item_key, self.id)
+				end
+				-- update the float score to integer
+				db:zadd(manager_key, math.floor(score), qstr)
+				db:exec()
 			end
-			-- update the float score to integer
-			db:zadd(manager_key, math.floor(score), qstr)
-			db:exec()
 		else
 			if db:exists(item_key) then
 				-- delete the old one id
@@ -1450,7 +1418,6 @@ local delInstanceToIndexOnRule = function (self, qstr)
 end
 
 local INDEX_ACTIONS = {
---	['save'] = addInstanceToIndexOnRule,
 	['update'] = updateInstanceToIndexOnRule,
 	['del'] = delInstanceToIndexOnRule
 }
@@ -1820,10 +1787,10 @@ Model = Object:extend {
 
 	-- return the first instance found by query set
 	--
-	get = function (self, query_args, find_rev, nocache)
+	get = function (self, query_args, find_rev, no_cache)
 		-- XXX: may cause effective problem
 		-- every time 'get' will cause the all objects' retrieving
-		local objs = self:filter(query_args, nil, nil, find_rev, nocache, 'get')
+		local objs = self:filter(query_args, nil, nil, find_rev, no_cache, 'get')
 		if objs then
 			return objs[1]
 		else
@@ -1843,14 +1810,14 @@ Model = Object:extend {
 		assert(type(query_args) == 'table' or type(query_args) == 'function', '[Error] the query_args passed to filter must be table or function.')
        local no_sort_rule
        -- regular the args
-       local sort_field, sort_dir, sort_func, start, stop, is_rev, nocache, is_get
+       local sort_field, sort_dir, sort_func, start, stop, is_rev, no_cache, is_get
        local first_arg = select(1, ...)
        if type(first_arg) == 'function' then
 			sort_func = first_arg
 			start = select(2, ...)
 			stop = select(3, ...)
 			is_rev = select(4, ...)
-			nocache = select(5, ...)
+			no_cache = select(5, ...)
 			is_get = select(6, ...)
 			no_sort_rule = false
 		elseif type(first_arg) == 'string' then
@@ -1859,14 +1826,14 @@ Model = Object:extend {
 			start = select(3, ...)
 			stop = select(4, ...)
 			is_rev = select(5, ...)
-			nocache = select(6, ...)
+			no_cache = select(6, ...)
 			is_get = select(7, ...)
 			no_sort_rule = false
        elseif type(first_arg) == 'number' then
 			start = first_arg
 			stop = select(2, ...)
 			is_rev = select(3, ...)
-			nocache = select(4, ...)
+			no_cache = select(4, ...)
 			is_get = select(5, ...)
 			no_sort_rule = true
        end
@@ -1881,7 +1848,7 @@ Model = Object:extend {
 		local logic = 'and'
 
 		local query_str_iden, is_capable_press_rule = '', true
-		local do_rule_index_cache = (not is_query_set) and isUsingRuleIndex() and (nocache ~= 'nocache')
+		local do_rule_index_cache = (not is_query_set) and isUsingRuleIndex() and (no_cache ~= 'nocache')
 		if do_rule_index_cache then
 			if type(query_args) == 'function' then
 				is_capable_press_rule = collectRuleFunctionUpvalues(query_args)
