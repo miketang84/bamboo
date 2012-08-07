@@ -1201,7 +1201,7 @@ local compressQueryArgs = function (query_args)
 		for _, k in ipairs(queryfs) do
 			v = query_args[k]
 			tinsert(out, k)
-			if type(v) == 'string' then
+			if type(v) ~= 'function' then
 				tinsert(out, v)
 			else
 				local queryt_iden = closure_collector[v]
