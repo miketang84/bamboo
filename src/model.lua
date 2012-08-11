@@ -1202,7 +1202,7 @@ local compressQueryArgs = function (query_args)
 			v = query_args[k]
 			tinsert(out, k)
 			if type(v) ~= 'function' then
-				tinsert(out, v)
+				tinsert(out, tostring(v))
 			else
 				local queryt_iden = closure_collector[v]
 				-- XXX: here, queryt_iden[2] may be nil, this will be stored now
