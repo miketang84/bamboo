@@ -851,7 +851,7 @@ _G['outside'] = function (small, big)
         if v == uglystr then return nil, 'outside',{small,big}; end
 
 --		local nv = tonumber(v) or v
-		if v and v < small and v > big then
+		if v and (v < small or v > big) then
 			return true
 		else
 			return false
