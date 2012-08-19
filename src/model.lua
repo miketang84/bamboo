@@ -637,6 +637,13 @@ local function makeLongWordSegments (self, longwords)
 	return self
 end
 
+local function didLongWordSegment (self)
+	local ret = #db:smembers(format(ft_longwords_manager, self.__name), word)
+	
+	return ret > 0
+end
+
+
 local function searchOnLongwords (self, sentence)
 	local longwords_chosed = List()
 	
@@ -3536,6 +3543,7 @@ Model = Object:extend {
 
 	makeLongWordSegments = makeLongWordSegments;
 	searchOnLongwords = searchOnLongwords;
+	didLongWordSegment = didLongWordSegment;
 	
 	getFDT = function (self, field)
 		I_AM_CLASS_OR_INSTANCE(self)
