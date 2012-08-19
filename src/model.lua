@@ -547,6 +547,15 @@ end
 
 --------------------------------------------------------------------------------
 if bamboo.config.fulltext_index_support then require 'mmseg' end
+
+local ft_words_manager = '_fulltext_words:%s'
+local ft_rft_pattern = '_RFT:%s'
+local ft_ft_pattern = '_FT:%s:%s'
+
+local ft_longwords_manager = '_fulltext_longwords:%s'   -- _fulltext_longwords:model
+local ft_longword_pattern = '_FT_LONGWORD:%s:%s'		-- _FT_LONGWORD:lword_part
+
+
 -- Full Text Search utilities
 -- @param instance the object to be full text indexes
 local makeFulltextIndexes = function (instance)
@@ -562,11 +571,11 @@ local makeFulltextIndexes = function (instance)
 			-- only index word length larger than 1
 			if string.utf8len(word) >= 2 then
 				-- add this word to global word set
-				db:sadd(format('_fulltext_words:%s', instance.__name), word)
+				db:sadd(format(ft_words_manager, instance.__name), word)
 				-- add reverse fulltext index such as '_RFT:model:id', type is set, item is 'word'
-				db:sadd(format('_RFT:%s', getNameIdPattern(instance)), word)
-				-- add fulltext index such as '_FT:word', type is set, item is 'model:id'
-				db:sadd(format('_FT:%s:%s', instance.__name, word), instance.id)
+				db:sadd(format(ft_rft_pattern, getNameIdPattern(instance)), word)
+				-- add fulltext index such as '_FT:model:word', type is set, item is 'id'
+				db:sadd(format(ft_ft_pattern, instance.__name, word), instance.id)
 			end
 		end
 	end
@@ -578,7 +587,7 @@ local wordSegmentOnFtIndex = function (self, ask_str)
 	local search_tags = mmseg.segment(ask_str)
 	local tags = List()
 	for _, tag in ipairs(search_tags) do
-		if string.utf8len(tag) >= 2 and db:sismember(format('_fulltext_words:%s', self.__name), tag) then
+		if string.utf8len(tag) >= 2 and db:sismember(format(ft_words_manager, self.__name), tag) then
 			tags:append(tag)
 		end
 	end
@@ -592,11 +601,11 @@ local searchOnFulltextIndexes = function (self, tags, n)
 	local rlist = List()
 	local _tmp_key = "__tmp_ftkey"
 	if #tags == 1 then
-		db:sinterstore(_tmp_key, format('_FT:%s:%s', self.__name, tags[1]))
+		db:sinterstore(_tmp_key, format(ft_ft_pattern, self.__name, tags[1]))
 	else
 		local _args = {}
 		for _, tag in ipairs(tags) do
-			table.insert(_args, format('_FT:%s:%s', self.__name, tag))
+			table.insert(_args, format(ft_ft_pattern, self.__name, tag))
 		end
 		-- XXX, some afraid
 		db:sinterstore(_tmp_key, unpack(_args))
@@ -612,6 +621,79 @@ local searchOnFulltextIndexes = function (self, tags, n)
 	-- return objects
 	return getFromRedisPipeline(self, ids)
 end
+
+
+-- self is model name
+local function makeLongWordSegments (self, longwords)
+	local words
+	for _, longword in ipairs(longwords) do
+		words = mmseg.segment(longword)
+		for _, word in ipairs(words) do
+			db:sadd(format(ft_longwords_manager, self.__name), word))
+			db:sadd(format(ft_longword_pattern, self.__name, word), longword)
+		end
+	end
+	
+	return self
+end
+
+local function searchOnLongwords (self, sentence)
+	local longwords_chosed = List()
+	
+	local ask_words = mmseg.segment(sentence)
+	local i, p, e = 1
+
+	local dataset = Set()
+	local old_dataset = Set()
+	while i <= #ask_words do
+		-- i = i + 1
+		p = i
+		while true do
+			local word = ask_words[i]
+			i = i + 1
+			local is_this_in = db:sismember(format(ft_longwords_manager, self.__name), word)
+			if is_this_in then
+				local thisset = db:smembers(format(ft_longword_pattern, self.__name, word))
+				old_dataset = dataset
+				dataset = dataset * Set(thisset)
+				if #dataset == 0 then
+					dataset = old_dataset
+					e = i - 2
+					break
+				end
+				
+
+			else
+				e = i - 2
+				break
+			end
+		end
+		
+		local words_length = e - p + 1
+		if words_length > 0 then
+			if #dataset == 1 then
+				local longword = dataset:members()[1]
+				local thisword = table.concat(List(ask_words):slice(p, e))
+				if thisword == longword then
+					longwords_chosed:append(longword)
+				end
+			else
+				local longwords = dataset:members()
+				local thisword = table.concat(List(ask_words):slice(p, e))
+				for _, v in ipairs(longwords) do
+					if thisword == v then
+						longwords_chosed:append(longword)
+						break
+					end
+				end
+			end
+		end
+		
+	end
+	
+	return longwords_chosed
+end
+
 
 --------------------------------------------------------------------------------
 -- The bellow four assertations, they are called only by class, instance or query set
