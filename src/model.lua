@@ -640,7 +640,13 @@ end
 local function searchOnLongwords (self, sentence)
 	local longwords_chosed = List()
 	
-	local ask_words = mmseg.segment(sentence)
+	local ask_words 
+	if type(sentence) == 'string' then
+		ask_words = mmseg.segment(sentence)	
+	else
+		ask_words = sentence
+	end
+
 	local i, p, e = 1
 
 	local dataset = Set()
