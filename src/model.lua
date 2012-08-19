@@ -638,7 +638,7 @@ local function makeLongWordSegments (self, longwords)
 end
 
 local function didLongWordSegment (self)
-	local ret = #db:smembers(format(ft_longwords_manager, self.__name), word)
+	local ret = #db:smembers(format(ft_longwords_manager, self.__name))
 	
 	return ret > 0
 end
