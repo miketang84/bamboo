@@ -629,7 +629,7 @@ local function makeLongWordSegments (self, longwords)
 	for _, longword in ipairs(longwords) do
 		words = mmseg.segment(longword)
 		for _, word in ipairs(words) do
-			db:sadd(format(ft_longwords_manager, self.__name), word))
+			db:sadd(format(ft_longwords_manager, self.__name), word)
 			db:sadd(format(ft_longword_pattern, self.__name, word), longword)
 		end
 	end
@@ -3528,6 +3528,9 @@ Model = Object:extend {
 		return searchOnFulltextIndexes(self, {word}, n)
 	end;
 
+	makeLongWordSegments = makeLongWordSegments;
+	searchOnLongwords = searchOnLongwords;
+	
 	getFDT = function (self, field)
 		I_AM_CLASS_OR_INSTANCE(self)
 		checkType(field, 'string')
