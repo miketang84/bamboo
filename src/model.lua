@@ -646,60 +646,64 @@ end
 
 local function searchOnLongwords (self, sentence)
 	local longwords_chosed = List()
-	
-	local ask_words 
-	if type(sentence) == 'string' then
-		ask_words = mmseg.segment(sentence)	
-	else
-		ask_words = sentence
-	end
-
-	local i, p, e = 1
+	local i, p, e = 1, 1, 1
 
 	local dataset = Set()
 	local old_dataset = Set()
-	while i <= #ask_words do
+	while i <= sentence:utf8len() do
 		-- i = i + 1
 		p = i
-		while true do
-			local word = ask_words[i]
-			i = i + 1
-			local is_this_in = db:sismember(format(ft_longwords_manager, self.__name), word)
-			if is_this_in then
-				local thisset = db:smembers(format(ft_longword_pattern, self.__name, word))
-				old_dataset = dataset
-				dataset = dataset * Set(thisset)
-				if #dataset == 0 then
-					dataset = old_dataset
+		while true  do
+			local word = sentence:utf8index(i)
+			if word then
+				i = i + 1
+				local is_this_in = db:sismember(format(ft_longwords_manager, self.__name), word)
+				if is_this_in then
+					local thisset = db:smembers(format(ft_longword_pattern, self.__name, word))
+					--db:interstore('__tmp_longkey', format(ft_longword_pattern, self.__name, word))
+					old_dataset = Set(table.copy(dataset))
+					if dataset:size() > 0 then
+						dataset = dataset * Set(thisset)
+					else
+						dataset = Set(thisset)
+					end
+					
+					if dataset:size() == 0 then
+						dataset = old_dataset
+						e = i - 2
+						break
+					end
+					
+
+				else
 					e = i - 2
 					break
 				end
-				
-
+		
 			else
-				e = i - 2
+				e = i - 1
 				break
 			end
-		end
-		
+		end	
 		local words_length = e - p + 1
 		if words_length > 0 then
-			if #dataset == 1 then
+			if dataset:size() == 1 then
 				local longword = dataset:members()[1]
-				local thisword = table.concat(List(ask_words):slice(p, e))
+				local thisword = sentence:utf8slice(p, e)
 				if thisword == longword then
 					longwords_chosed:append(longword)
 				end
 			else
 				local longwords = dataset:members()
-				local thisword = table.concat(List(ask_words):slice(p, e))
+				local thisword = sentence:utf8slice(p, e)
 				for _, v in ipairs(longwords) do
 					if thisword == v then
-						longwords_chosed:append(longword)
+						longwords_chosed:append(thisword)
 						break
 					end
 				end
 			end
+			dataset = Set()
 		end
 		
 	end
