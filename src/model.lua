@@ -644,7 +644,7 @@ local function didLongWordSegment (self)
 end
 
 
-local function searchOnLongwords (self, sentence)
+local function searchOnLongWords (self, sentence)
 	local longwords_chosed = List()
 	local i, p, e = 1, 1, 1
 
@@ -810,7 +810,6 @@ end
 -- Query Function Set
 -- for convienent, import them into _G directly
 ------------------------------------------------------------------------
-local closure_collector = {}
 local upvalue_collector = {}
 local uglystr = '___hashindex^*_#@[]-+~~!$$$$'
 
@@ -825,7 +824,6 @@ _G['eq'] = function ( cmp_obj )
 			return false
 		end
 	end
-	closure_collector[t] = {'eq', cmp_obj}
 	return t
 end
 
@@ -840,7 +838,6 @@ _G['uneq'] = function ( cmp_obj )
 			return false
 		end
 	end
-	closure_collector[t] = {'uneq', cmp_obj}
 	return t
 end
 
@@ -856,7 +853,6 @@ _G['lt'] = function (limitation)
 			return false
 		end
 	end
-	closure_collector[t] = {'lt', limitation}
 	return t
 end
 
@@ -872,7 +868,6 @@ _G['gt'] = function (limitation)
 			return false
 		end
 	end
-	closure_collector[t] = {'gt', limitation}
 	return t
 end
 
@@ -889,7 +884,6 @@ _G['le'] = function (limitation)
 			return false
 		end
 	end
-	closure_collector[t] = {'le', limitation}
 	return t
 end
 
@@ -905,7 +899,6 @@ _G['ge'] = function (limitation)
 			return false
 		end
 	end
-	closure_collector[t] = {'ge', limitation}
 	return t
 end
 
@@ -922,7 +915,6 @@ _G['bt'] = function (small, big)
 			return false
 		end
 	end
-	closure_collector[t] = {'bt', small, big}
 	return t
 end
 
@@ -939,7 +931,6 @@ _G['be'] = function (small, big)
 			return false
 		end
 	end
-	closure_collector[t] = {'be', small, big}
 	return t
 end
 
@@ -956,7 +947,6 @@ _G['outside'] = function (small, big)
 			return false
 		end
 	end
-	closure_collector[t] = {'outside', small, big}
 	return t
 end
 
@@ -971,7 +961,6 @@ _G['contains'] = function (substr)
 			return false
 		end
 	end
-	closure_collector[t] = {'contains', substr}
 	return t
 end
 
@@ -986,7 +975,6 @@ _G['uncontains'] = function (substr)
 			return false
 		end
 	end
-	closure_collector[t] = {'uncontains', substr}
 	return t
 end
 
@@ -1002,7 +990,6 @@ _G['startsWith'] = function (substr)
 			return false
 		end
 	end
-	closure_collector[t] = {'startsWith', substr}
 	return t
 end
 
@@ -1017,7 +1004,6 @@ _G['unstartsWith'] = function (substr)
 			return false
 		end
 	end
-	closure_collector[t] = {'unstartsWith', substr}
 	return t
 end
 
@@ -1032,7 +1018,6 @@ _G['endsWith'] = function (substr)
 			return false
 		end
 	end
-	closure_collector[t] = {'endsWith', substr}
 	return t
 end
 
@@ -1046,7 +1031,6 @@ _G['unendsWith'] = function (substr)
 			return false
 		end
 	end
-	closure_collector[t] = {'unendsWith', substr}
 	return t
 end
 
@@ -1064,7 +1048,6 @@ _G['inset'] = function (...)
 
 		return false
 	end
-	closure_collector[t] = {'inset', ...}
 	return t
 end
 
@@ -1082,7 +1065,6 @@ _G['uninset'] = function (...)
 
 		return true
 	end
-	closure_collector[t] = {'uninset', ...}
 	return t
 end
 
@@ -1111,28 +1093,33 @@ local collectRuleFunctionUpvalues = function (query_args)
 		end
 	end
 
-	return true
+	return true, upvalues
 end
 
 -----------------------------------------------------------------------
 -- query_str_iden is at least ''
-local compressSortByArgs = function (query_str_iden, sortby_args)
+local compressSortByArgs = function (sortby_args)
 	local strs = {}
 	for i = 1, #sortby_args do
-       local v = sortby_args[i]
+       		local v = sortby_args[i]
 		local ctype = type(v)
 		if ctype == 'string' then
-            tinsert(strs, v)
-        -- may don't appear
-        elseif ctype == 'nil' then
-            tinsert(strs, 'nil')
-        elseif ctype == 'function' then
+            		tinsert(strs, v)
+        	-- may don't appear
+        	elseif ctype == 'nil' then
+            		tinsert(strs, 'nil')
+        	elseif ctype == 'function' then
 			tinsert(strs, string.dump(v))
 		end
 	end
 
-	local sortby_str_iden = table.concat(strs, rule_index_divider)
-	return query_str_iden .. rule_index_query_sortby_divider .. sortby_str_iden
+	return table.concat(strs, rule_index_divider)
+end
+
+
+
+local compressTwoPartArgs = function (query_str_iden, sortby_str_iden)
+	return query_str_iden .. rule_index_query_sortby_divider .. sortby_str_iden	
 end
 
 function luasplit(str, pat)
@@ -1187,9 +1174,8 @@ local extractSortByArgs = function (sortby_str_iden)
 	end
 end
 
-local canInstanceFitQueryRule
-local canInstanceFitQueryRuleAndFindProperPosition = function (self, combine_str_iden)
-	local p = 0
+local function divideQueryPartAndSortbyPart (combine_str_iden)
+	local query_str_iden, sortby_str_iden
 	local divider_start, divider_stop = combine_str_iden:find(rule_index_query_sortby_divider)
 	if divider_start then
 		query_str_iden = combine_str_iden:sub(1, divider_start - 1)
@@ -1198,7 +1184,24 @@ local canInstanceFitQueryRuleAndFindProperPosition = function (self, combine_str
 		query_str_iden = combine_str_iden
 		sortby_str_iden = nil
 	end
-	--local query_str_iden, sortby_str_iden = combine_str_iden:splitout(rule_index_query_sortby_divider)
+	
+	return query_str_iden, sortby_str_iden	
+end
+
+local canInstanceFitQueryRule
+local canInstanceFitQueryRuleAndFindProperPosition = function (self, combine_str_iden)
+	local p = 0
+--[[	local divider_start, divider_stop = combine_str_iden:find(rule_index_query_sortby_divider)
+	if divider_start then
+		query_str_iden = combine_str_iden:sub(1, divider_start - 1)
+		sortby_str_iden = combine_str_iden:sub(divider_stop + 1, -1)
+	else
+		query_str_iden = combine_str_iden
+		sortby_str_iden = nil
+	end
+--]]
+
+	local query_str_iden, sortby_str_iden = divideQueryPartAndSortbyPart(combine_str_iden)
 	local flag = true
 
 	if query_str_iden ~= '' then
@@ -1303,16 +1306,15 @@ local compressQueryArgs = function (query_args)
 			if type(v) ~= 'function' then
 				tinsert(out, tostring(v))
 			else
-				local queryt_iden = closure_collector[v]
+				local _, func_name, cmp_obj = v(uglystr)
+				local queryt_iden = {func_name, cmp_obj}
 				-- XXX: here, queryt_iden[2] may be nil, this will be stored now
-                for _, item in ipairs(queryt_iden) do
+                		for _, item in ipairs(queryt_iden) do
 					tinsert(out, item)
 				end
 			end
 			tinsert(out, '|')
 		end
-		-- clear the closure_collector
-		closure_collector = {}
 
 		-- restore the first element, avoiding side effect
 		query_args[1] = out[1]
@@ -1397,7 +1399,6 @@ local extractQueryArgs = function (qstr)
 
 	return query_args
 end
-
 
 local checkLogicRelation = function (obj, query_args, logic_choice, model)
 	-- NOTE: query_args can't contain [1]
@@ -1568,7 +1569,7 @@ local getIndexFromManager = function (self, str_iden, getnum)
 	local rule_manager_prefix, rule_result_pattern = specifiedRulePrefix()
 
 	local manager_key = rule_manager_prefix .. self.__name
-	-- get this rule's socre
+	-- get this rule's score
 	local score = db:zscore(manager_key, str_iden)
 	-- if has no score, means it is not rule indexed,
 	-- return nil directly
@@ -1910,6 +1911,7 @@ Model = Object:extend {
 		assert(type(query_args) == 'table' or type(query_args) == 'function', '[Error] the query_args passed to filter must be table or function.')
        local no_sort_rule
        -- regular the args
+       local is_count = select(7, ...)
        local sort_field, sort_dir, sort_func, start, stop, is_rev, no_cache, is_get
        local first_arg = select(1, ...)
        if type(first_arg) == 'function' then
@@ -1958,7 +1960,8 @@ Model = Object:extend {
 				-- make query identification string
 				query_str_iden = compressQueryArgs(query_args)
 				if not no_sort_rule then
-					 query_str_iden = compressSortByArgs(query_str_iden, {sort_field or sort_func, sort_dir})
+					local sortby_str_iden = compressSortByArgs({sort_field or sort_func, sort_dir})
+					query_str_iden = compressTwoPartArgs(query_str_iden, sortby_str_iden)
 				end
 				if #query_str_iden > 0 then
 					-- check index
@@ -1966,8 +1969,16 @@ Model = Object:extend {
 					local id_list = getIndexFromManager(self, query_str_iden)
 					if type(id_list) == 'table' then
 						if #id_list == 0 then
-							return QuerySet()
+							if is_count == 'count' then
+								return 0
+							else
+								return QuerySet()
+							end
 						else
+							if is_count == 'count' then
+								return #id_list
+							end
+							
 							-- #id_list > 0
 							if is_get == 'get' then
 								id_list = (is_rev == 'rev') and List{id_list[#id_list]} or List{id_list[1]}
@@ -2010,7 +2021,11 @@ Model = Object:extend {
 			if isFalse(query_args) then
 				-- need to participate sort, if has
 				if no_sort_rule then
-					return self:slice(start, stop, is_rev)
+					if is_count == 'count' then
+						return self:numbers()
+					else
+						return self:slice(start, stop, is_rev)
+					end
 				else
 					query_set = self:all()
 				end
@@ -2162,18 +2177,20 @@ Model = Object:extend {
 			end
 		end
 
-		return query_set
+		if is_count == 'count' then
+			return #query_set
+		else
+			return query_set
+		end
 	end;
 
-    -- count the number of instance fit to some rule
+    	-- count the number of instance fit to some rule
 	count = function (self, query_args)
 		I_AM_CLASS(self)
-		local query_str_iden = compressQueryArgs(query_args)
-		local ret = getIndexFromManager(self, query_str_iden, 'getnum')
-		if not ret then
-			ret = #self:filter(query_args)
-		end
-		return ret
+		--local query_str_iden = compressQueryArgs(query_args)
+		--print(query_str_iden)
+		--local ret = getIndexFromManager(self, query_str_iden, 'getnum')
+		return self:filter(query_args, nil, nil, nil, nil, nil, nil, 'count')
 	end;
 
 	-------------------------------------------------------------------
@@ -3546,7 +3563,7 @@ Model = Object:extend {
 	end;
 
 	makeLongWordSegments = makeLongWordSegments;
-	searchOnLongwords = searchOnLongwords;
+	searchOnLongWords = searchOnLongWords;
 	didLongWordSegment = didLongWordSegment;
 	
 	getFDT = function (self, field)
