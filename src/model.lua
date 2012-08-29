@@ -629,7 +629,7 @@ end
 
 -- here, tags is the field specified tags
 local searchOnFieldFulltextIndexes = function (self, field, tags, n, onlyids)
-	if not tags or #tags == 0 then return List() end
+	if not tags or #tags == 0 then return QuerySet() end
 
 	local rlist = List()
 	local _tmp_key = "__tmp_ftkey"
@@ -652,7 +652,7 @@ local searchOnFieldFulltextIndexes = function (self, field, tags, n, onlyids)
 	end
 
 	if onlyids == 'onlyids' then
-		return List(ids)
+		return QuerySet(ids)
 	else
 		-- return objects
 		return getFromRedisPipeline(self, ids)
@@ -673,7 +673,7 @@ local searchOnFieldFulltextIndexesByOr = function (self, field, tags, n, onlyids
 	
 	local results
 	if onlyids == 'onlyids' then
-		results = id_set:members():slice(1, n)
+		results = QuerySet(id_set:members():slice(1, n))
 	else
 		results = getFromRedisPipeline(self, id_set:members():slice(1, n))
 	end
