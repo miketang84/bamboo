@@ -3671,6 +3671,26 @@ Model = Object:extend {
 		end
 		return ids
 	end;
+	
+	combineQuerySet = function (self, another)
+		I_AM_QUERY_SET(self)
+		I_AM_QUERY_SET(another)		
+		local ids = List()
+		for _, v in ipairs(self) do
+			ids:append(v.id)
+		end
+		local self_set = Set(ids)
+		
+		for _, v in ipairs(another) do
+			-- if not duplicated, append it
+			if not self_set[v.id] then
+				self:append(v)
+			end
+		end
+		
+		return self
+	end;
+	
 
 	makeFulltextIndexes = function (self)
 		I_AM_CLASS(self)
