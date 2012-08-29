@@ -748,7 +748,7 @@ local ft_longwords_manager = '_fulltext_longwords:%s'   -- _fulltext_longwords:m
 local ft_longword_pattern = '_FT_LONGWORD:%s:%s'	-- _FT_LONGWORD:model:lword_part
 
 -- self is model name
-local function makeLongWordSegments (self, longwords)
+local function makeLongWordIndexes (self, longwords)
 	local words
 	for _, longword in ipairs(longwords) do
 		words = mmseg.segment(longword)
@@ -761,7 +761,7 @@ local function makeLongWordSegments (self, longwords)
 	return self
 end
 
-local function didLongWordSegment (self)
+local function didLongWordIndexed (self)
 	local ret = #db:smembers(format(ft_longwords_manager, self.__name))
 	
 	return ret > 0
@@ -3672,7 +3672,12 @@ Model = Object:extend {
 		return ids
 	end;
 
-
+	makeFulltextIndexes = function (self)
+		I_AM_CLASS(self)
+		self:all():each(function (instance) makeFulltextIndexes(instance) end)
+		return true
+	end;
+	
 	-- for fulltext index API
 	fulltextSearch = function (self, ask_str, n)
 		I_AM_CLASS(self)
@@ -3713,9 +3718,9 @@ Model = Object:extend {
 		return searchOnFieldFulltextIndexes(self, field, {word}, n)
 	end;
 
-	makeLongWordSegments = makeLongWordSegments;
+	makeLongWordIndexes = makeLongWordIndexes;
 	searchOnLongWords = searchOnLongWords;
-	didLongWordSegment = didLongWordSegment;
+	didLongWordIndexed = didLongWordIndexed;
 	
 	getFDT = function (self, field)
 		I_AM_CLASS_OR_INSTANCE(self)
