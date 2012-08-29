@@ -3672,7 +3672,7 @@ Model = Object:extend {
 		return ids
 	end;
 	
-	combineQuerySet = function (self, another)
+	combineQuerySets = function (self, another)
 		I_AM_QUERY_SET(self)
 		I_AM_QUERY_SET(another)		
 		local ids = List()
