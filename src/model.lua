@@ -618,7 +618,7 @@ local wordSegmentOnFtIndex = function (self, ask_str)
 
 	for _, tag in ipairs(search_tags) do
 		for _, field in ipairs(ftindex_fields) do
-			if string.utf8len(tag) >= 2 and db:sismember(format(ft_words_manager, self.__name, v), tag) then
+			if string.utf8len(tag) >= 2 and db:sismember(format(ft_words_manager, self.__name, field), tag) then
 				tags[field]:append(tag)
 			end
 		end
@@ -668,7 +668,7 @@ local searchOnFieldFulltextIndexesByOr = function (self, field, tags, n, onlyids
 
 	local id_set = Set()
 	for tag, ids in pairs(tag_dict) do
-		id_set = id_set:union(ids)
+		id_set = id_set:union(Set(ids))
 	end
 	
 	local results
@@ -706,7 +706,7 @@ local searchOnFulltextIndexes = function (self, tags, n, is_or, standalone)
 	else
 		local id_set = Set()
 		for k, ids in pairs(field_dict) do
-			id_set = id_set:union(ids)
+			id_set = id_set:union(Set(ids))
 		end
 		results = getFromRedisPipeline(self, id_set:members():slice(1, n))
 	end
