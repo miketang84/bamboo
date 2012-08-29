@@ -629,7 +629,7 @@ end
 
 -- here, tags is the field specified tags
 local searchOnFieldFulltextIndexes = function (self, field, tags, n, onlyids)
-	if #tags == 0 then return List() end
+	if not tags or #tags == 0 then return List() end
 
 	local rlist = List()
 	local _tmp_key = "__tmp_ftkey"
