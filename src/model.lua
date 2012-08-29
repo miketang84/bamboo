@@ -547,13 +547,15 @@ end
 
 --------------------------------------------------------------------------------
 if bamboo.config.fulltext_index_support then require 'mmseg' end
-
+--[[
 local ft_words_manager = '_fulltext_words:%s'
 local ft_rft_pattern = '_RFT:%s'
 local ft_ft_pattern = '_FT:%s:%s'
+--]]
+local ft_words_manager = '_fulltext_words:%s:%s'	-- prefix:model:field
+local ft_rft_pattern = '_RFT:%s:%s'			-- prefix:model:id:field
+local ft_ft_pattern = '_FT:%s:%s:%s'			-- prefix:model:field:word
 
-local ft_longwords_manager = '_fulltext_longwords:%s'   -- _fulltext_longwords:model
-local ft_longword_pattern = '_FT_LONGWORD:%s:%s'		-- _FT_LONGWORD:lword_part
 
 
 -- Full Text Search utilities
@@ -571,11 +573,11 @@ local makeFulltextIndexes = function (instance)
 			-- only index word length larger than 1
 			if string.utf8len(word) >= 2 then
 				-- add this word to global word set
-				db:sadd(format(ft_words_manager, instance.__name), word)
+				db:sadd(format(ft_words_manager, instance.__name, v), word)
 				-- add reverse fulltext index such as '_RFT:model:id', type is set, item is 'word'
-				db:sadd(format(ft_rft_pattern, getNameIdPattern(instance)), word)
+				db:sadd(format(ft_rft_pattern, getNameIdPattern(instance), v), word)
 				-- add fulltext index such as '_FT:model:word', type is set, item is 'id'
-				db:sadd(format(ft_ft_pattern, instance.__name, word), instance.id)
+				db:sadd(format(ft_ft_pattern, instance.__name, v, word), instance.id)
 			end
 		end
 	end
@@ -583,11 +585,18 @@ local makeFulltextIndexes = function (instance)
 	return true
 end
 
-local wordSegmentOnFtIndex = function (self, ask_str)
+
+local wordSegmentOnFieldFtIndex = function (self, field, ask_str)
 	local search_tags = mmseg.segment(ask_str)
+	
+	local fdt = self:getFDT(field)
+	if not fdt.fulltext_index then
+		return List()
+	end
+
 	local tags = List()
 	for _, tag in ipairs(search_tags) do
-		if string.utf8len(tag) >= 2 and db:sismember(format(ft_words_manager, self.__name), tag) then
+		if string.utf8len(tag) >= 2 and db:sismember(format(ft_words_manager, self.__name, field), tag) then
 			tags:append(tag)
 		end
 	end
@@ -595,7 +604,116 @@ local wordSegmentOnFtIndex = function (self, ask_str)
 end
 
 
-local searchOnFulltextIndexes = function (self, tags, n)
+
+local wordSegmentOnFtIndex = function (self, ask_str)
+	local search_tags = mmseg.segment(ask_str)
+	
+	local ftindex_fields = self['__fulltext_index_fields']
+	if isFalse(ftindex_fields) then return {} end
+	
+	local tags = {}
+	for _, field in ipairs(ftindex_fields) do
+		tags[field] = List()
+	end
+
+	for _, tag in ipairs(search_tags) do
+		for _, field in ipairs(ftindex_fields) do
+			if string.utf8len(tag) >= 2 and db:sismember(format(ft_words_manager, self.__name, v), tag) then
+				tags[field]:append(tag)
+			end
+		end
+	end
+	return tags
+end
+
+
+-- here, tags is the field specified tags
+local searchOnFieldFulltextIndexes = function (self, field, tags, n, onlyids)
+	if #tags == 0 then return List() end
+
+	local rlist = List()
+	local _tmp_key = "__tmp_ftkey"
+	if #tags == 1 then
+		db:sinterstore(_tmp_key, format(ft_ft_pattern, self.__name, field, tags[1]))
+	else
+		local _args = {}
+		for _, tag in ipairs(tags) do
+			table.insert(_args, format(ft_ft_pattern, self.__name, field, tag))
+		end
+		-- XXX, some afraid
+		db:sinterstore(_tmp_key, unpack(_args))
+	end
+
+	local ids = {}
+	if n and type(n) == 'number' and n > 0 then
+		ids = db:sort(_tmp_key, 'LIMIT', 0, n, 'DESC', 'ALPHA')
+	else
+		ids = db:sort(_tmp_key, 'DESC', 'ALPHA')
+	end
+
+	if onlyids == 'onlyids' then
+		return List(ids)
+	else
+		-- return objects
+		return getFromRedisPipeline(self, ids)
+	end
+end
+
+-- here, tags is the field specified tags
+local searchOnFieldFulltextIndexesByOr = function (self, field, tags, n, onlyids)
+	local tag_dict = {}
+	for _, tag in ipairs(tags) do
+		tag_dict[tag] = searchOnFieldFulltextIndexes(self, field, {tag}, nil, 'onlyids')
+	end
+
+	local id_set = Set()
+	for tag, ids in pairs(tag_dict) do
+		id_set = id_set:union(ids)
+	end
+	
+	local results
+	if onlyids == 'onlyids' then
+		results = id_set:members():slice(1, n)
+	else
+		results = getFromRedisPipeline(self, id_set:members():slice(1, n))
+	end
+	
+	return results, tag_dict
+end
+
+-- here, tags is the whole tags dict
+local searchOnFulltextIndexes = function (self, tags, n, is_or, standalone)
+	
+	local ftindex_fields = self['__fulltext_index_fields']
+	if isFalse(ftindex_fields) then return QuerySet() end
+	
+	local field_dict = {}
+	if is_or ~= 'or' then
+		for _, field in ipairs(ftindex_fields) do
+			field_dict[field] = searchOnFieldFulltextIndexes(self, field, tags[field], nil, 'onlyids')
+		end
+	else
+		for _, field in ipairs(ftindex_fields) do
+			field_dict[field] = searchOnFieldFulltextIndexesByOr(self, field, tags[field], nil, 'onlyids')
+		end
+	end
+	
+	local results = QuerySet()
+	if standalone == 'standalone' then
+		for k, ids in pairs(field_dict) do
+			results[k] = getFromRedisPipeline(self, ids:slice(1, n))
+		end
+	else
+		local id_set = Set()
+		for k, ids in pairs(field_dict) do
+			id_set = id_set:union(ids)
+		end
+		results = getFromRedisPipeline(self, id_set:members():slice(1, n))
+	end
+	
+	return results, id_dict
+	
+--[[
 	if #tags == 0 then return List() end
 
 	local rlist = List()
@@ -613,15 +731,21 @@ local searchOnFulltextIndexes = function (self, tags, n)
 
 	local ids
 	if n and type(n) == 'number' and n > 0 then
-		ids = db:sort(_tmp_key, 'LIMIT', 0, n, 'desc')
+		ids = db:sort(_tmp_key, 'LIMIT', 0, n, 'DESC', 'ALPHA')
 	else
-		ids = db:sort(_tmp_key, 'desc')
+		ids = db:sort(_tmp_key, 'DESC', 'ALPHA')
 	end
 
 	-- return objects
 	return getFromRedisPipeline(self, ids)
+--]]
+
 end
 
+
+
+local ft_longwords_manager = '_fulltext_longwords:%s'   -- _fulltext_longwords:model
+local ft_longword_pattern = '_FT_LONGWORD:%s:%s'	-- _FT_LONGWORD:model:lword_part
 
 -- self is model name
 local function makeLongWordSegments (self, longwords)
@@ -3557,9 +3681,36 @@ Model = Object:extend {
 	end;
 
 	-- for fulltext index API
+	fulltextSearchByOr = function (self, ask_str, n)
+		I_AM_CLASS(self)
+		local tags = wordSegmentOnFtIndex(self, ask_str)
+		return searchOnFulltextIndexes(self, tags, n, 'or')
+	end;
+
+	-- for fulltext index API
+	fulltextSearchByFieldByOr = function (self, field, ask_str, n)
+		I_AM_CLASS(self)
+		local tags = wordSegmentOnFieldFtIndex(self, field, ask_str)
+		return searchOnFieldFulltextIndexesByOr(self, field, tags, n)
+	end;
+
+	-- for fulltext index API
+	fulltextSearchByField = function (self, field, ask_str, n)
+		I_AM_CLASS(self)
+		local tags = wordSegmentOnFieldFtIndex(self, field, ask_str)
+		return searchOnFieldFulltextIndexes(self, field, tags, n)
+	end;
+
+	-- for fulltext index API
 	fulltextSearchByWord = function (self, word, n)
 		I_AM_CLASS(self)
 		return searchOnFulltextIndexes(self, {word}, n)
+	end;
+
+	-- for fulltext index API
+	fulltextSearchByFieldByWord = function (self, field, word, n)
+		I_AM_CLASS(self)
+		return searchOnFieldFulltextIndexes(self, field, {word}, n)
 	end;
 
 	makeLongWordSegments = makeLongWordSegments;
