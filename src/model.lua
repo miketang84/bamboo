@@ -3729,7 +3729,14 @@ Model = Object:extend {
 	-- for fulltext index API
 	fulltextSearchByWord = function (self, word, n)
 		I_AM_CLASS(self)
-		return searchOnFulltextIndexes(self, {word}, n)
+		local ftindex_fields = self['__fulltext_index_fields']
+		if isFalse(ftindex_fields) then return QuerySet() end
+	
+		local tags = {}
+		for _, field in ipairs(ftindex_fields) do
+			tags[field] = {word}
+		end
+		return searchOnFulltextIndexes(self, tags, n)
 	end;
 
 	-- for fulltext index API
