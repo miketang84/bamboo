@@ -142,11 +142,12 @@ local MappingTableConcrete, MappingTablePattern = makeUrlHandlerMapping(URLS)
 bamboo.URLS = MappingTableConcrete
 bamboo.PATTERN_URLS = MappingTablePattern
 
+if not config.PRODUCTION then
 print('-------------------- URL Settings --------------------')
 ptable(MappingTableConcrete)
 ptable(MappingTablePattern)
 print('------------------------------------------------------')
-
+end
 ------------------------------------------------------------------------
 -- find handler function by path
 -- @param path:	coming path
