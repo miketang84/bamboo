@@ -2015,7 +2015,7 @@ Model = Object:extend {
 	get = function (self, query_args, find_rev, no_cache)
 		-- XXX: may cause effective problem
 		-- every time 'get' will cause the all objects' retrieving
-		local objs = self:filter(query_args, nil, nil, find_rev, no_cache, 'get')
+		local objs = self:filter(query_args, 1, -1, find_rev, no_cache, 'get')
 		if objs then
 			return objs[1]
 		else
@@ -2033,12 +2033,12 @@ Model = Object:extend {
 	filter = function (self, query_args, ...)
 		I_AM_CLASS_OR_QUERY_SET(self)
 		assert(type(query_args) == 'table' or type(query_args) == 'function', '[Error] the query_args passed to filter must be table or function.')
-       local no_sort_rule
-       -- regular the args
-       local is_count = select(7, ...)
-       local sort_field, sort_dir, sort_func, start, stop, is_rev, no_cache, is_get
-       local first_arg = select(1, ...)
-       if type(first_arg) == 'function' then
+		local no_sort_rule
+		-- regular the args
+		local is_count = select(select(#, ...), ...)
+		local sort_field, sort_dir, sort_func, start, stop, is_rev, no_cache, is_get
+		local first_arg = select(1, ...)
+		if type(first_arg) == 'function' then
 			sort_func = first_arg
 			start = select(2, ...)
 			stop = select(3, ...)
@@ -2055,16 +2055,16 @@ Model = Object:extend {
 			no_cache = select(6, ...)
 			is_get = select(7, ...)
 			no_sort_rule = false
-       elseif type(first_arg) == 'number' then
+       		elseif type(first_arg) == 'number' then
 			start = first_arg
 			stop = select(2, ...)
 			is_rev = select(3, ...)
 			no_cache = select(4, ...)
 			is_get = select(5, ...)
 			no_sort_rule = true
-       end
+       		end
         
-       if start then assert(type(start) == 'number', '[Error] @filter - start must be number.') end
+       		if start then assert(type(start) == 'number', '[Error] @filter - start must be number.') end
 		if stop then assert(type(stop) == 'number', '[Error] @filter - stop must be number.') end
 		if is_rev then assert(type(is_rev) == 'string', '[Error] @filter - is_rev must be string.') end
 
@@ -2314,7 +2314,7 @@ Model = Object:extend {
 		--local query_str_iden = compressQueryArgs(query_args)
 		--print(query_str_iden)
 		--local ret = getIndexFromManager(self, query_str_iden, 'getnum')
-		return self:filter(query_args, nil, nil, nil, nil, nil, nil, 'count')
+		return self:filter(query_args, 1, -1, nil, 'count')
 	end;
 
 	-------------------------------------------------------------------
