@@ -2035,7 +2035,8 @@ Model = Object:extend {
 		assert(type(query_args) == 'table' or type(query_args) == 'function', '[Error] the query_args passed to filter must be table or function.')
 		local no_sort_rule
 		-- regular the args
-		local is_count = select(select(#, ...), ...)
+                local nargs = select('#', ...)
+                local is_count = (nargs ~= 0) and select(nargs, ...) or nil
 		local sort_field, sort_dir, sort_func, start, stop, is_rev, no_cache, is_get
 		local first_arg = select(1, ...)
 		if type(first_arg) == 'function' then
