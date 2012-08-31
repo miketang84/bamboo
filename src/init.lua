@@ -306,7 +306,7 @@ registerModule = function (mdl, extra_params)
 					if ret and mdl.finish and type(mdl.finish) == 'function' then
 						ret, last_params = mdl.finish(finished_params)
 					end
-					if ret == false then print(format("[Warning] abort in module %s's finish function.", mdl._NAME or '')) end
+					-- if ret == false then print(format("[Warning] abort in module %s's finish function.", mdl._NAME or '')) end
 					
 					-- make no sense
 					return ret, last_params or finished_params or inited_params
