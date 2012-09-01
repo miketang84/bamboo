@@ -1600,7 +1600,7 @@ local updateInstanceToIndexOnRule = function (self, qstr)
 					db:rpush(item_key, self.id)
 				end
 				-- update the float score to integer
-				db:zadd(manager_key, math.floor(score), qstr)
+--				db:zadd(manager_key, math.floor(score), qstr)
 				db:exec()
 			end
 		else
@@ -1608,9 +1608,9 @@ local updateInstanceToIndexOnRule = function (self, qstr)
 				-- delete the old one id
 				db:lrem(item_key, 1, self.id)
 				-- if delete to empty list, update the rule score to float
-				if not db:exists(item_key) then
-					db:zadd(manager_key, score + 0.1, qstr)
-				end
+--				if not db:exists(item_key) then
+--					db:zadd(manager_key, score + 0.1, qstr)
+--				end
 			end
 		end
 
@@ -1669,7 +1669,7 @@ local addIndexToManager = function (self, str_iden, obj_list)
 		-- when it is a new rule
 		new_score = db:zcard(manager_key) + 1
 		-- use float score represent empty rule result index
-		if #obj_list == 0 then new_score = new_score + 0.1 end
+		-- if #obj_list == 0 then new_score = new_score + 0.1 end
 		db:zadd(manager_key, new_score, str_iden)
 	else
 		-- when rule result is expired, re enter this function
@@ -1702,15 +1702,15 @@ local getIndexFromManager = function (self, str_iden, getnum)
 	end
 
 	-- if score is float, means its rule result is empty, return empty query set
-	if score % 1 ~= 0 then
+--[[	if score % 1 ~= 0 then
 		return (not getnum) and List() or 0
 	end
-
+--]]
 	-- score is integer, not float, and rule result doesn't exist, means its rule result is expired now,
 	-- need to retreive again, so return nil
 	local item_key = rule_result_pattern:format(self.__name, score)
 	if not db:exists(item_key) then
-		return nil
+		return List()
 	end
 
 	-- update expiration
