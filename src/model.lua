@@ -1614,7 +1614,7 @@ local updateInstanceToIndexOnRule = function (self, qstr)
 			end
 		end
 
-		db:expire(item_key, bamboo.config.rule_expiration or bamboo.RULE_LIFE)
+		-- db:expire(item_key, bamboo.config.rule_expiration or bamboo.RULE_LIFE)
 	end, options)
 	return self
 end
@@ -1635,7 +1635,7 @@ local delInstanceToIndexOnRule = function (self, qstr)
 				db:zadd(manager_key, score + 0.1, qstr)
 			end
 		end
-		db:expire(item_key, bamboo.config.rule_expiration or bamboo.RULE_LIFE)
+		-- db:expire(item_key, bamboo.config.rule_expiration or bamboo.RULE_LIFE)
 	end, options)
 
 	return self
@@ -1685,7 +1685,7 @@ local addIndexToManager = function (self, str_iden, obj_list)
 			db:rpush(item_key, unpack(obj_list))
 		end
 		-- set expiration to each index item
-		db:expire(item_key, bamboo.config.rule_expiration or bamboo.RULE_LIFE)
+		-- db:expire(item_key, bamboo.config.rule_expiration or bamboo.RULE_LIFE)
 	end, options)
 end
 
@@ -1714,7 +1714,7 @@ local getIndexFromManager = function (self, str_iden, getnum)
 	end
 
 	-- update expiration
-	db:expire(item_key, bamboo.config.rule_expiration or bamboo.RULE_LIFE)
+	-- db:expire(item_key, bamboo.config.rule_expiration or bamboo.RULE_LIFE)
 	-- rule result is not empty, and not expired, retrieve them
 	if not getnum then
 		-- return a list
