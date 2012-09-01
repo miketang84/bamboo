@@ -1603,7 +1603,7 @@ local updateInstanceToIndexOnRule = function (self, qstr)
 --				db:zadd(manager_key, math.floor(score), qstr)
 				db:exec()
 			end
-		else
+--[[		else
 			if db:exists(item_key) then
 				-- delete the old one id
 				db:lrem(item_key, 1, self.id)
@@ -1612,6 +1612,7 @@ local updateInstanceToIndexOnRule = function (self, qstr)
 --					db:zadd(manager_key, score + 0.1, qstr)
 --				end
 			end
+--]]
 		end
 
 		-- db:expire(item_key, bamboo.config.rule_expiration or bamboo.RULE_LIFE)
@@ -1631,9 +1632,9 @@ local delInstanceToIndexOnRule = function (self, qstr)
 		if db:exists(item_key) then
 			db:lrem(item_key, 0, self.id)
 			-- if delete to empty list, update the rule score to float
-			if not db:exists(item_key) then
-				db:zadd(manager_key, score + 0.1, qstr)
-			end
+--			if not db:exists(item_key) then
+--				db:zadd(manager_key, score + 0.1, qstr)
+--			end
 		end
 		-- db:expire(item_key, bamboo.config.rule_expiration or bamboo.RULE_LIFE)
 	end, options)
@@ -1678,7 +1679,7 @@ local addIndexToManager = function (self, str_iden, obj_list)
 	if #obj_list == 0 then return end
 
 	local item_key = rule_result_pattern:format(self.__name, math.floor(new_score))
-	local options = { watch = item_key, cas = true, retry = 2 }
+	local options = { watch = item_key, retry = 2 }
 	db:transaction(function(db)
 		if not db:exists(item_key) then
 			-- generate the index item, use list

@@ -2,7 +2,7 @@ module(..., package.seeall)
 
 local pluto = require 'pluto'
 
-local PLUGIN_ARGS_DBKEY = "_plugin_args"
+local PLUGIN_ARGS_DBKEY = "_plugin_args:%s:%s"
 
 local function collectUpvalues(func)
 	local upvalues = {}
@@ -144,7 +144,9 @@ function persist(plugin_name, args)
 	end
 	-- store to db
 	local db = BAMBOO_DB
-	db:hset(PLUGIN_ARGS_DBKEY, format("%s:%s", plugin_name, args._tag), buf)
+	local key = format(PLUGIN_ARGS_DBKEY, plugin_name, args._tag)
+	db:set(key, buf)
+	db:expire(key, bamboo.config.plugin_args_life or bamboo.PLUGIN_ARGS_LIFE)
 	
 end
 
@@ -153,8 +155,10 @@ function unpersist(plugin_name, _tag)
 	assert(type(_tag) == 'string', "[Error] @plugin unpersist - #2 _tag should be string.")
 
 	local db = BAMBOO_DB
-	local buf = db:hget(PLUGIN_ARGS_DBKEY, format("%s:%s", plugin_name, _tag))
+	local buf = db:get(format(PLUGIN_ARGS_DBKEY, plugin_name, _tag))
 	-- local tbl = pluto.unpersist({}, buf)
+	if not buf then return {} end
+	
 	local ok, tbl = pcall(pluto.unpersist, {}, buf)
 	if not ok then 
 		return print(format('[Warning] plugin %s: arguments unpersisting failed.', plugin_name))
