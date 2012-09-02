@@ -139,8 +139,7 @@ end
 -- return the key of some string like 'User'
 --
 local function getClassName(self)
-	if type(self) ~= 'table' then return nil end
-	return self.__tag:match('%.(%w+)$')
+	return self.__name
 end
 
 -- return the key of some string like 'User:__index'
@@ -151,30 +150,6 @@ end
 
 local function getClassIdPattern(self)
 	return getClassName(self) + self.id
-end
-
-local function getCustomKey(self, key)
-	return getClassName(self) + ':custom:' + key
-end
-
-local function getCustomIdKey(self, key)
-	return getClassName(self) + ':' + self.id + ':custom:'  + key
-end
-
-local function getCacheKey(self, key)
-	return getClassName(self) + ':cache:' + key
-end
-
-local function getCachetypeKey(self, key)
-	return 'CACHETYPE:' + getCacheKey(self, key)
-end
-
-local function getDynamicFieldKey(self, key)
-	return getClassName(self) + ':dynamic_field:' + key
-end
-
-local function getDynamicFieldIndex(self)
-	return getClassName(self) + ':dynamic_field:__index'
 end
 
 local function makeModelKeyList(self, ids)
@@ -545,655 +520,11 @@ local retrieveObjectsByForeignType = function (foreign, list)
 end
 
 
---------------------------------------------------------------------------------
-if bamboo.config.fulltext_index_support then require 'mmseg' end
---[[
-local ft_words_manager = '_fulltext_words:%s'
-local ft_rft_pattern = '_RFT:%s'
-local ft_ft_pattern = '_FT:%s:%s'
---]]
-local ft_words_manager = '_fulltext_words:%s:%s'	-- prefix:model:field
-local ft_rft_pattern = '_RFT:%s:%s'			-- prefix:model:id:field
-local ft_ft_pattern = '_FT:%s:%s:%s'			-- prefix:model:field:word
 
 
 
--- Full Text Search utilities
--- @param instance the object to be full text indexes
-local makeFulltextIndexes = function (instance)
-
-	local ftindex_fields = instance['__fulltext_index_fields']
-	if isFalse(ftindex_fields) then return false end
-
-	local words
-	for _, v in ipairs(ftindex_fields) do
-		-- parse the fulltext field value
-		words = mmseg.segment(instance[v])
-		for _, word in ipairs(words) do
-			-- only index word length larger than 1
-			if string.utf8len(word) >= 2 then
-				-- add this word to global word set
-				db:sadd(format(ft_words_manager, instance.__name, v), word)
-				-- add reverse fulltext index such as '_RFT:model:id', type is set, item is 'word'
-				db:sadd(format(ft_rft_pattern, getNameIdPattern(instance), v), word)
-				-- add fulltext index such as '_FT:model:word', type is set, item is 'id'
-				db:sadd(format(ft_ft_pattern, instance.__name, v, word), instance.id)
-			end
-		end
-	end
-
-	return true
-end
-
-
-local wordSegmentOnFieldFtIndex = function (self, field, ask_str)
-	local search_tags = mmseg.segment(ask_str)
-	
-	local fdt = self:getFDT(field)
-	if not fdt.fulltext_index then
-		return List()
-	end
-
-	local tags = List()
-	for _, tag in ipairs(search_tags) do
-		if string.utf8len(tag) >= 2 and db:sismember(format(ft_words_manager, self.__name, field), tag) then
-			tags:append(tag)
-		end
-	end
-	return tags
-end
-
-
-
-local wordSegmentOnFtIndex = function (self, ask_str)
-	local search_tags = mmseg.segment(ask_str)
-	
-	local ftindex_fields = self['__fulltext_index_fields']
-	if isFalse(ftindex_fields) then return {} end
-	
-	local tags = {}
-	for _, field in ipairs(ftindex_fields) do
-		tags[field] = List()
-	end
-
-	for _, tag in ipairs(search_tags) do
-		for _, field in ipairs(ftindex_fields) do
-			if string.utf8len(tag) >= 2 and db:sismember(format(ft_words_manager, self.__name, field), tag) then
-				tags[field]:append(tag)
-			end
-		end
-	end
-	return tags
-end
-
-
--- here, tags is the field specified tags
-local searchOnFieldFulltextIndexes = function (self, field, tags, n, onlyids)
-	if not tags or #tags == 0 then return QuerySet() end
-
-	local rlist = List()
-	local _tmp_key = "__tmp_ftkey"
-	if #tags == 1 then
-		db:sinterstore(_tmp_key, format(ft_ft_pattern, self.__name, field, tags[1]))
-	else
-		local _args = {}
-		for _, tag in ipairs(tags) do
-			table.insert(_args, format(ft_ft_pattern, self.__name, field, tag))
-		end
-		-- XXX, some afraid
-		db:sinterstore(_tmp_key, unpack(_args))
-	end
-
-	local ids = {}
-	if n and type(n) == 'number' and n > 0 then
-		ids = db:sort(_tmp_key, 'LIMIT', 0, n, 'DESC', 'ALPHA')
-	else
-		ids = db:sort(_tmp_key, 'DESC', 'ALPHA')
-	end
-
-	if onlyids == 'onlyids' then
-		return QuerySet(ids)
-	else
-		-- return objects
-		return getFromRedisPipeline(self, ids)
-	end
-end
-
--- here, tags is the field specified tags
-local searchOnFieldFulltextIndexesByOr = function (self, field, tags, n, onlyids)
-	local tag_dict = {}
-	for _, tag in ipairs(tags) do
-		tag_dict[tag] = searchOnFieldFulltextIndexes(self, field, {tag}, nil, 'onlyids')
-	end
-
-	local id_set = Set()
-	for tag, ids in pairs(tag_dict) do
-		id_set = id_set:union(Set(ids))
-	end
-	
-	local results
-	if onlyids == 'onlyids' then
-		results = QuerySet(id_set:members():slice(1, n))
-	else
-		results = getFromRedisPipeline(self, id_set:members():slice(1, n))
-	end
-	
-	return results, tag_dict
-end
-
--- here, tags is the whole tags dict
-local searchOnFulltextIndexes = function (self, tags, n, is_or, standalone)
-	
-	local ftindex_fields = self['__fulltext_index_fields']
-	if isFalse(ftindex_fields) then return QuerySet() end
-	
-	local field_dict = {}
-	if is_or ~= 'or' then
-		for _, field in ipairs(ftindex_fields) do
-			field_dict[field] = searchOnFieldFulltextIndexes(self, field, tags[field], nil, 'onlyids')
-		end
-	else
-		for _, field in ipairs(ftindex_fields) do
-			field_dict[field] = searchOnFieldFulltextIndexesByOr(self, field, tags[field], nil, 'onlyids')
-		end
-	end
-	
-	local results = QuerySet()
-	if standalone == 'standalone' then
-		for k, ids in pairs(field_dict) do
-			results[k] = getFromRedisPipeline(self, ids:slice(1, n))
-		end
-	else
-		local id_set = Set()
-		for k, ids in pairs(field_dict) do
-			id_set = id_set:union(Set(ids))
-		end
-		results = getFromRedisPipeline(self, id_set:members():slice(1, n))
-	end
-	
-	return results, id_dict
-	
---[[
-	if #tags == 0 then return List() end
-
-	local rlist = List()
-	local _tmp_key = "__tmp_ftkey"
-	if #tags == 1 then
-		db:sinterstore(_tmp_key, format(ft_ft_pattern, self.__name, tags[1]))
-	else
-		local _args = {}
-		for _, tag in ipairs(tags) do
-			table.insert(_args, format(ft_ft_pattern, self.__name, tag))
-		end
-		-- XXX, some afraid
-		db:sinterstore(_tmp_key, unpack(_args))
-	end
-
-	local ids
-	if n and type(n) == 'number' and n > 0 then
-		ids = db:sort(_tmp_key, 'LIMIT', 0, n, 'DESC', 'ALPHA')
-	else
-		ids = db:sort(_tmp_key, 'DESC', 'ALPHA')
-	end
-
-	-- return objects
-	return getFromRedisPipeline(self, ids)
---]]
-
-end
-
-
-
-local ft_longwords_manager = '_fulltext_longwords:%s'   -- _fulltext_longwords:model
-local ft_longword_pattern = '_FT_LONGWORD:%s:%s'	-- _FT_LONGWORD:model:lword_part
-
--- self is model name
-local function makeLongWordIndexes (self, longwords)
-	local words
-	for _, longword in ipairs(longwords) do
-		words = mmseg.segment(longword)
-		for _, word in ipairs(words) do
-			db:sadd(format(ft_longwords_manager, self.__name), word)
-			db:sadd(format(ft_longword_pattern, self.__name, word), longword)
-		end
-	end
-	
-	return self
-end
-
-local function didLongWordIndexed (self)
-	local ret = #db:smembers(format(ft_longwords_manager, self.__name))
-	
-	return ret > 0
-end
-
-
-local function searchOnLongWords (self, sentence)
-	local longwords_chosed = List()
-	local i, p, e = 1, 1, 1
-
-	local dataset = Set()
-	local old_dataset = Set()
-	while i <= sentence:utf8len() do
-		-- i = i + 1
-		p = i
-		while true  do
-			local word = sentence:utf8index(i)
-			if word then
-				i = i + 1
-				local is_this_in = db:sismember(format(ft_longwords_manager, self.__name), word)
-				if is_this_in then
-					local thisset = db:smembers(format(ft_longword_pattern, self.__name, word))
-					--db:interstore('__tmp_longkey', format(ft_longword_pattern, self.__name, word))
-					old_dataset = Set(table.copy(dataset))
-					if dataset:size() > 0 then
-						dataset = dataset * Set(thisset)
-					else
-						dataset = Set(thisset)
-					end
-					
-					if dataset:size() == 0 then
-						dataset = old_dataset
-						e = i - 2
-						break
-					end
-					
-
-				else
-					e = i - 2
-					break
-				end
-		
-			else
-				e = i - 1
-				break
-			end
-		end	
-		local words_length = e - p + 1
-		if words_length > 0 then
-			if dataset:size() == 1 then
-				local longword = dataset:members()[1]
-				local thisword = sentence:utf8slice(p, e)
-				if thisword == longword then
-					longwords_chosed:append(longword)
-				end
-			else
-				local longwords = dataset:members()
-				local thisword = sentence:utf8slice(p, e)
-				for _, v in ipairs(longwords) do
-					if thisword == v then
-						longwords_chosed:append(thisword)
-						break
-					end
-				end
-			end
-			dataset = Set()
-		end
-		
-	end
-	
-	return longwords_chosed
-end
-
-
---------------------------------------------------------------------------------
--- The bellow four assertations, they are called only by class, instance or query set
---
--------------------------------------------
--- judge if it is a class
---
-_G['isClass'] = function (t)
-	if t.isClass then
-		if type(t.isClass) == 'function' then
-			return t:isClass()
-		else
-			return false
-		end
-	else
-		return false
-	end
-end
-
--------------------------------------------
--- judge if it is an instance
---
-_G['isInstance'] = function (t)
-	if t.isInstance then
-		if type(t.isInstance) == 'function' then
-			return t:isInstance()
-		else
-			return false
-		end
-	else
-		return false
-	end
-end
-
----------------------------------------------------------------
--- judge if it is an empty object.
--- the empty rules are defined by ourselves, see follows.
---
-_G['isValidInstance'] = function (obj)
-	if isFalse(obj) then return false end
-	checkType(obj, 'table')
-
-	for k, v in pairs(obj) do
-		if type(k) == 'string' then
-			if k ~= 'id' then
-				return true
-			end
-		end
-	end
-
-	return false
-end;
-
-
-_G['isQuerySet'] = function (self)
-	if isList(self)
-	and rawget(self, '__spectype') == nil and self.__spectype == 'QuerySet'
-	and self.__tag == 'Object.Model'
-	then return true
-	else return false
-	end
-end
-
--------------------------------------------------------------
---
-_G['I_AM_QUERY_SET'] = function (self)
-	assert(isQuerySet(self), "[Error] This caller is not a QuerySet.")
-end
-
-_G['I_AM_CLASS'] = function (self)
-	assert(self.isClass, '[Error] The caller is not a valid class.')
-	assert(self:isClass(), '[Error] This function is only allowed to be called by class.')
-end
-
-_G['I_AM_CLASS_OR_QUERY_SET'] = function (self)
-	assert(self.isClass, '[Error] The caller is not a valid class.')
-	assert(self:isClass() or isQuerySet(self), '[Error] This function is only allowed to be called by class or query set.')
-end
-
-_G['I_AM_INSTANCE'] = function (self)
-	assert(self.isInstance, '[Error] The caller is not a valid instance.')
-	assert(self:isInstance(), '[Error] This function is only allowed to be called by instance.')
-end
-
-_G['I_AM_INSTANCE_OR_QUERY_SET'] = function (self)
-	assert(self.isInstance, '[Error] The caller is not a valid instance.')
-	assert(self:isInstance() or isQuerySet(self), '[Error] This function is only allowed to be called by instance or query set.')
-end
-
-_G['I_AM_CLASS_OR_INSTANCE'] = function (self)
-	assert(self.isClass or self.isInstance, '[Error] The caller is not a valid class or instance.')
-	assert(self:isClass() or self:isInstance(), '[Error] This function is only allowed to be called by class or instance.')
-end
-
-
-------------------------------------------------------------------------
--- Query Function Set
--- for convienent, import them into _G directly
-------------------------------------------------------------------------
 local upvalue_collector = {}
-local uglystr = '___hashindex^*_#@[]-+~~!$$$$'
 
-_G['eq'] = function ( cmp_obj )
-	local t = function (v)
-	-- XXX: here we should not open the below line. v can be nil
-		if v == uglystr then return nil, 'eq', cmp_obj; end--only return params
-
-        if v == cmp_obj then
-			return true
-		else
-			return false
-		end
-	end
-	return t
-end
-
-_G['uneq'] = function ( cmp_obj )
-	local t = function (v)
-	-- XXX: here we should not open the below line. v can be nil
-		if v == uglystr then return nil, 'uneq', cmp_obj; end
-
-		if v ~= cmp_obj then
-			return true
-		else
-			return false
-		end
-	end
-	return t
-end
-
-_G['lt'] = function (limitation)
---	limitation = tonumber(limitation) or limitation
-	local t = function (v)
-        if v == uglystr then return nil, 'lt', limitation; end
-
---		local nv = tonumber(v) or v
-		if v and v < limitation then
-			return true
-		else
-			return false
-		end
-	end
-	return t
-end
-
-_G['gt'] = function (limitation)
---	limitation = tonumber(limitation) or limitation
-	local t = function (v)
-        if v == uglystr then return nil, 'gt', limitation; end
-
---		local nv = tonumber(v) or v
-		if v and v > limitation then
-			return true
-		else
-			return false
-		end
-	end
-	return t
-end
-
-
-_G['le'] = function (limitation)
---	limitation = tonumber(limitation) or limitation
-	local t = function (v)
-        if v == uglystr then return nil, 'le', limitation; end
-
---		local nv = tonumber(v) or v
-		if v and v <= limitation then
-			return true
-		else
-			return false
-		end
-	end
-	return t
-end
-
-_G['ge'] = function (limitation)
---	limitation = tonumber(limitation) or limitation
-	local t = function (v)
-        if v == uglystr then return nil, 'ge', limitation; end
-
---		local nv = tonumber(v) or v
-		if v and v >= limitation then
-			return true
-		else
-			return false
-		end
-	end
-	return t
-end
-
-_G['bt'] = function (small, big)
---	small = tonumber(small) or small
---	big = tonumber(big) or big
-	local t = function (v)
-        if v == uglystr then return nil, 'bt', {small, big}; end
-
---		local nv = tonumber(v) or v
-		if v and v > small and v < big then
-			return true
-		else
-			return false
-		end
-	end
-	return t
-end
-
-_G['be'] = function (small, big)
---	small = tonumber(small) or small
---	big = tonumber(big) or big
-	local t = function (v)
-        if v == uglystr then return nil, 'be', {small,big}; end
-
---		local nv = tonumber(v) or v
-		if v and v >= small and v <= big then
-			return true
-		else
-			return false
-		end
-	end
-	return t
-end
-
-_G['outside'] = function (small, big)
---	small = tonumber(small) or small
---	big = tonumber(big) or big
-	local t = function (v)
-        if v == uglystr then return nil, 'outside',{small,big}; end
-
---		local nv = tonumber(v) or v
-		if v and (v < small or v > big) then
-			return true
-		else
-			return false
-		end
-	end
-	return t
-end
-
-_G['contains'] = function (substr)
-	local t = function (v)
-        if v == uglystr then return nil, 'contains', substr; end
-
-		v = tostring(v)
-		if v:contains(substr) then
-			return true
-		else
-			return false
-		end
-	end
-	return t
-end
-
-_G['uncontains'] = function (substr)
-	local t = function (v)
-        if v == uglystr then return nil, 'uncontains', substr; end
-
-		v = tostring(v)
-		if not v:contains(substr) then
-			return true
-		else
-			return false
-		end
-	end
-	return t
-end
-
-
-_G['startsWith'] = function (substr)
-	local t = function (v)
-        if v == uglystr then return nil, 'startsWith', substr; end
-
-		v = tostring(v)
-		if v:startsWith(substr) then
-			return true
-		else
-			return false
-		end
-	end
-	return t
-end
-
-_G['unstartsWith'] = function (substr)
-	local t = function (v)
-        if v == uglystr then return nil, 'unstartsWith', substr; end
-
-		v = tostring(v)
-		if not v:startsWith(substr) then
-			return true
-		else
-			return false
-		end
-	end
-	return t
-end
-
-
-_G['endsWith'] = function (substr)
-	local t = function (v)
-        if v == uglystr then return nil, 'endsWith', substr; end
-		v = tostring(v)
-		if v:endsWith(substr) then
-			return true
-		else
-			return false
-		end
-	end
-	return t
-end
-
-_G['unendsWith'] = function (substr)
-	local t = function (v)
-        if v == uglystr then return nil, 'unendsWith', substr; end
-		v = tostring(v)
-		if not v:endsWith(substr) then
-			return true
-		else
-			return false
-		end
-	end
-	return t
-end
-
-_G['inset'] = function (...)
-	local args = {...}
-	local t = function (v)
-        if v == uglystr then return nil, 'inset', args; end
-		v = tostring(v)
-		for _, val in ipairs(args) do
-			-- once meet one, ok
-			if tostring(val) == v then
-				return true
-			end
-		end
-
-		return false
-	end
-	return t
-end
-
-_G['uninset'] = function (...)
-	local args = {...}
-	local t = function (v)
-        if v == uglystr then return nil, 'uninset', args; end
-		v = tostring(v)
-		for _, val in ipairs(args) do
-			-- once meet one, false
-			if tostring(val) == v then
-				return false
-			end
-		end
-
-		return true
-	end
-	return t
-end
-
--------------------------------------------------------------------
---
 local collectRuleFunctionUpvalues = function (query_args)
 	local upvalues = upvalue_collector
 	for i=1, math.huge do
@@ -1572,7 +903,7 @@ local updateInstanceToIndexOnRule = function (self, qstr)
 
 	local manager_key = rule_manager_prefix .. self.__name
 	local score = db:zscore(manager_key, qstr)
-	local item_key = rule_result_pattern:format(self.__name, math.floor(score))
+	local item_key = rule_result_pattern:format(self.__name, score)
 
 	local flag, cmpid, p = canInstanceFitQueryRuleAndFindProperPosition(self, qstr)
 	local success
@@ -1607,10 +938,6 @@ local updateInstanceToIndexOnRule = function (self, qstr)
 			if db:exists(item_key) then
 				-- delete the old one id
 				db:lrem(item_key, 1, self.id)
-				-- if delete to empty list, update the rule score to float
---				if not db:exists(item_key) then
---					db:zadd(manager_key, score + 0.1, qstr)
---				end
 			end
 --]]
 		end
@@ -1625,16 +952,12 @@ local delInstanceToIndexOnRule = function (self, qstr)
 
 	local manager_key = rule_manager_prefix .. self.__name
 	local score = db:zscore(manager_key, qstr)
-	local item_key = rule_result_pattern:format(self.__name, math.floor(score))
+	local item_key = rule_result_pattern:format(self.__name, score)
 
 	local options = { watch = item_key, retry = 2 }
 	db:transaction(function(db)
 		if db:exists(item_key) then
 			db:lrem(item_key, 0, self.id)
-			-- if delete to empty list, update the rule score to float
---			if not db:exists(item_key) then
---				db:zadd(manager_key, score + 0.1, qstr)
---			end
 		end
 		-- db:expire(item_key, bamboo.config.rule_expiration or bamboo.RULE_LIFE)
 	end, options)
@@ -1678,7 +1001,7 @@ local addIndexToManager = function (self, str_iden, obj_list)
 	end
 	if #obj_list == 0 then return end
 
-	local item_key = rule_result_pattern:format(self.__name, math.floor(new_score))
+	local item_key = rule_result_pattern:format(self.__name, new_score)
 	local options = { watch = item_key, retry = 2 }
 	db:transaction(function(db)
 		if not db:exists(item_key) then
@@ -1702,13 +1025,6 @@ local getIndexFromManager = function (self, str_iden, getnum)
 		return nil
 	end
 
-	-- if score is float, means its rule result is empty, return empty query set
---[[	if score % 1 ~= 0 then
-		return (not getnum) and List() or 0
-	end
---]]
-	-- score is integer, not float, and rule result doesn't exist, means its rule result is expired now,
-	-- need to retreive again, so return nil
 	local item_key = rule_result_pattern:format(self.__name, score)
 	if not db:exists(item_key) then
 		return List()
@@ -1717,12 +1033,12 @@ local getIndexFromManager = function (self, str_iden, getnum)
 	-- update expiration
 	-- db:expire(item_key, bamboo.config.rule_expiration or bamboo.RULE_LIFE)
 	-- rule result is not empty, and not expired, retrieve them
-	if not getnum then
-		-- return a list
-		return List(db:lrange(item_key, 0, -1))
-	else
+	if getnum then
 		-- return the number of this list
 		return db:llen(item_key)
+	else
+		-- return a list
+		return List(db:lrange(item_key, 0, -1))
 	end
 end
 
@@ -1776,11 +1092,6 @@ local processBeforeSave = function (self, params)
 
     return self, store_kv
 end
-
-
-------------------------------------------------------------------------
---
-------------------------------------------------------------------------
 
 
 ------------------------------------------------------------------------
@@ -1999,10 +1310,10 @@ Model = Object:extend {
 	-- return all the keys belong to this Model (or this model's parent model)
 	-- all elements in returning list are string
 	--
-	allKeys = function (self)
-		I_AM_CLASS(self)
-		return db:keys(self.__name + ':*')
-	end;
+--	allKeys = function (self)
+--		I_AM_CLASS(self)
+--		return db:keys(self.__name + ':*')
+--	end;
 
 	-- return the actual number of the instances
 	--
@@ -2319,490 +1630,45 @@ Model = Object:extend {
 		return self:filter(query_args, 1, -1, nil, 'count')
 	end;
 
-	-------------------------------------------------------------------
-	-- CUSTOM API
-	--- seven APIs
-	-- 1. setCustom
-	-- 2. getCustom
-	-- 3. delCustom
-	-- 4. existCustom
-	-- 5. updateCustom
-	-- 6. addCustomMember
-	-- 7. removeCustomMember
-	-- 8. hasCustomMember
-	-- 9. numCustom
 
-    -- 10. incrCustom   only number
-    -- 11. decrCustom   only number
-	--
-	--- five store type
-	-- 1. string
-	-- 2. list
-	-- 3. set
-	-- 4. zset
-	-- 5. hash
-    -- 6. fifo   , scores is the length of fifo
-	-------------------------------------------------------------------
-
-	-- store customize key-value pair to db
-	-- now: st is string, and value is number
-    -- if no this key, the value is 0 before performing the operation
-    incrCustom = function(self,key,step)
-		I_AM_CLASS_OR_INSTANCE(self)
-		checkType(key, 'string')
-		local custom_key = self:isClass() and getCustomKey(self, key) or getCustomIdKey(self, key)
-        db:incrby(custom_key,step or 1)
-    end;
-    decrCustom = function(self,key,step)
-		I_AM_CLASS_OR_INSTANCE(self)
-		checkType(key, 'string')
-		local custom_key = self:isClass() and getCustomKey(self, key) or getCustomIdKey(self, key)
-        db:decrby(custom_key,step or 1);
-    end;
-
-	-- store customize key-value pair to db
-	-- now: it support string, list and so on
-    -- if fifo ,the scores is the length of the fifo
-	setCustom = function (self, key, val, st, scores)
-		I_AM_CLASS_OR_INSTANCE(self)
-		checkType(key, 'string')
-		local custom_key = self:isClass() and getCustomKey(self, key) or getCustomIdKey(self, key)
-
-		if not st or st == 'string' then
-			assert( type(val) == 'string' or type(val) == 'number',
-					"[Error] @setCustom - In the string mode of setCustom, val should be string or number.")
-			rdstring.save(custom_key, val)
-		else
-			-- checkType(val, 'table')
-			local store_module = getStoreModule(st)
-			store_module.save(custom_key, val, scores)
-		end
-
-		return self
-	end;
-
-	setCustomQuerySet = function (self, key, query_set, scores)
-		I_AM_CLASS_OR_INSTANCE(self)
-		I_AM_QUERY_SET(query_set)
-		checkType(key, 'string')
-
-		if type(scores) == 'table' then
-			local ids = {}
-			for i, v in ipairs(query_set) do
-				tinsert(ids, v.id)
-			end
-			self:setCustom(key, ids, 'zset', scores)
-		else
-			local ids = {}
-			for i, v in ipairs(query_set) do
-				tinsert(ids, v.id)
-			end
-			self:setCustom(key, ids, 'list')
-		end
-
-		return self
-	end;
-
-	--
-	getCustomKey = function (self, key)
-		I_AM_CLASS_OR_INSTANCE(self)
-		checkType(key, 'string')
-		local custom_key = self:isClass() and getCustomKey(self, key) or getCustomIdKey(self, key)
-
-		return custom_key, db:type(custom_key)
-	end;
-
-	--
-	getCustom = function (self, key, atype, start, stop, is_rev)
-		I_AM_CLASS_OR_INSTANCE(self)
-		checkType(key, 'string')
-		local custom_key = self:isClass() and getCustomKey(self, key) or getCustomIdKey(self, key)
-		if not db:exists(custom_key) then
-			print(("[Warning] @getCustom - Key %s doesn't exist!"):format(custom_key))
-			if not atype or atype == 'string' then return nil
-			elseif atype == 'list' then
-				return List()
-			else
-				-- TODO: need to seperate every type
-				return {}
-			end
-		end
-
-		-- get the store type in redis
-		local store_type = db:type(custom_key)
-		if atype then assert(store_type == atype, '[Error] @getCustom - The specified type is not equal the type stored in db.') end
-		local store_module = getStoreModule(store_type)
-		local ids, scores = store_module.retrieve(custom_key)
-
-		if type(ids) == 'table' and (start or stop) then
-			ids = ids:slice(start, stop, is_rev)
-			if type(scores) == 'table' then
-				scores = scores:slice(start, stop, is_rev)
-			end
-		end
-
-		return ids, scores
-	end;
-
-	getCustomQuerySet = function (self, key, start, stop, is_rev)
-		I_AM_CLASS_OR_INSTANCE(self)
-		checkType(key, 'string')
-		local query_set_ids, scores = self:getCustom(key, nil, start, stop, is_rev)
-		if isFalse(query_set_ids) then
-			return QuerySet(), nil
-		else
-			local query_set, nils = getFromRedisPipeline(self, query_set_ids)
-
-			if bamboo.config.auto_clear_index_when_get_failed then
-				if not isFalse(nils) then
-					for _, v in ipairs(nils) do
-						self:removeCustomMember(key, v)
-					end
-				end
-			end
-
-			return query_set, scores
-		end
-	end;
-
-	delCustom = function (self, key)
-		I_AM_CLASS_OR_INSTANCE(self)
-		checkType(key, 'string')
-		local custom_key = self:isClass() and getCustomKey(self, key) or getCustomIdKey(self, key)
-
-		return db:del(custom_key)
-	end;
-
-	-- check whether exist custom key
-	existCustom = function (self, key)
-		I_AM_CLASS_OR_INSTANCE(self)
-		checkType(key, 'string')
-		local custom_key = self:isClass() and getCustomKey(self, key) or getCustomIdKey(self, key)
-
-		if not db:exists(custom_key) then
-			return false
-		else
-			return true
-		end
-	end;
-
-	updateCustom = function (self, key, val)
-		I_AM_CLASS_OR_INSTANCE(self)
-		checkType(key, 'string')
-		local custom_key = self:isClass() and getCustomKey(self, key) or getCustomIdKey(self, key)
-
-		if not db:exists(custom_key) then print('[Warning] @updateCustom - This custom key does not exist.'); return nil end
-		local store_type = db:type(custom_key)
-		local store_module = getStoreModule(store_type)
-		return store_module.update(custom_key, val)
-
-	end;
-
-	removeCustomMember = function (self, key, val)
-		I_AM_CLASS_OR_INSTANCE(self)
-		checkType(key, 'string')
-		local custom_key = self:isClass() and getCustomKey(self, key) or getCustomIdKey(self, key)
-
-		if not db:exists(custom_key) then print('[Warning] @removeCustomMember - This custom key does not exist.'); return nil end
-		local store_type = db:type(custom_key)
-		local store_module = getStoreModule(store_type)
-		return store_module.remove(custom_key, val)
-
-	end;
-
-	addCustomMember = function (self, key, val, stype, score)
-		I_AM_CLASS_OR_INSTANCE(self)
-		checkType(key, 'string')
-		local custom_key = self:isClass() and getCustomKey(self, key) or getCustomIdKey(self, key)
-
-		if not db:exists(custom_key) then print('[Warning] @addCustomMember - This custom key does not exist.'); end
-		local store_type = db:type(custom_key) ~= 'none' and db:type(custom_key) or stype
-		local store_module = getStoreModule(store_type)
-		return store_module.add(custom_key, val, score)
-
-	end;
-
-	hasCustomMember = function (self, key, mem)
-		I_AM_CLASS_OR_INSTANCE(self)
-		checkType(key, 'string')
-		local custom_key = self:isClass() and getCustomKey(self, key) or getCustomIdKey(self, key)
-
-		if not db:exists(custom_key) then print('[Warning] @hasCustomMember - This custom key does not exist.'); return nil end
-		local store_type = db:type(custom_key)
-		local store_module = getStoreModule(store_type)
-		return store_module.has(custom_key, mem)
-
-	end;
-
-	numCustom = function (self, key)
-		I_AM_CLASS_OR_INSTANCE(self)
-		checkType(key, 'string')
-		local custom_key = self:isClass() and getCustomKey(self, key) or getCustomIdKey(self, key)
-
-		if not db:exists(custom_key) then return 0 end
-		local store_type = db:type(custom_key)
-		local store_module = getStoreModule(store_type)
-		return store_module.num(custom_key)
-	end;
-
-	-----------------------------------------------------------------
-	-- Cache API
-	--- seven APIs
-	-- 1. setCache
-	-- 2. getCache
-	-- 3. delCache
-	-- 4. existCache
-	-- 5. addCacheMember
-	-- 6. removeCacheMember
-	-- 7. hasCacheMember
-	-- 8. numCache
-	-- 9. lifeCache
-	-----------------------------------------------------------------
-	setCache = function (self, key, vals, orders)
-		I_AM_CLASS(self)
-		checkType(key, 'string')
-		local cache_key = getCacheKey(self, key)
-		local cachetype_key = getCachetypeKey(self, key)
-
-		if type(vals) == 'string' or type(vals) == 'number' then
-			db:set(cache_key, vals)
-		else
-			-- checkType(vals, 'table')
-			local new_vals = {}
-			-- if `vals` is a list, insert its element's id into `new_vals`
-			-- ignore the uncorrent element
-
-			-- elements in `vals` are ordered, but every element itself is not
-			-- nessesary containing enough order info.
-			-- for number, it contains enough
-			-- for others, it doesn't contain enough
-			-- so, we use `orders` to specify the order info
-			if #vals >= 1 then
-				if isValidInstance(vals[1]) then
-					-- save instances' id
-					for i, v in ipairs(vals) do
-						table.insert(new_vals, v.id)
-					end
-
-					db:set(cachetype_key, 'instance')
-				else
-					new_vals = vals
-					db:set(cachetype_key, 'general')
-				end
-			end
-
-			rdzset.save(cache_key, new_vals, orders)
-		end
-
-		-- set expiration
-		db:expire(cache_key, bamboo.config.cache_life or bamboo.CACHE_LIFE)
-		db:expire(cachetype_key, bamboo.config.cache_life or bamboo.CACHE_LIFE)
-
-	end;
-
-
-	getCache = function (self, key, start, stop, is_rev)
-		I_AM_CLASS(self)
-		checkType(key, 'string')
-		local cache_key = getCacheKey(self, key)
-		local cachetype_key = getCachetypeKey(self, key)
-
-		local cache_data_type = db:type(cache_key)
-		local cache_data
-		if cache_data_type == 'string' then
-			cache_data = db:get(cache_key)
-			if isFalse(cache_data) then return nil end
-		elseif cache_data_type == 'zset' then
-			cache_data = rdzset.retrieve(cache_key)
-			if start or stop then
-				cache_data = cache_data:slice(start, stop, is_rev)
-			end
-			if isFalse(cache_data) then return List() end
-		end
-
-
-		local cachetype = db:get(cachetype_key)
-		if cachetype and cachetype == 'instance' then
-			-- if cached instance, return instance list
-			local cache_objects = getFromRedisPipeline(self, cache_data)
-
-			return cache_objects
-		else
-			-- else return element list directly
-			return cache_data
-		end
-
-		db:expire(cache_key, bamboo.config.cache_life or bamboo.CACHE_LIFE)
-		db:expire(cachetype_key, bamboo.config.cache_life or bamboo.CACHE_LIFE)
-
-	end;
-
-	delCache = function (self, key)
-		I_AM_CLASS(self)
-		checkType(key, 'string')
-		local cache_key = getCacheKey(self, key)
-		local cachetype_key = getCachetypeKey(self, key)
-
-		db:del(cachetype_key)
-		return db:del(cache_key)
-
-	end;
-
-	-- check whether exist cache key
-	existCache = function (self, key)
-		I_AM_CLASS(self)
-		local cache_key = getCacheKey(self, key)
-
-		return db:exists(cache_key)
-	end;
-
-	--
-	addCacheMember = function (self, key, val, score)
-		I_AM_CLASS(self)
-		checkType(key, 'string')
-		local cache_key = getCacheKey(self, key)
-		local cachetype_key = getCachetypeKey(self, key)
-
-		local store_type = db:type(cache_key)
-
-		if store_type == 'zset' then
-			if cachetype_key == 'instance' then
-				-- `val` is instance
-				checkType(val, 'table')
-				if isValidInstance(val) then
-					rdzset.add(cache_key, val.id, score)
-				end
-			else
-				-- `val` is string or number
-				rdzset.add(cache_key, tostring(val), score)
-			end
-		elseif store_type == 'string' then
-			db:set(cache_key, val)
-		end
-
-		db:expire(cache_key, bamboo.config.cache_life or bamboo.CACHE_LIFE)
-		db:expire(cachetype_key, bamboo.config.cache_life or bamboo.CACHE_LIFE)
-
-	end;
-
-	removeCacheMember = function (self, key, val)
-		I_AM_CLASS(self)
-		checkType(key, 'string')
-		local cache_key = getCacheKey(self, key)
-		local cachetype_key = getCachetypeKey(self, key)
-
-		local store_type = db:type(cache_key)
-
-		if store_type == 'zset' then
-			if cachetype_key == 'instance' then
-				-- `val` is instance
-				checkType(val, 'table')
-				if isValidInstance(val) then
-					rdzset.remove(cache_key, val.id)
-				end
-			else
-				-- `val` is string or number
-				rdzset.remove(cache_key, tostring(val))
-			end
-
-		elseif store_type == 'string' then
-			db:set(cache_key, '')
-		end
-
-		db:expire(cache_key, bamboo.config.cache_life or bamboo.CACHE_LIFE)
-		db:expire(cachetype_key, bamboo.config.cache_life or bamboo.CACHE_LIFE)
-
-	end;
-
-	hasCacheMember = function (self, key, mem)
-		I_AM_CLASS(self)
-		checkType(key, 'string')
-		local cache_key = getCacheKey(self, key)
-		local cachetype_key = getCachetypeKey(self, key)
-
-		local store_type = db:type(cache_key)
-
-		if store_type == 'zset' then
-			if cachetype_key == 'instance' then
-				-- `val` is instance
-				checkType(mem, 'table')
-				if isValidInstance(val) then
-					return rdzset.has(cache_key, val.id)
-				end
-			else
-				-- `val` is string or number
-				return rdzset.has(cache_key, tostring(mem))
-			end
-
-		elseif store_type == 'string' then
-			return db:get(cache_key) == mem
-		end
-
-		db:expire(cache_key, bamboo.config.cache_life or bamboo.CACHE_LIFE)
-		db:expire(cachetype_key, bamboo.config.cache_life or bamboo.CACHE_LIFE)
-	end;
-
-	numCache = function (self, key)
-		I_AM_CLASS(self)
-
-		local cache_key = getCacheKey(self, key)
-		local cachetype_key = getCachetypeKey(self, key)
-
-		db:expire(cache_key, bamboo.config.cache_life or bamboo.CACHE_LIFE)
-		db:expire(cachetype_key, bamboo.config.cache_life or bamboo.CACHE_LIFE)
-
-		local store_type = db:type(cache_key)
-		if store_type == 'zset' then
-			return rdzset.num(cache_key)
-		elseif store_type == 'string' then
-			return 1
-		end
-	end;
-
-	lifeCache = function (self, key)
-		I_AM_CLASS(self)
-		checkType(key, 'string')
-		local cache_key = getCacheKey(self, key)
-
-		return db:ttl(cache_key)
-	end;
-
+	
+	
 	-- delete self instance object
-    -- self can be instance or query set
-    delById = function (self, ids)
+	    -- self can be instance or query set
+	delById = function (self, ids)
 		I_AM_CLASS(self)
 		if bamboo.config.use_fake_deletion == true then
 			return self:fakeDelById(ids)
 		else
 			return self:trueDelById(ids)
 		end
-    end;
+	end;
 
-    fakeDelById = function (self, ids)
-    	local idtype = type(ids)
-    	if idtype == 'table' then
-	    for _, v in ipairs(ids) do
-		v = tostring(v)
-		fakedelFromRedis(self, v)
+	    fakeDelById = function (self, ids)
+		local idtype = type(ids)
+		if idtype == 'table' then
+		    for _, v in ipairs(ids) do
+			v = tostring(v)
+			fakedelFromRedis(self, v)
 
-	    end
-	else
-	    fakedelFromRedis(self, tostring(ids))
-    	end
-    end;
+		    end
+		else
+		    fakedelFromRedis(self, tostring(ids))
+		end
+	    end;
 
-    trueDelById = function (self, ids)
-    	local idtype = type(ids)
-    	if idtype == 'table' then
-	    for _, v in ipairs(ids) do
-		v = tostring(v)
-		delFromRedis(self, v)
+	    trueDelById = function (self, ids)
+		local idtype = type(ids)
+		if idtype == 'table' then
+		    for _, v in ipairs(ids) do
+			v = tostring(v)
+			delFromRedis(self, v)
 
-	    end
-	else
-	    delFromRedis(self, tostring(ids))
-    	end
-    end;
+		    end
+		else
+		    delFromRedis(self, tostring(ids))
+		end
+	    end;
 
 
 
@@ -3104,7 +1970,7 @@ Model = Object:extend {
 	--
 	--
 	--
-	getForeign = function (self, field, start, stop, is_rev)
+	getForeign = function (self, field, start, stop, is_rev, onlyids)
 		I_AM_INSTANCE(self)
 		checkType(field, 'string')
 		local fld = self.__fields[field]
@@ -3437,6 +2303,8 @@ Model = Object:extend {
 	classname = function (self)
 		return getClassName(self)
 	end;
+	
+	getClassName = getClassName;
 
 	-- do sort on query set by some field
 	sortBy = function (self, ...)
@@ -3523,147 +2391,7 @@ Model = Object:extend {
 		return self
 	end;
 
-	addToCacheAndSortBy = function (self, cache_key, field, sort_func)
-		I_AM_INSTANCE(self)
-		checkType(cache_key, field, 'string', 'string')
 
-		--DEBUG(cache_key)
-		--DEBUG('entering addToCacheAndSortBy')
-		local cache_saved_key = getCacheKey(self, cache_key)
-		if not db:exists(cache_saved_key) then
-			print('[WARNING] The cache is missing or expired.')
-			return nil
-		end
-
-		local cached_ids = db:zrange(cache_saved_key, 0, -1)
-		local head = db:hget(getNameIdPattern2(self, cached_ids[1]), field)
-		local tail = db:hget(getNameIdPattern2(self, cached_ids[#cached_ids]), field)
-		assert(head and tail, "[Error] @addToCacheAndSortBy. the object referring to head or tail of cache list may be deleted, please check.")
-		--DEBUG(head, tail)
-		local order_type = 'asc'
-		local field_value, stop_id
-		local insert_position = 0
-
-		if head > tail then order_type = 'desc' end
-		-- should always keep `a` and `b` have the same type
-		local sort_func = sort_func or function (a, b)
-			if order_type == 'asc' then
-				return a > b
-			elseif order_type == 'desc' then
-				return a < b
-			end
-		end
-
-		--DEBUG(order_type)
-		-- find the inserting position
-		-- FIXME: use 2-part searching method is better
-		for i, id in ipairs(cached_ids) do
-			field_value = db:hget(getNameIdPattern2(self, id), field)
-			if sort_func(field_value, self[field]) then
-				stop_id = db:hget(getNameIdPattern2(self, id), 'id')
-				insert_position = i
-				break
-			end
-		end
-		--DEBUG(insert_position)
-
-		local new_score
-		if insert_position == 0 then
-			-- means till the end, all element is smaller than self.field
-			-- insert_position = #cached_ids
-			-- the last element's score + 1
-			local _, scores = db:zrange(cache_saved_key, -1, -1, 'withscores')
-			local end_score = scores[1]
-			new_score = end_score + 1
-
-		elseif insert_position == 1 then
-			-- get the half of the first element
-			local stop_score = db:zscore(cache_saved_key, stop_id)
-			new_score = tonumber(stop_score) / 2
-		elseif insert_position > 1 then
-			-- get the middle value of the left and right neighbours
-			local stop_score = db:zscore(cache_saved_key, stop_id)
-			local stopprev_rank = db:zrank(cache_saved_key, stop_id) - 1
-			local _, scores = db:zrange(cache_saved_key, stopprev_rank, stopprev_rank, 'withscores')
-			local stopprev_score = scores[1]
-			new_score = tonumber(stop_score + stopprev_score) / 2
-
-		end
-
-		--DEBUG(new_score)
-		-- add new element to cache
-		db:zadd(cache_saved_key, new_score, self.id)
-
-
-		return self
-	end;
-
-
-	--------------------------------------------------------------------------
-	-- Dynamic Field API
-	--------------------------------------------------------------------------
-
-	-- called by model
-	addDynamicField = function (self, field_name, field_dt)
-		I_AM_CLASS(self)
-		checkType(field_name, field_dt, 'string', 'table')
-
-
-		local fields = self.__fields
-		if not fields then print('[Warning] This model has no __fields.'); return nil end
-		-- if already exist, can not override it
-		-- ensure the added is new field
-		if not fields[field_name] then
-			fields[field_name] = field_dt
-			-- record to db
-			local key = getDynamicFieldKey(self, field_name)
-			for k, v in pairs(field_dt) do
-				db:hset(key, k, serialize(v))
-			end
-			-- add to dynamic field index list
-			db:rpush(getDynamicFieldIndex(self), field_name)
-		end
-
-	end;
-
-	hasDynamicField = function (self)
-		I_AM_CLASS(self)
-		local dfindex = getDynamicFieldIndex(self)
-		if db:exists(dfindex) and db:llen(dfindex) > 0 then
-			return true
-		else
-			return false
-		end
-	end;
-
-	delDynamicField = function (self, field_name)
-		I_AM_CLASS(self)
-		checkType(field_name, 'string')
-		local dfindex = getDynamicFieldIndex(self)
-		local dfield = getDynamicFieldKey(self, field_name)
-		-- get field description table
-		db:del(dfield)
-		db:lrem(dfindex, 0, field_name)
-		self.__fields[field_name] = nil
-
-		return self
-	end;
-
-	importDynamicFields = function (self)
-		I_AM_CLASS(self)
-		local dfindex = getDynamicFieldIndex(self)
-		local dfields_list = db:lrange(dfindex, 0, -1)
-
-		for _, field_name in ipairs(dfields_list) do
-			local dfield = getDynamicFieldKey(self, field_name)
-			-- get field description table
-			local data = db:hgetall(dfield)
-			-- add new field to __fields
-			self.__fields[field_name] = data
-		end
-
-		return self
-	end;
 
 	querySetIds = function (self)
 		I_AM_QUERY_SET(self)
@@ -3694,63 +2422,6 @@ Model = Object:extend {
 	end;
 	
 
-	makeFulltextIndexes = function (self)
-		I_AM_CLASS(self)
-		self:all():each(function (instance) makeFulltextIndexes(instance) end)
-		return true
-	end;
-	
-	-- for fulltext index API
-	fulltextSearch = function (self, ask_str, n)
-		I_AM_CLASS(self)
-		local tags = wordSegmentOnFtIndex(self, ask_str)
-		return searchOnFulltextIndexes(self, tags, n)
-	end;
-
-	-- for fulltext index API
-	fulltextSearchByOr = function (self, ask_str, n)
-		I_AM_CLASS(self)
-		local tags = wordSegmentOnFtIndex(self, ask_str)
-		return searchOnFulltextIndexes(self, tags, n, 'or')
-	end;
-
-	-- for fulltext index API
-	fulltextSearchByFieldByOr = function (self, field, ask_str, n)
-		I_AM_CLASS(self)
-		local tags = wordSegmentOnFieldFtIndex(self, field, ask_str)
-		return searchOnFieldFulltextIndexesByOr(self, field, tags, n)
-	end;
-
-	-- for fulltext index API
-	fulltextSearchByField = function (self, field, ask_str, n)
-		I_AM_CLASS(self)
-		local tags = wordSegmentOnFieldFtIndex(self, field, ask_str)
-		return searchOnFieldFulltextIndexes(self, field, tags, n)
-	end;
-
-	-- for fulltext index API
-	fulltextSearchByWord = function (self, word, n)
-		I_AM_CLASS(self)
-		local ftindex_fields = self['__fulltext_index_fields']
-		if isFalse(ftindex_fields) then return QuerySet() end
-	
-		local tags = {}
-		for _, field in ipairs(ftindex_fields) do
-			tags[field] = {word}
-		end
-		return searchOnFulltextIndexes(self, tags, n)
-	end;
-
-	-- for fulltext index API
-	fulltextSearchByFieldByWord = function (self, field, word, n)
-		I_AM_CLASS(self)
-		return searchOnFieldFulltextIndexes(self, field, {word}, n)
-	end;
-
-	makeLongWordIndexes = makeLongWordIndexes;
-	searchOnLongWords = searchOnLongWords;
-	didLongWordIndexed = didLongWordIndexed;
-	
 	getFDT = function (self, field)
 		I_AM_CLASS_OR_INSTANCE(self)
 		checkType(field, 'string')

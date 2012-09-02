@@ -349,11 +349,6 @@ registerModel = function (model)
 	if not MODEL_LIST[model_name] then
 		MODEL_LIST[model_name] = model
 
-		-- dynamic fields
-		if model:hasDynamicField() then
-			model:importDynamicFields()
-		end
-		
 		-- set metatable for each field
 		for field, fdt in pairs(model.__fields) do
 			setmetatable(fdt, {__index = FieldType[fdt.widget_type or 'text']})
