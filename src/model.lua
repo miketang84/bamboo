@@ -1208,7 +1208,7 @@ Model = Object:extend {
 		local index_key = getIndexKey(self)
 		-- id is the score of that index value
 		local rank = db:zrank(index_key, tostring(name))
-		return tonumber(rank)
+		return tonumber(rank) + 1 
 	end;
 
 	getIdByPrimaryKey = function (self, name)
@@ -1236,6 +1236,20 @@ Model = Object:extend {
 		if not id then return nil end
 
 		return self:getById (id)
+	end;
+
+	-- return the location of 'name' in index
+	getByRank = function (self, rank_index)
+		I_AM_CLASS(self)
+		
+		if rank_index > 0 then 
+			rank_index = rank_index - 1
+		end
+		
+		local index_key = getIndexKey(self)
+		-- id is the score of that index value
+		local _, ids = db:zrange(index_key, rank_index, rank_index, 'withscores')
+		return self:getById(ids[1])
 	end;
 
 	getById = function (self, id)
