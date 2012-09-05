@@ -1,13 +1,20 @@
 
-
-
-
---------------------------------------------------------------------------------
 if bamboo.config.fulltext_index_support then require 'mmseg' end
 local ft_words_manager = '_fulltext_words:%s:%s'	-- prefix:model:field
 local ft_rft_pattern = '_RFT:%s:%s'			-- prefix:model:id:field
 local ft_ft_pattern = '_FT:%s:%s:%s'			-- prefix:model:field:word
 
+local clearFtIndexesOnDeletion = function (instance)
+	local model_key = getNameIdPattern(instance)
+	local words = db:smembers('_RFT:' + model_key)
+	db:pipeline(function (p)
+		for _, word in ipairs(words) do
+			p:srem(format('_FT:%s:%s', instance.__name, word), model_key)
+		end
+	end)
+	-- clear the reverse fulltext key
+	db:del('_RFT:' + model_key)
+end
 
 
 -- Full Text Search utilities

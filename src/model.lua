@@ -18,6 +18,26 @@ local rdzfifo = require 'bamboo.redis.zfifo'
 local rdhash = require 'bamboo.redis.hash'
 
 
+
+-- can be called by instance and class
+local isUsingFulltextIndex = function (self)
+	local model = self
+	if isInstance(self) then model = getModelByName(self:getClassName()) end
+	if bamboo.config.fulltext_index_support and rawget(model, '__use_fulltext_index') then
+		return true
+	else
+		return false
+	end
+end
+
+local isUsingRuleIndex = function ()
+	if bamboo.config.rule_index_support == false then
+		return false
+	end
+	return true
+end
+
+
 local getModelByName  = bamboo.getModelByName
 local dcollector= 'DELETED:COLLECTOR'
 local rule_manager_prefix = '_RULE_INDEX_MANAGER:'
@@ -112,7 +132,7 @@ end
 -----------------------------------------------------------------
 
 local function getCounterName(self)
-	return self.__name + ':__counter'
+	return format("%s:__counter", self.__name)
 end
 
 -- return a string
@@ -121,19 +141,19 @@ local function getCounter(self)
 end;
 
 local function getNameIdPattern(self)
-	return self.__name + ':' + self.id
+	return format("%s:%s", self.__name, self.id)
 end
 
 local function getNameIdPattern2(self, id)
-	return self.__name + ':' + tostring(id)
+	return format("%s:%s", self.__name, tostring(id))
 end
 
 local function getFieldPattern(self, field)
-	return getNameIdPattern(self) + ':' + field
+	return format("%s:%s:%s", self.__name, self.id, field)
 end
 
 local function getFieldPattern2(self, id, field)
-	return getNameIdPattern2(self, id) + ':' + field
+	return format("%s:%s:%s", self.__name, id, field)
 end
 
 -- return the key of some string like 'User'
@@ -145,11 +165,7 @@ end
 -- return the key of some string like 'User:__index'
 --
 local function getIndexKey(self)
-	return getClassName(self) + ':__index'
-end
-
-local function getClassIdPattern(self)
-	return getClassName(self) + self.id
+	return format("%s:__index", self.__name)
 end
 
 local function makeModelKeyList(self, ids)
@@ -161,27 +177,6 @@ local function makeModelKeyList(self, ids)
 end
 
 
--- can be called by instance and class
-local isUsingFulltextIndex = function (self)
-	local model = self
-	if isInstance(self) then model = getModelByName(self:classname()) end
-	if bamboo.config.fulltext_index_support and rawget(model, '__use_fulltext_index') then
-		return true
-	else
-		return false
-	end
-end
-
-local isUsingRuleIndex = function ()
-	if bamboo.config.rule_index_support == false then
-		return false
-	end
-	return true
-end
-
-local specifiedRulePrefix = function ()
-	return rule_manager_prefix, rule_query_result_pattern
-end
 
 -- in model global index cache (backend is zset),
 -- check the existance of some member by its id (score)
@@ -228,7 +223,7 @@ local makeObject = function (self, data)
 		checkType(fld, 'table')
 		-- convert the number type field
 
-    	if fld.foreign then
+		if fld.foreign then
 			local st = fld.st
 			-- in redis, we don't save MANY foreign key in db, but we want to fill them when
 			-- form lua object
@@ -238,15 +233,15 @@ local makeObject = function (self, data)
 				data[k] = 'FOREIGN FIFO ' .. fld.foreign
 			elseif st == 'ZFIFO' then
 				data[k] = 'FOREIGN ZFIFO ' .. fld.foreign
-      		elseif st == 'LIST' then
-        		data[k] = 'FOREIGN LIST ' .. fld.foreign
-      		end
-    	else
-      		if fld.type == 'number' then
-        		data[k] = tonumber(data[k])
+			elseif st == 'LIST' then
+				data[k] = 'FOREIGN LIST ' .. fld.foreign
+			end
+		else
+			if fld.type == 'number' then
+				data[k] = tonumber(data[k])
 			elseif fld.type == 'boolean' then
 				data[k] = data[k] == 'true' and true or false
-			end
+				end
 		end
 
 	end
@@ -258,20 +253,6 @@ local makeObject = function (self, data)
 	return obj
 
 end
-
-
-local clearFtIndexesOnDeletion = function (instance)
-	local model_key = getNameIdPattern(instance)
-	local words = db:smembers('_RFT:' + model_key)
-	db:pipeline(function (p)
-		for _, word in ipairs(words) do
-			p:srem(format('_FT:%s:%s', instance.__name, word), model_key)
-		end
-	end)
-	-- clear the reverse fulltext key
-	db:del('_RFT:' + model_key)
-end
-
 
 
 ------------------------------------------------------------
@@ -422,6 +403,7 @@ local delFromRedis = function (self, id)
 	-- release the lua object
 	self = nil
 end
+bamboo.internals['delFromRedis'] = delFromRedis
 
 --------------------------------------------------------------
 -- Fake Deletion
@@ -431,10 +413,10 @@ local fakedelFromRedis = function (self, id)
 	local model_key = id and getNameIdPattern2(self, id) or getNameIdPattern(self)
 	local index_key = getIndexKey(self)
 
-    --del hash index
-    if bamboo.config.index_hash then
-        mih.indexDel(self);
-    end
+	--del hash index
+	if bamboo.config.index_hash then
+		mih.indexDel(self);
+	end
 
 	local fields = self.__fields
 	-- in redis, delete the associated foreign key-value store
@@ -467,6 +449,8 @@ local fakedelFromRedis = function (self, id)
 	-- release the lua object
 	self = nil
 end
+bamboo.internals['fakedelFromRedis'] = fakedelFromRedis
+
 
 --------------------------------------------------------------
 -- Restore Fake Deletion
@@ -523,6 +507,11 @@ end
 
 
 
+local specifiedRulePrefix = function ()
+	return rule_manager_prefix, rule_query_result_pattern
+end
+
+
 local upvalue_collector = {}
 
 local collectRuleFunctionUpvalues = function (query_args)
@@ -551,7 +540,6 @@ local collectRuleFunctionUpvalues = function (query_args)
 	return true, upvalues
 end
 
------------------------------------------------------------------------
 -- query_str_iden is at least ''
 local compressSortByArgs = function (sortby_args)
 	local strs = {}
@@ -570,8 +558,6 @@ local compressSortByArgs = function (sortby_args)
 
 	return table.concat(strs, rule_index_divider)
 end
-
-
 
 local compressTwoPartArgs = function (query_str_iden, sortby_str_iden)
 	return query_str_iden .. rule_index_query_sortby_divider .. sortby_str_iden	
@@ -1093,7 +1079,23 @@ local processBeforeSave = function (self, params)
     return self, store_kv
 end
 
-
+local transEdgeFromLuaToRedis = function (start, stop)
+	local istart, istop
+	
+	if start > 0 then
+		istart = start - 1
+	else
+		istart = start
+	end
+	
+	if stop > 0 then
+		istop = stop - 1
+	else 
+		istop = stop
+	end
+	
+	return istart, istop
+end
 ------------------------------------------------------------------------
 -- Model Define
 -- Model is the basic object of Bamboo Database Abstract Layer
@@ -1101,19 +1103,17 @@ end
 
 
 Model = Object:extend {
-	__tag = 'Object.Model';
-	-- ATTEN: __name's value is not neccesary be equal strictly to the last word of __tag
 	__name = 'Model';
-	__desc = 'Model is the base of all models.';
 	__fields = {
 	    -- here, we don't put 'id' as a field
 	    ['created_time'] = { type="number" },
 	    ['lastmodified_time'] = { type="number" },
 
 	};
-	__indexfd = "id";
+	__primarykey = "id";
 
-	-- make every object creatation from here: every object has the 'id', 'created_time' and 'lastmodified_time' fields
+	-- make every object creatation from here: 
+	-- every object has the 'id', 'created_time' and 'lastmodified_time' fields
 	init = function (self, t)
 		local t = t or {}
 		local fields = self.__fields
@@ -1135,91 +1135,28 @@ Model = Object:extend {
 	end;
 
 
-	toHtml = function (self, params)
-		 I_AM_INSTANCE(self)
-		 params = params or {}
-
-		 if params.field and type(params.field) == 'string' then
-			 for k, v in pairs(params.attached) do
-				 if v == 'html_class' then
-					 self.__fields[params.field][k] = self.__fields[params.field][k] .. ' ' .. v
-				 else
-					 self.__fields[params.field][k] = v
-				 end
-			 end
-
-			 return (self.__fields[params.field]):toHtml(self, params.field, params.format)
-		 end
-
-		 params.attached = params.attached or {}
-
-		 local output = ''
-		 for field, fdt_old in pairs(self.__fields) do
-			 local fdt = table.copy(fdt_old)
-			 setmetatable(fdt, getmetatable(fdt_old))
-			 for k, v in pairs(params.attached) do
-				 if type(v) == 'table' then
-					 for key, val in pairs(v) do
-						 fdt[k] = fdt[k] or {}
-						 fdt[k][key] = val
-					 end
-				 else
-					 fdt[k] = v
-				 end
-			 end
-
-			 local flag = true
-			 params.filters = params.filters or {}
-			 for k, v in pairs(params.filters) do
-				 -- to redundant query condition, once meet, jump immediately
-				 if not fdt[k] then
-					 -- if k == 'vl' then self.__fields[field][k] = 0 end
-					 if k == 'vl' then fdt[k] = 0 end
-				 end
-
-				 if type(v) == 'function' then
-					 flag = v(fdt[k] or '')
-					 if not flag then break end
-				 else
-					 if fdt[k] ~= v then flag=false; break end
-				 end
-			 end
-
-			 if flag then
-				 output = output .. fdt:toHtml(self, field, params.format or nil)
-			 end
-
-		 end
-
-		 return output
-	 end,
-
-
 	--------------------------------------------------------------------
 	-- Class Functions. Called by class object.
 	--------------------------------------------------------------------
-
-    getRankByIndex = function (self, name)
+	
+	-- return the location of 'name' in index
+	getRankByPrimaryKey = function (self, name)
 		I_AM_CLASS(self)
 
 		local index_key = getIndexKey(self)
 		-- id is the score of that index value
 		local rank = db:zrank(index_key, tostring(name))
 		return tonumber(rank)
-    end;
+	end;
 
-	-- return id queried by index
-	--
-    getIdByIndex = function (self, name)
+	getIdByPrimaryKey = function (self, name)
 		I_AM_CLASS(self)
 		local index_key = getIndexKey(self)
 		-- id is the score of that index value
 		return db:zscore(index_key, tostring(name))
-    end;
+	end;
 
-    -- return name query by id
-	--
-    getIndexById = function (self, id)
+	getPrimaryKeyById = function (self, id)
 		I_AM_CLASS(self)
 		if type(tonumber(id)) ~= 'number' then return nil end
 
@@ -1227,21 +1164,27 @@ Model = Object:extend {
 		if isFalse(flag) or isFalse(name) then return nil end
 
 		return name
-    end;
+	end;
 
-    -- return instance object by id
+	-- return instance object by primary key value
 	--
+	getByPrimaryKey = function (self, name)
+		I_AM_CLASS(self)
+		local id = self:getIdByPrimaryKey(name)
+		if not id then return nil end
+
+		return self:getById (id)
+	end;
+
 	getById = function (self, id)
 		I_AM_CLASS(self)
-		--DEBUG(id)
 		if type(tonumber(id)) ~= 'number' then return nil end
 
 		-- check the existance in the index cache
-		if not checkExistanceById(self, id) then return nil end
+		-- if not checkExistanceById(self, id) then return nil end
 		-- and then check the existance in the key set
 		local key = getNameIdPattern2(self, id)
 		if not db:exists(key) then return nil end
-		--DEBUG(key)
 		return getFromRedis(self, key)
 	end;
 
@@ -1252,23 +1195,14 @@ Model = Object:extend {
 		return getFromRedisPipeline(self, ids)
 	end;
 
-	-- return instance object by name
+	
+	-- return a list containing all ids of all instances of this Model
 	--
-	getByIndex = function (self, name)
-		I_AM_CLASS(self)
-		local id = self:getIdByIndex(name)
-		if not id then return nil end
-
-		return self:getById (id)
-	end;
-
-	-- return a list containing all ids of all instances belong to this Model
-	--
-	allIds = function (self, find_rev)
+	allIds = function (self, is_rev)
 		I_AM_CLASS(self)
 		local index_key = getIndexKey(self)
 		local all_ids
-		if find_rev == 'rev' then
+		if is_rev == 'rev' then
 			_, all_ids = db:zrevrange(index_key, 0, -1, 'withscores')
 		else
 			_, all_ids = db:zrange(index_key, 0, -1, 'withscores')
@@ -1277,23 +1211,29 @@ Model = Object:extend {
 		return List(all_ids)
 	end;
 
+	
 	-- slice the ids list, start from 1, support negative index (-1)
 	--
 	sliceIds = function (self, start, stop, is_rev)
 		I_AM_CLASS(self)
 		checkType(start, stop, 'number', 'number')
 		local index_key = getIndexKey(self)
-		local _, all_ids = db:zrange(index_key, 0, -1, 'withscores')
-		all_ids = List(all_ids):slice(start, stop, is_rev)
+		local istart, istop = transEdgeFromLuaToRedis(start, stop)
+		local ids
+		_, ids = db:zrange(index_key, istart, istop, 'withscores')
+		if is_rev == 'rev' then
+			return List(ids):reverse()
+		else
+			return List(ids)
+		end
 
-		return all_ids
 	end;
 
 	-- return all instance objects belong to this Model
 	--
-	all = function (self, find_rev)
+	all = function (self, is_rev)
 		I_AM_CLASS(self)
-		local all_ids = self:allIds(find_rev)
+		local all_ids = self:allIds(is_rev)
 		return getFromRedisPipeline(self, all_ids)
 	end;
 
@@ -1306,15 +1246,6 @@ Model = Object:extend {
 		return getFromRedisPipeline(self, ids)
 	end;
 
-	-- this is a magic function
-	-- return all the keys belong to this Model (or this model's parent model)
-	-- all elements in returning list are string
-	--
---	allKeys = function (self)
---		I_AM_CLASS(self)
---		return db:keys(self.__name + ':*')
---	end;
-
 	-- return the actual number of the instances
 	--
 	numbers = function (self)
@@ -1324,15 +1255,44 @@ Model = Object:extend {
 
 	-- return the first instance found by query set
 	--
-	get = function (self, query_args, find_rev, no_cache)
-		-- XXX: may cause effective problem
-		-- every time 'get' will cause the all objects' retrieving
-		local objs = self:filter(query_args, 1, -1, find_rev, no_cache, 'get')
-		if objs then
-			return objs[1]
-		else
+	get = function (self, query_args, find_rev)
+		I_AM_CLASS(self)
+		
+		local PART_LEN = 100
+		local total = self:numbers()
+		local nparts = math.floor((total+PART_LEN-1)/PART_LEN)
+		local logic = type(query_args) == 'table' and query_args[1] == 'or' and 'or' or 'and'
+		local flag
+
+		local walkcheck = function (ids)
+			local objs = getFromRedisPipeline(self, ids)
+			for _, obj in ipairs(objs) do
+				-- logic check
+				flag = checkLogicRelation(obj, query_args, logic == 'and', self)
+				if flag then return obj end
+			end
+			
 			return nil
 		end
+			
+		
+		if find_rev == 'rev' then
+			for i=nparts, 1, -1 do
+				local ids = self:sliceIds(PART_LEN*(i-1)+1, PART_LEN*i, 'rev')
+				local obj = walkcheck(ids)
+				if obj then return obj end
+			end
+		
+		else
+			for i=1, nparts do
+				local ids = self:sliceIds(PART_LEN*(i-1)+1, PART_LEN*i)
+				local obj = walkcheck(ids)
+				if obj then return obj end
+			end
+			
+		end
+	
+		return nil
 	end;
 
 	--- fitler some instances belong to this model
@@ -1344,12 +1304,12 @@ Model = Object:extend {
 	-- @note: this function can be called by class object and query set
 	filter = function (self, query_args, ...)
 		I_AM_CLASS_OR_QUERY_SET(self)
-		assert(type(query_args) == 'table' or type(query_args) == 'function', '[Error] the query_args passed to filter must be table or function.')
+		assert(type(query_args) == 'table' or type(query_args) == 'function', 
+			'[Error] the query_args passed to filter must be table or function.')
 		local no_sort_rule
 		-- regular the args
                 local nargs = select('#', ...)
-                local is_count = (nargs ~= 0) and select(nargs, ...) or nil
-		local sort_field, sort_dir, sort_func, start, stop, is_rev, no_cache, is_get
+		local sort_field, sort_dir, sort_func, start, stop, is_rev, no_cache
 		local first_arg = select(1, ...)
 		if type(first_arg) == 'function' then
 			sort_func = first_arg
@@ -1357,7 +1317,6 @@ Model = Object:extend {
 			stop = select(3, ...)
 			is_rev = select(4, ...)
 			no_cache = select(5, ...)
-			is_get = select(6, ...)
 			no_sort_rule = false
 		elseif type(first_arg) == 'string' then
 			sort_field = first_arg
@@ -1366,28 +1325,26 @@ Model = Object:extend {
 			stop = select(4, ...)
 			is_rev = select(5, ...)
 			no_cache = select(6, ...)
-			is_get = select(7, ...)
 			no_sort_rule = false
        		elseif type(first_arg) == 'number' then
 			start = first_arg
 			stop = select(2, ...)
 			is_rev = select(3, ...)
 			no_cache = select(4, ...)
-			is_get = select(5, ...)
 			no_sort_rule = true
-       		end
+		end
         
-       		if start then assert(type(start) == 'number', '[Error] @filter - start must be number.') end
+		if start then assert(type(start) == 'number', '[Error] @filter - start must be number.') end
 		if stop then assert(type(stop) == 'number', '[Error] @filter - stop must be number.') end
 		if is_rev then assert(type(is_rev) == 'string', '[Error] @filter - is_rev must be string.') end
 
-		local is_query_set = false
-		if isQuerySet(self) then is_query_set = true end
 		local is_args_table = (type(query_args) == 'table')
 		local logic = 'and'
 
+		------------------------------------------------------------------------------
+		-- do rule index lookup
 		local query_str_iden, is_capable_press_rule = '', true
-		local do_rule_index_cache = (not is_query_set) and isUsingRuleIndex() and (no_cache ~= 'nocache')
+		local do_rule_index_cache = isUsingRuleIndex() and (no_cache ~= 'nocache')
 		if do_rule_index_cache then
 			if type(query_args) == 'function' then
 				is_capable_press_rule = collectRuleFunctionUpvalues(query_args)
@@ -1406,27 +1363,16 @@ Model = Object:extend {
 					local id_list = getIndexFromManager(self, query_str_iden)
 					if type(id_list) == 'table' then
 						if #id_list == 0 then
-							if is_count == 'count' then
-								return 0
-							else
-								return QuerySet()
-							end
+							return QuerySet(), 0
 						else
-							if is_count == 'count' then
-								return #id_list
-							end
-							
-							-- #id_list > 0
-							if is_get == 'get' then
-								id_list = (is_rev == 'rev') and List{id_list[#id_list]} or List{id_list[1]}
-							elseif start or stop then
+							if start or stop then
 								-- now id_list is a list containing all id of instances fit to this query_args rule, so need to slice
 								id_list = id_list:slice(start, stop, is_rev)
 							end
 
 							-- if have this list, return objects directly
 							if #id_list > 0 then
-								return getFromRedisPipeline(self, id_list)
+								return getFromRedisPipeline(self, id_list), #id_list
 							end
 						end
 					end
@@ -1435,39 +1381,27 @@ Model = Object:extend {
 			end
 		end
 
-
+		------------------------------------------------------------------------------
+		-- start do real filter
 		local all_ids = {}
-		if is_query_set then
-			-- if self is query set, we think of all_ids as object list, rather than id string list
-			all_ids = self
-			-- nothing in id list, return empty table
-			if #all_ids == 0 then return QuerySet() end
-		end
-
-		-- create a query set
 		local query_set = QuerySet()
 
 		if is_args_table then
-			if query_args and query_args['id'] then
-				-- remove 'id' query argument
-				print("[Warning] get and filter don't support search by id, please use getById.")
-				return nil
-			end
+			assert( not query_args['id'], 
+				"[Error] get and filter don't support search by id, please use getById.")
 
-			-- if query table is empty, return slice instances
+			-- if query table is empty, treate it as all action, or slice action
 			if isFalse(query_args) then
 				-- need to participate sort, if has
 				if no_sort_rule then
-					if is_count == 'count' then
-						return self:numbers()
-					else
-						return self:slice(start, stop, is_rev)
-					end
+					return self:slice(start, stop, is_rev), self:numbers()
 				else
 					query_set = self:all()
 				end
-			elseif query_args[1] then
-			-- normalize the 'and' and 'or' logic
+			end
+			
+			if query_args[1] then
+				-- normalize the 'and' and 'or' logic
 				assert(query_args[1] == 'or' or query_args[1] == 'and',
 					"[Error] The logic should be 'and' or 'or', rather than: " .. tostring(query_args[1]))
 				if query_args[1] == 'or' then
@@ -1479,7 +1413,8 @@ Model = Object:extend {
 
 		local logic_choice = (logic == 'and')
 		local partially_got = false
-
+		local fields = self.__fields
+		
 		-- walkcheck can process full object and partial object
 		local walkcheck = function (objs, model)
 			for i, obj in ipairs(objs) do
@@ -1493,50 +1428,45 @@ Model = Object:extend {
 			end
 		end
 
-		--DEBUG('all_ids', all_ids)
-		if is_query_set then
-			local objs = all_ids
-			-- objs are already integrated instances
-			walkcheck(objs)
-		else
-            local hash_index_query_args = {};
-            local hash_index_flag = false;
-            local raw_filter_flag = false;
+		local hash_index_query_args = {};
+		local hash_index_flag = false;
+		local raw_filter_flag = false;
 
-            if type(query_args) == 'function' then
-                hash_index_flag = false;
-                raw_filter_flag = true;
-            elseif bamboo.config.index_hash then
-                for field,value in pairs(query_args) do
-                    if self.__fields[field].index_type ~= nil then
-                        hash_index_query_args[field] = value;
-                        query_args[field] = nil;
-                        hash_index_flag = true;
-                    else
-                        raw_filter_flag = true;
-                    end
+		if type(query_args) == 'function' then
+			hash_index_flag = false;
+			raw_filter_flag = true;
+		elseif bamboo.config.index_hash then
+			for field, value in pairs(query_args) do
+				-- very odd, flags are assinged many times
+				if fields[field].hash_index then
+					hash_index_query_args[field] = value;
+					query_args[field] = nil;
+					hash_index_flag = true;
+				else
+					raw_filter_flag = true;
+				end
+			end
                 end
-            else
-                raw_filter_flag = true;
-                hash_index_flag = false;
-            end
 
 
-            if hash_index_flag then
-                all_ids = mih.filter(self,hash_index_query_args,logic);
-            else
-			    -- all_ids is id string list
+		if hash_index_flag then
+			all_ids = mih.filter(self,hash_index_query_args,logic);
+		else
     			all_ids = self:allIds()
-            end
+		end
 
-            if raw_filter_flag and #query_set == 0 then
-	    		local qfs = {}
-	    		if is_args_table then
-		    		for k, _ in pairs(query_args) do
-			    		tinsert(qfs, k)
-				    end
+		-- if not nessesary to use raw filter, retrieve objects immediately
+		if not raw_filter_flag then
+			query_set = getFromRedisPipeline(self, all_ids)
+		else
+			if #query_set == 0 then
+				local qfs = {}
+				if is_args_table then
+					for k, _ in pairs(query_args) do
+						tinsert(qfs, k)
+					end
 					table.sort(qfs)
-    			end
+				end
 
 				local objs, nils
 				if #qfs == 0 then
@@ -1562,72 +1492,58 @@ Model = Object:extend {
 						end
 					end
 				end
-            else
-		        -- here, all_ids is the all instance id to query_args now
-                query_set = getFromRedisPipeline(self, all_ids)
-            end
+			end
 		end
 
+		------------------------------------------------------------------------------
+		-- do later process
+		local total_length = #query_set
 		-- here, _t_query_set is the all instance fit to query_args now
 		local _t_query_set = query_set
-
-		if #query_set == 0 then
-			if do_rule_index_cache and is_capable_press_rule and #query_str_iden > 0 then
-				addIndexToManager(self, query_str_iden, {})
-			end
-		else
-			if is_get == 'get' then
-				query_set = (is_rev == 'rev') and List {_t_query_set[#_t_query_set]} or List {_t_query_set[1]}
-			else
-				if not no_sort_rule then
-					query_set = query_set:sortBy(sort_field or sort_func, sort_dir)
-					_t_query_set = query_set
-				end
-				if start or stop then
-					-- now id_list is a list containing all id of instances fit to this query_args rule, so need to slice
-					query_set = _t_query_set:slice(start, stop, is_rev)
-				end
-			end
-
-			-- if self is query set, its' element is always integrated
-			-- if call by class
-			if not is_query_set then
-				-- retrieve all objects' id
-				local id_list = {}
-				for _, v in ipairs(_t_query_set) do
-					tinsert(id_list, v.id)
-				end
-				-- add to index, here, we index all instances fit to query_args, rather than results applied extra limitation conditions
-				if do_rule_index_cache and is_capable_press_rule and #query_str_iden > 0 then
-					addIndexToManager(self, query_str_iden, id_list)
-				end
-
-				-- if partially got previously, need to get the integrated objects now
-				if partially_got then
-					id_list = {}
-					-- retrieve needed objects' id
-					for _, v in ipairs(query_set) do
-						tinsert(id_list, v.id)
-					end
-					query_set = getFromRedisPipeline(self, id_list)
-				end
-			end
+		-- check if it is empty
+		if #query_set == 0 and do_rule_index_cache and is_capable_press_rule and #query_str_iden > 0 then
+			addIndexToManager(self, query_str_iden, {})
+			return query_set(), 0
+		end
+		-- do sort
+		if not no_sort_rule then
+			query_set = query_set:sortBy(sort_field or sort_func, sort_dir)
+			_t_query_set = query_set
+		end
+		-- slice
+		if start or stop then
+			-- now id_list is a list containing all id of instances fit to this query_args rule, so need to slice
+			query_set = _t_query_set:slice(start, stop, is_rev)
 		end
 
-		if is_count == 'count' then
-			return #query_set
-		else
-			return query_set
+		-- add to index, here, we index all instances fit to query_args, rather than results applied extra limitation conditions
+		if do_rule_index_cache and is_capable_press_rule and #query_str_iden > 0 then
+			local id_list = {}
+			for _, v in ipairs(_t_query_set) do
+				tinsert(id_list, v.id)
+			end
+			addIndexToManager(self, query_str_iden, id_list)
 		end
+
+		if partially_got then
+			local id_list = {}
+			-- retrieve needed objects' id
+			for _, v in ipairs(query_set) do
+				tinsert(id_list, v.id)
+			end
+			query_set = getFromRedisPipeline(self, id_list)
+		end
+
+		-- return results
+		return query_set, total_length
 	end;
 
-    	-- count the number of instance fit to some rule
+    	-- deprecated
+	-- count the number of instance fit to some rule
 	count = function (self, query_args)
 		I_AM_CLASS(self)
-		--local query_str_iden = compressQueryArgs(query_args)
-		--print(query_str_iden)
-		--local ret = getIndexFromManager(self, query_str_iden, 'getnum')
-		return self:filter(query_args, 1, -1, nil, 'count')
+		local _, length = self:filter(query_args)
+		return length
 	end;
 
 
@@ -1644,33 +1560,29 @@ Model = Object:extend {
 		end
 	end;
 
-	    fakeDelById = function (self, ids)
+	fakeDelById = function (self, ids)
 		local idtype = type(ids)
 		if idtype == 'table' then
-		    for _, v in ipairs(ids) do
-			v = tostring(v)
-			fakedelFromRedis(self, v)
-
-		    end
+			for _, v in ipairs(ids) do
+				v = tostring(v)
+				fakedelFromRedis(self, v)
+			end
 		else
-		    fakedelFromRedis(self, tostring(ids))
+			fakedelFromRedis(self, tostring(ids))
 		end
-	    end;
+	end;
 
-	    trueDelById = function (self, ids)
+	trueDelById = function (self, ids)
 		local idtype = type(ids)
 		if idtype == 'table' then
-		    for _, v in ipairs(ids) do
-			v = tostring(v)
-			delFromRedis(self, v)
-
-		    end
+			for _, v in ipairs(ids) do
+				v = tostring(v)
+				delFromRedis(self, v)
+			end
 		else
-		    delFromRedis(self, tostring(ids))
+			delFromRedis(self, tostring(ids))
 		end
-	    end;
-
-
+	end;
 
 	-----------------------------------------------------------------
 	-- validate form parameters by model defination
@@ -1696,12 +1608,12 @@ Model = Object:extend {
 
 
 
-    --------------------------------------------------------------------
-    -- Instance Functions
-    --------------------------------------------------------------------
-    -- save instance's normal field
-    -- before save, the instance has no id
-    save = function (self, params)
+	--------------------------------------------------------------------
+	-- Instance Functions
+	--------------------------------------------------------------------
+	-- save instance's normal field
+	-- before save, the instance has no id
+	save = function (self, params)
 		I_AM_INSTANCE(self)
 
 		local new_case = true
@@ -1776,11 +1688,11 @@ Model = Object:extend {
 		end
 
 		return self
-    end;
+	end;
 
-    -- partially update function, once one field
+	-- partially update function, once one field
 	-- can only apply to none foreign field
-    update = function (self, field, new_value)
+	update = function (self, field, new_value)
 		I_AM_INSTANCE(self)
 		checkType(field, 'string')
 		assert(type(new_value) == 'string' or type(new_value) == 'number' or type(new_value) == 'nil')
@@ -1792,31 +1704,29 @@ Model = Object:extend {
 
 		local indexfd = self.__indexfd
 
-        --old indexfd
-        -- apply to db
-	    -- if field is indexed, need to update the __index too
+		-- if field is indexed, need to update the __index too
 		if field == indexfd then
-		    assert(new_value ~= nil, "[Error] Can not delete indexfd field");
-        	local index_key = getIndexKey(self)
-	    	db:zremrangebyscore(index_key, self.id, self.id)
+			assert(new_value ~= nil, "[Error] Can not delete indexfd field");
+			local index_key = getIndexKey(self)
+			db:zremrangebyscore(index_key, self.id, self.id)
 		   	db:zadd(index_key, self.id, new_value)
-	    end
+		end
 
 		-- update the lua object
 		self[field] = new_value
-        --hash index
-        if bamboo.config.index_hash then
-            mih.index(self,false,field);
-        end
+		--hash index
+		if bamboo.config.index_hash then
+			mih.index(self,false,field);
+		end
 
-        --update object in database
+		--update object in database
 		if new_value == nil then
-		    -- could not delete index field
+			-- could not delete index field
 			if field ~= indexfd then
 				db:hdel(model_key, field)
 			end
 		else
-		    -- apply to db
+			-- apply to db
 			-- if field is indexed, need to update the __index too
 			if field == indexfd then
 				local index_key = getIndexKey(self)
@@ -1824,7 +1734,7 @@ Model = Object:extend {
 				db:zadd(index_key, self.id, new_value)
 			end
 
-		    db:hset(model_key, field, new_value)
+			db:hset(model_key, field, new_value)
 		end
 		-- update the lastmodified_time
 		self.lastmodified_time = socket.gettime()
@@ -1843,55 +1753,37 @@ Model = Object:extend {
 
 
 		return self
-    end;
-
-    -- get the model's instance counter value
-    -- this can be call by Class and Instance
-    getCounter = getCounter;
-
-    -- delete self instance object
-    -- self can be instance or query set
-    fakeDel = function (self)
-		-- if self is query set
-		if isQuerySet(self) then
-			for _, v in ipairs(self) do
-				fakedelFromRedis(v)
-				v = nil
-			end
-		else
-			fakedelFromRedis(self)
-		end
-
-		self = nil
-    end;
-
-	-- delete self instance object
-    -- self can be instance or query set
-    trueDel = function (self)
-		-- if self is query set
-		if isQuerySet(self) then
-			for _, v in ipairs(self) do
-				delFromRedis(v)
-				v = nil
-			end
-		else
-			delFromRedis(self)
-		end
-
-		self = nil
-    end;
+	end;
 
 
 	-- delete self instance object
-    -- self can be instance or query set
-    del = function (self)
-		I_AM_INSTANCE_OR_QUERY_SET(self)
+	-- self can be instance or query set
+	fakeDel = function (self)
+		-- if self is query set
+		fakedelFromRedis(self)
+
+		self = nil
+	end;
+
+	-- delete self instance object
+	-- self can be instance or query set
+	trueDel = function (self)
+		delFromRedis(self)
+
+		self = nil
+	end;
+
+
+	-- delete self instance object
+	-- self can be instance or query set
+	del = function (self)
+		I_AM_INSTANCE(self)
 		if bamboo.config.use_fake_deletion == true then
 			return self:fakeDel()
 		else
 			return self:trueDel()
 		end
-    end;
+	end;
 
 	-- use style: Model_name:restoreDeleted(id)
 	restoreDeleted = function (self, id)
@@ -2039,7 +1931,7 @@ Model = Object:extend {
 			return objs, scores
 		end
 	end;
-
+--[[
 	getForeignIds = function (self, field, start, stop, is_rev)
 		I_AM_INSTANCE(self)
 		checkType(field, 'string')
@@ -2067,7 +1959,7 @@ Model = Object:extend {
 		end
 
 	end;
-
+--]]
 	-- rearrange the foreign index by input list
 	rearrangeForeign = function (self, field, inlist)
 		I_AM_INSTANCE(self)
@@ -2296,131 +2188,18 @@ Model = Object:extend {
 		if fld and fld.foreign then return true
 		else return false
 		end
-
 	end;
 
-	--- return the class name of an instance
+	------------------------------------------------------------------------
+	-- misc API
+	------------------------------------------------------------------------
+	--- deprecated
 	classname = function (self)
 		return getClassName(self)
 	end;
 	
 	getClassName = getClassName;
 
-	-- do sort on query set by some field
-	sortBy = function (self, ...)
-		I_AM_QUERY_SET(self)
-		local field, dir, sort_func, field2, dir2, sort_func2
-		-- regular the args, 6 cases
-		local first_arg = select(1, ...)
-		if type(first_arg) == 'function' then
-			sort_func = first_arg
-			local second_arg = select(2, ...)
-			if type(second_arg) == 'function' then
-				sort_func2 = first_arg
-			elseif type(second_arg) == 'string' then
-				field2 = second_arg
-				dir2 = select(3, ...)
-			end
-		elseif type(first_arg) == 'string' then
-			field = first_arg
-			dir = select(2, ...)
-			local third_arg = select(3, ...)
-			if type(third_arg) == 'function' then
-				sort_func2 = third_arg
-			elseif type(third_arg) == 'string' then
-				filed2 = third_arg
-				dir2 = select(4, ...)
-			end
-		end
-		
-
-		local dir = dir or 'asc'
-		local byfield = field
-		local sort_func = sort_func or function (a, b)
-			local af = a[byfield]
-			local bf = b[byfield]
-			if af and bf then
-				if dir == 'asc' then
-					return af < bf
-				elseif dir == 'desc' then
-					return af > bf
-				end
-			else
-				return nil
-			end
-		end
-
-		table.sort(self, sort_func)
-
-		-- secondary sort
-		if field2 then
-			checkType(field2, 'string')
-
-			-- divide to parts
-			local work_t = {{self[1]}, }
-			for i = 2, #self do
-				if self[i-1][field] == self[i][field] then
-					-- insert to the last table element of the list
-					table.insert(work_t[#work_t], self[i])
-				else
-					work_t[#work_t + 1] = {self[i]}
-				end
-			end
-
-			-- sort each part
-			local result = {}
-			byfield = field2
-			dir = dir2 or 'asc'
-			sort_func = sort_func2 or sort_func
-			for i, val in ipairs(work_t) do
-				table.sort(val, sort_func)
-				table.insert(result, val)
-			end
-
-			-- flatten to one rank table
-			local flat = QuerySet()
-			for i, val in ipairs(result) do
-				for j, v in ipairs(val) do
-					table.insert(flat, v)
-				end
-			end
-
-			self = flat
-		end
-
-		return self
-	end;
-
-
-
-	querySetIds = function (self)
-		I_AM_QUERY_SET(self)
-		local ids = List()
-		for _, v in ipairs(self) do
-			ids:append(v.id)
-		end
-		return ids
-	end;
-	
-	combineQuerySets = function (self, another)
-		I_AM_QUERY_SET(self)
-		I_AM_QUERY_SET(another)		
-		local ids = List()
-		for _, v in ipairs(self) do
-			ids:append(v.id)
-		end
-		local self_set = Set(ids)
-		
-		for _, v in ipairs(another) do
-			-- if not duplicated, append it
-			if not self_set[v.id] then
-				self:append(v)
-			end
-		end
-		
-		return self
-	end;
-	
 
 	getFDT = function (self, field)
 		I_AM_CLASS_OR_INSTANCE(self)
@@ -2430,21 +2209,18 @@ Model = Object:extend {
 
 	end;
 
+	-- get the model's instance counter value
+	-- this can be call by Class and Instance
+	getCounter = getCounter;
 }
 
-local QuerySetMeta = setProto({__spectype='QuerySet'}, Model)
-QuerySet = function (list)
-	local list = List(list)
-	-- create a query set
-	-- add it to fit the check of isClass function
---	if not getmetatable(QuerySetMeta) then
---		QuerySetMeta = setProto(QuerySetMeta, Model)
---	end
-	local query_set = setProto(list, QuerySetMeta)
+-- keep compatable with old version
+Model.__indexfd = Model.__primarykey
+Model.__tag = Model.__name
+Model.getRankByIndex = Model.getRankByPrimaryKey
+Model.getIdByIndex = Model.getIdByPrimaryKey
+Model.getIndexById = Model.getPrimaryKeyById
+Model.getByIndex = Model.getByPrimaryKey
 
-	return query_set
-end
-
-_G['QuerySet'] = QuerySet
 
 return Model

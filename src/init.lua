@@ -19,6 +19,7 @@ config = {}
 context = {}
 userdata = {}
 plugindata = {}
+internals = {}
 compiled_views_tmpls = {}
 compiled_views = {}
 compiled_views_locals = {}
@@ -338,7 +339,7 @@ end
 MODEL_LIST = {}
 
 local function getClassName(model)
-	return model.__tag:match('%.(%w+)$')
+	return model.__name
 end
 
 registerModel = function (model)

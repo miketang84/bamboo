@@ -56,7 +56,6 @@ end;
 _G['isQuerySet'] = function (self)
 	if isList(self)
 	and rawget(self, '__spectype') == nil and self.__spectype == 'QuerySet'
-	and self.__tag == 'Object.Model'
 	then return true
 	else return false
 	end
