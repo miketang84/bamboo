@@ -1633,7 +1633,6 @@ local updateInstanceToIndexOnRule = function (self, qstr)
 --				db:zadd(manager_key, math.floor(score), qstr)
 				db:exec()
 			end
----[[	
 	else
 			if db:exists(item_key) then
 				-- delete the old one id
@@ -1643,7 +1642,6 @@ local updateInstanceToIndexOnRule = function (self, qstr)
 --					db:zadd(manager_key, score + 0.1, qstr)
 --				end
 			end
---]]
 		end
 
 		-- db:expire(item_key, bamboo.config.rule_expiration or bamboo.RULE_LIFE)

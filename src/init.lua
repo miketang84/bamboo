@@ -32,6 +32,8 @@ SESSION_LIFE = 3600 * 24
 CACHE_LIFE = 1800
 -- for rule index life time
 RULE_LIFE = 1800
+-- for plugin args life time
+PLUGIN_ARGS_LIFE = 3600
 
 -- global URLS definition
 URLS = {}
