@@ -4,9 +4,7 @@ local Model = require 'bamboo.model'
 
 local Group 
 Group = Model:extend {
-    __tag = 'Object.Model.Group';
 	__name = 'Group';
-	__desc = 'Group is the basic tree like model';
 	__indexfd = "name";
 	__fields = {
 		['name'] 	= 	{},

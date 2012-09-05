@@ -8,10 +8,8 @@ local socket = require 'socket'
 local Perm = require 'bamboo.models.permission'
 
 local User = Model:extend {
-    __tag = 'Object.Model.User';
 	__name = 'User';
-	__desc = 'Basic user definition.';
-	__indexfd = "username";
+	__primarykey = "username";
 	__fields = {
 		['username'] = { required=true, unique=true },
 		['password'] = { required=true },

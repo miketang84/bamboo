@@ -1,6 +1,7 @@
 module(..., package.seeall)
 local socket = require 'socket'
 local mih = require 'bamboo.model-indexhash'
+require 'bamboo.queryset'
 
 local tinsert, tremove = table.insert, table.remove
 local format = string.format

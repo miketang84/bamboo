@@ -5,8 +5,7 @@ local db = BAMBOO_DB
 
 ------------------------public ------------
 local function getClassName(self)
-	if type(self) ~= 'table' then return nil end
-	return self.__tag:match('%.(%w+)$')
+	return self.__name
 end
 
 -- return the key of some string like 'User:__index'

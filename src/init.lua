@@ -339,16 +339,15 @@ end
 ------------------------------------------------------------------------
 MODEL_LIST = {}
 
-local function getClassName(model)
-	return model.__name
-end
-
 registerModel = function (model)
 	checkType(model, 'table')
-	assert( model.__tag, 'Registered model __tag must not be missing.' )
-	local model_name = getClassName(model)
+	assert( model.__name, 'Registered model __name must not be missing.' )
+	local model_name = model.__name
 
-	if not MODEL_LIST[model_name] then
+	if MODEL_LIST[model_name] then
+		print('[Warning] The same __name model had been registered.')
+		return
+	else
 		MODEL_LIST[model_name] = model
 
 		-- set metatable for each field

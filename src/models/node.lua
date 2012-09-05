@@ -6,9 +6,7 @@ local getModelByName = bamboo.getModelByName
 
 local Node 
 Node = Model:extend {
-    __tag = 'Object.Model.Node';
 	__name = 'Node';
-	__desc = 'Node is the basic tree like model';
 	__fields = {
 		['name'] 	= 	{  newfield=true},
 		['rank'] 	= 	{  newfield=true},

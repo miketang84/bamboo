@@ -97,10 +97,8 @@ end
 
 
 local Upload = Model:extend {
-	__tag = 'Object.Model.Upload';
 	__name = 'Upload';
-	__desc = "User's upload files.";
-	__indexfd = "path";
+	__primarykey = "path";
 	__fields = {
 		['name'] = {},
 		['path'] = {unique=true},
