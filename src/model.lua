@@ -100,7 +100,7 @@ local getStoreModule = function (store_type)
 	assert( store_module, "[Error] store type must be one of 'string', 'list', 'set', 'zset' or 'hash'.")
 	return store_module
 end
-
+bamboo.internals['getStoreModule'] = getStoreModule
 
 ------------------------------------------------------------------------------------
 -- swithes
@@ -130,7 +130,6 @@ local rule_manager_prefix = '_RULE_INDEX_MANAGER:'
 local rule_query_result_pattern = '_RULE:%s:%s'   -- _RULE:Model:num
 local rule_index_query_sortby_divider = ' |^|^| '
 local rule_index_divider = ' ^_^ '
-local QuerySet
 local Model
 
 
@@ -966,8 +965,6 @@ local updateInstanceToIndexOnRule = function (self, qstr)
 				if success == -1 then
 					db:rpush(item_key, self.id)
 				end
-				-- update the float score to integer
---				db:zadd(manager_key, math.floor(score), qstr)
 				db:exec()
 			end
 --[[		else
@@ -1028,8 +1025,6 @@ local addIndexToManager = function (self, str_iden, obj_list)
 	if not score then
 		-- when it is a new rule
 		new_score = db:zcard(manager_key) + 1
-		-- use float score represent empty rule result index
-		-- if #obj_list == 0 then new_score = new_score + 0.1 end
 		db:zadd(manager_key, new_score, str_iden)
 	else
 		-- when rule result is expired, re enter this function
@@ -1360,7 +1355,7 @@ Model = Object:extend {
 			is_rev = select(5, ...)
 			no_cache = select(6, ...)
 			no_sort_rule = false
-       		elseif type(first_arg) == 'number' then
+     		elseif type(first_arg) == 'number' then
 			start = first_arg
 			stop = select(2, ...)
 			is_rev = select(3, ...)
@@ -1537,7 +1532,7 @@ Model = Object:extend {
 		-- check if it is empty
 		if #query_set == 0 and do_rule_index_cache and is_capable_press_rule and #query_str_iden > 0 then
 			addIndexToManager(self, query_str_iden, {})
-			return query_set(), 0
+			return QuerySet(), 0
 		end
 		-- do sort
 		if not no_sort_rule then
@@ -1571,6 +1566,7 @@ Model = Object:extend {
 		-- return results
 		return query_set, total_length
 	end;
+
 
     	-- deprecated
 	-- count the number of instance fit to some rule
@@ -1896,7 +1892,7 @@ Model = Object:extend {
 	--
 	--
 	--
-	getForeign = function (self, field, start, stop, is_rev, onlyids)
+	getForeign = function (self, field, start, stop, is_rev)
 		I_AM_INSTANCE(self)
 		checkType(field, 'string')
 		local fld = self.__fields[field]
@@ -1965,7 +1961,7 @@ Model = Object:extend {
 			return objs, scores
 		end
 	end;
---[[
+
 	getForeignIds = function (self, field, start, stop, is_rev)
 		I_AM_INSTANCE(self)
 		checkType(field, 'string')
@@ -1993,7 +1989,7 @@ Model = Object:extend {
 		end
 
 	end;
---]]
+
 	-- rearrange the foreign index by input list
 	rearrangeForeign = function (self, field, inlist)
 		I_AM_INSTANCE(self)

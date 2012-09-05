@@ -10,7 +10,7 @@ local function getCustomIdKey(self, key)
 end
 
 local makeCustomKey = function (self, key)
-	local custom_key = self:isClass() and getCustomKey(self, key) or getCustomIdKey(self, key)
+	return self:isClass() and getCustomKey(self, key) or getCustomIdKey(self, key)
 end
 
 return function ()
@@ -76,6 +76,7 @@ return function ()
 						"[Error] @setCustom - In the string mode of setCustom, val should be string or number.")
 				rdstring.save(custom_key, val)
 			else
+				local getStoreModule = bamboo.internals.getStoreModule
 				local store_module = getStoreModule(st)
 				store_module.save(custom_key, val, scores)
 			end
@@ -135,6 +136,7 @@ return function ()
 
 			-- get the store type in redis
 			local store_type = db:type(custom_key)
+			local getStoreModule = bamboo.internals.getStoreModule
 			local store_module = getStoreModule(store_type)
 			local ids, scores = store_module.retrieve(custom_key)
 
@@ -247,6 +249,7 @@ return function ()
 
 			if not db:exists(custom_key) then return 0 end
 			local store_type = db:type(custom_key)
+			local getStoreModule = bamboo.internals.getStoreModule
 			local store_module = getStoreModule(store_type)
 			return store_module.num(custom_key)
 		end;

@@ -13,7 +13,7 @@ local Set = require 'lglib.set'
 local List = require 'lglib.list'
 local FieldType = require 'bamboo.mvm.prototype'
 local util = require 'bamboo.util'
-require 'globals'
+require 'bamboo.globals'
 
 config = {}
 -- for global rendering usage

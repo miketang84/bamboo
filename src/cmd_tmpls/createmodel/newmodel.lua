@@ -2,11 +2,9 @@ module(..., package.seeall)
 
 local Model = require 'bamboo.model'
 
-local $MODEL = Model:extend {
-	__tag = 'Bamboo.Model.$MODEL';
+return Model:extend {
 	__name = '$MODEL';
-	__desc = 'Generitic $MODEL definition';
-	__indexfd = 'name',
+	__primarykey = 'name',
 	__fields = {
 		['name'] = {},	
 	
@@ -26,10 +24,7 @@ local $MODEL = Model:extend {
 		return self
 	end;
 	
-
-
 }
 
-return $MODEL
 
 
