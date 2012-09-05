@@ -19,34 +19,6 @@ local rdhash = require 'bamboo.redis.hash'
 
 
 
--- can be called by instance and class
-local isUsingFulltextIndex = function (self)
-	local model = self
-	if isInstance(self) then model = getModelByName(self:getClassName()) end
-	if bamboo.config.fulltext_index_support and rawget(model, '__use_fulltext_index') then
-		return true
-	else
-		return false
-	end
-end
-
-local isUsingRuleIndex = function ()
-	if bamboo.config.rule_index_support == false then
-		return false
-	end
-	return true
-end
-
-
-local getModelByName  = bamboo.getModelByName
-local dcollector= 'DELETED:COLLECTOR'
-local rule_manager_prefix = '_RULE_INDEX_MANAGER:'
-local rule_query_result_pattern = '_RULE:%s:%s'   -- _RULE:Model:num
-local rule_index_query_sortby_divider = ' |^|^| '
-local rule_index_divider = ' ^_^ '
-local QuerySet
-local Model
-
 -----------------------------------------------------------------
 local rdactions = {
 	['string'] = {},
@@ -129,7 +101,68 @@ local getStoreModule = function (store_type)
 end
 
 
+------------------------------------------------------------------------------------
+-- swithes
+
+-- can be called by instance and class
+local isUsingFulltextIndex = function (self)
+	local model = self
+	if isInstance(self) then model = getModelByName(self:getClassName()) end
+	if bamboo.config.fulltext_index_support and rawget(model, '__use_fulltext_index') then
+		return true
+	else
+		return false
+	end
+end
+
+local isUsingRuleIndex = function ()
+	if bamboo.config.rule_index_support == false then
+		return false
+	end
+	return true
+end
+
+
+local getModelByName  = bamboo.getModelByName
+local dcollector= 'DELETED:COLLECTOR'
+local rule_manager_prefix = '_RULE_INDEX_MANAGER:'
+local rule_query_result_pattern = '_RULE:%s:%s'   -- _RULE:Model:num
+local rule_index_query_sortby_divider = ' |^|^| '
+local rule_index_divider = ' ^_^ '
+local QuerySet
+local Model
+
+
+
 -----------------------------------------------------------------
+-- misc functions
+-----------------------------------------------------------------
+local transEdgeFromLuaToRedis = function (start, stop)
+	local istart, istop
+	
+	if start > 0 then
+		istart = start - 1
+	else
+		istart = start
+	end
+	
+	if stop > 0 then
+		istop = stop - 1
+	else 
+		istop = stop
+	end
+	
+	return istart, istop
+end
+
+
+-----------------------------------------------------------------
+-- helper functions
+-----------------------------------------------------------------
+
+local function getClassName(self)
+	return self.__name
+end
 
 local function getCounterName(self)
 	return format("%s:__counter", self.__name)
@@ -156,18 +189,15 @@ local function getFieldPattern2(self, id, field)
 	return format("%s:%s:%s", self.__name, id, field)
 end
 
--- return the key of some string like 'User'
---
-local function getClassName(self)
-	return self.__name
-end
-
 -- return the key of some string like 'User:__index'
 --
 local function getIndexKey(self)
 	return format("%s:__index", self.__name)
 end
 
+
+--- make a list, 
+-- each element is 'Model_name:id'
 local function makeModelKeyList(self, ids)
 	local key_list = List()
 	for _, v in ipairs(ids) do
@@ -176,6 +206,22 @@ local function makeModelKeyList(self, ids)
 	return key_list
 end
 
+
+--- divide the model_name:id to two part
+-- item: 		'Model_name:id'
+-- link_model: 	model object
+-- lined_id:		instance id
+local function seperateModelAndId(item)
+	local link_model, linked_id
+	local link_model_str
+	link_model_str, linked_id = item:match('^(%w+):(%d+)$')
+	assert(link_model_str)
+	assert(linked_id)
+	link_model = getModelByName(link_model_str)
+	assert(link_model)
+
+	return link_model, linked_id
+end
 
 
 -- in model global index cache (backend is zset),
@@ -192,22 +238,7 @@ local function checkExistanceById(self, id)
 	end
 end
 
--- return the model part and the id part
--- if normal case, get the model string and return item directly
--- if UNFIXED case, split the UNFIXED model:id and return
--- this function doesn't suite ANYSTRING case
-local function seperateModelAndId(item)
-	local link_model, linked_id
-	local link_model_str
-	link_model_str, linked_id = item:match('^(%w+):(%d+)$')
-	assert(link_model_str)
-	assert(linked_id)
-	link_model = getModelByName(link_model_str)
-	assert(link_model)
-
-	return link_model, linked_id
-end
-
+--- make lua object from redis' raw data table
 local makeObject = function (self, data)
 	-- if data is invalid, return nil
 	if not isValidInstance(data) then
@@ -254,21 +285,27 @@ local makeObject = function (self, data)
 
 end
 
+-------------------------------------------------------------------------------------
+-- Functions work with redis
+-------------------------------------------------------------------------------------
 
 ------------------------------------------------------------
--- this function can only be called by Model
--- @param model_key:
+-- get one object from redis
+-- @param self:	Model
+-- @param model_key:	'Model_name:id'
 --
 local getFromRedis = function (self, model_key)
 	-- here, the data table contain ordinary field, ONE foreign key, but not MANY foreign key
 	-- all fields are strings
 	local data = db:hgetall(model_key)
 	return makeObject(self, data)
-
 end
 
+------------------------------------------------------------
+-- get objects from redis with pipeline
+-- @param self:	Model
+-- @param ids:	id list
 --
-
 local getFromRedisPipeline = function (self, ids)
 	local key_list = makeModelKeyList(self, ids)
 	-- all fields are strings
@@ -290,11 +327,50 @@ local getFromRedisPipeline = function (self, ids)
 	return objs, nils
 end
 
--- fields must not be empty
+
+------------------------------------------------------------
+-- get objects from redis with pipeline
+-- @param pattern_list:	list of 'Model_name:id' string
+--
+local getFromRedisPipeline2 = function (pattern_list)
+	-- 'list' store model and id info
+	local model_list = List()
+	for _, v in ipairs(pattern_list) do
+		local model, id = seperateModelAndId(v)
+		model_list:append(model)
+	end
+
+	-- all fields are strings
+	local data_list = db:pipeline(function (p)
+		for _, v in ipairs(pattern_list) do
+			p:hgetall(v)
+		end
+	end)
+
+	local objs = QuerySet()
+	local nils = {}
+	local obj
+	for i, model in ipairs(model_list) do
+		obj = makeObject(model, data_list[i])
+		if obj then tinsert(objs, obj)
+		else tinsert(nils, pattern_list[i])
+		end
+	end
+
+	return objs, nils
+end
+
+
+------------------------------------------------------------
+-- get partial objects from redis with pipeline
+-- @param self:	Model
+-- @param ids:	id list
+-- @param fields:	field string list
+-- @note: 'fields' must not be empty
 local getPartialFromRedisPipeline = function (self, ids, fields)
+	-- default retrieve 'id'
 	tinsert(fields, 'id')
 	local key_list = makeModelKeyList(self, ids)
-	-- DEBUG('key_list', key_list, 'fields', fields)
 
 	local data_list = db:pipeline(function (p)
 		for _, v in ipairs(key_list) do
@@ -333,49 +409,22 @@ local getPartialFromRedisPipeline = function (self, ids, fields)
 	return objs
 end
 
--- for use in "User:id" as each item key
-local getFromRedisPipeline2 = function (pattern_list)
-	-- 'list' store model and id info
-	local model_list = List()
-	for _, v in ipairs(pattern_list) do
-		local model, id = seperateModelAndId(v)
-		model_list:append(model)
-	end
-
-	-- all fields are strings
-	local data_list = db:pipeline(function (p)
-		for _, v in ipairs(pattern_list) do
-			p:hgetall(v)
-		end
-	end)
-
-	local objs = QuerySet()
-	local nils = {}
-	local obj
-	for i, model in ipairs(model_list) do
-		obj = makeObject(model, data_list[i])
-		if obj then tinsert(objs, obj)
-		else tinsert(nils, pattern_list[i])
-		end
-	end
-
-	return objs, nils
-end
-
 
 local updateIndexByRules
 --------------------------------------------------------------
--- this function can be called by instance or class
+-- del object and its single relation in redis
+-- @param self:	Model
+-- @param id:		instance id
 --
 local delFromRedis = function (self, id)
 	assert(self.id or id, '[Error] @delFromRedis - must specify an id of instance.')
 	local model_key = id and getNameIdPattern2(self, id) or getNameIdPattern(self)
 	local index_key = getIndexKey(self)
 
-    --del hash index
-    if bamboo.config.index_hash then
-        mih.indexDel(self);
-    end
+	--del hash index
+	if bamboo.config.index_hash then
+		mih.indexDel(self);
+	end
 
 	local fields = self.__fields
 	-- in redis, delete the associated foreign key-value store
@@ -407,7 +456,7 @@ bamboo.internals['delFromRedis'] = delFromRedis
 
 --------------------------------------------------------------
 -- Fake Deletion
---  called by instance
+--
 local fakedelFromRedis = function (self, id)
 	assert(self.id or id, '[Error] @fakedelFromRedis - must specify an id of instance.')
 	local model_key = id and getNameIdPattern2(self, id) or getNameIdPattern(self)
@@ -454,7 +503,7 @@ bamboo.internals['fakedelFromRedis'] = fakedelFromRedis
 
 --------------------------------------------------------------
 -- Restore Fake Deletion
--- called by Some Model: self, not instance
+-- called by Model: self, not instance
 local restoreFakeDeletedInstance = function (self, id)
 	checkType(tonumber(id),  'number')
 	local model_key = getNameIdPattern2(self, id)
@@ -489,6 +538,7 @@ local restoreFakeDeletedInstance = function (self, id)
 end
 
 
+
 local retrieveObjectsByForeignType = function (foreign, list)
 	if foreign == 'ANYSTRING' then
 		-- return string list directly
@@ -504,11 +554,65 @@ local retrieveObjectsByForeignType = function (foreign, list)
 end
 
 
+local checkLogicRelation = function (obj, query_args, logic_choice, model)
+	-- NOTE: query_args can't contain [1]
+	-- here, obj may be object or string
+	-- when obj is string, query_args must be function;
+	-- when query_args is table, obj must be table, and must be real object.
+	local flag = logic_choice
+	if type(query_args) == 'table' then
+		local fields = model and model.__fields or obj.__fields
+		for k, v in pairs(query_args) do
+			-- to redundant query condition, once meet, jump immediately
+			if not fields[k] then flag=false; break end
 
+			if type(v) == 'function' then
+				flag = v(obj[k])
+			else
+				flag = (obj[k] == v)
+			end
+			---------------------------------------------------------------
+			-- logic_choice,       flag,      action,          append?
+			---------------------------------------------------------------
+			-- true (and)          true       next field       --
+			-- true (and)          false      break            no
+			-- false (or)          true       break            yes
+			-- false (or)          false      next field       --
+			---------------------------------------------------------------
+			if logic_choice ~= flag then break end
+		end
+	else
+		-- call this query args function
+		flag = query_args(obj)
+	end
 
+	return flag
+end
 
+---------------------------------------------------------------------------------
+-- RULE INDEX CODE
+---------------------------------------------------------------------------------
 local specifiedRulePrefix = function ()
 	return rule_manager_prefix, rule_query_result_pattern
+end
+
+function luasplit(str, pat)
+   local t = {}
+   local fpat = "(.-)" .. pat
+   local last_end = 1
+   local s, e, cap = str:find(fpat, 1)
+   while s do
+      if s ~= 1 or cap ~= "" then
+      		table.insert(t,cap)
+      end
+      last_end = e+1
+      s, e, cap = str:find(fpat, last_end)
+   end
+   if last_end <= #str then
+      cap = str:sub(last_end)
+      table.insert(t, cap)
+   end
+   return t
 end
 
 
@@ -540,189 +644,7 @@ local collectRuleFunctionUpvalues = function (query_args)
 	return true, upvalues
 end
 
--- query_str_iden is at least ''
-local compressSortByArgs = function (sortby_args)
-	local strs = {}
-	for i = 1, #sortby_args do
-       		local v = sortby_args[i]
-		local ctype = type(v)
-		if ctype == 'string' then
-            		tinsert(strs, v)
-        	-- may don't appear
-        	elseif ctype == 'nil' then
-            		tinsert(strs, 'nil')
-        	elseif ctype == 'function' then
-			tinsert(strs, string.dump(v))
-		end
-	end
 
-	return table.concat(strs, rule_index_divider)
-end
-
-local compressTwoPartArgs = function (query_str_iden, sortby_str_iden)
-	return query_str_iden .. rule_index_query_sortby_divider .. sortby_str_iden	
-end
-
-function luasplit(str, pat)
-   local t = {}
-   local fpat = "(.-)" .. pat
-   local last_end = 1
-   local s, e, cap = str:find(fpat, 1)
-   while s do
-      if s ~= 1 or cap ~= "" then
-      		table.insert(t,cap)
-      end
-      last_end = e+1
-      s, e, cap = str:find(fpat, last_end)
-   end
-   if last_end <= #str then
-      cap = str:sub(last_end)
-      table.insert(t, cap)
-   end
-   return t
-end
-
-local extractSortByArgs = function (sortby_str_iden)
-	assert(sortby_str_iden ~= '', "[Error] @extractSortByArgs - sortby_str_iden should not be emply!")
-	local sortby_args = luasplit(sortby_str_iden, rule_index_divider)
-	--local sortby_args = sortby_str_iden:split(rule_index_divider)
-	-- [1] is string or function, [2] is nil or string, 
-	local first_arg = sortby_args[1]
-	local first_arg_compile = loadstring(first_arg)
-	if type(first_arg_compile) == 'function' then
-		return first_arg_compile
-	elseif not first_arg_compile then
-		-- if type(first_arg_compile) ~= 'function', first_arg_compile is a nil
-		if #first_arg > 0 then
-			local key = first_arg
-			local dir = (sortby_args[2] == 'desc' and 'desc' or 'asc')
-			return function (a, b)
-				local af = a[key]
-				local bf = b[key]
-				if af and bf then
-					if dir == 'asc' then
-						return af < bf
-					elseif dir == 'desc' then
-						return af > bf
-					end
-				else
-					return nil
-				end
-			end
-		end
-	else
-		return nil
-	end
-end
-
-local function divideQueryPartAndSortbyPart (combine_str_iden)
-	local query_str_iden, sortby_str_iden
-	local divider_start, divider_stop = combine_str_iden:find(rule_index_query_sortby_divider)
-	if divider_start then
-		query_str_iden = combine_str_iden:sub(1, divider_start - 1)
-		sortby_str_iden = combine_str_iden:sub(divider_stop + 1, -1)
-	else
-		query_str_iden = combine_str_iden
-		sortby_str_iden = nil
-	end
-	
-	return query_str_iden, sortby_str_iden	
-end
-
-local canInstanceFitQueryRule
-local canInstanceFitQueryRuleAndFindProperPosition = function (self, combine_str_iden)
-	local p = 0
---[[	local divider_start, divider_stop = combine_str_iden:find(rule_index_query_sortby_divider)
-	if divider_start then
-		query_str_iden = combine_str_iden:sub(1, divider_start - 1)
-		sortby_str_iden = combine_str_iden:sub(divider_stop + 1, -1)
-	else
-		query_str_iden = combine_str_iden
-		sortby_str_iden = nil
-	end
---]]
-
-	local query_str_iden, sortby_str_iden = divideQueryPartAndSortbyPart(combine_str_iden)
-	local flag = true
-
-	if query_str_iden ~= '' then
-		flag = canInstanceFitQueryRule (self, query_str_iden)
-		-- if no sortby part, return directly
-		if isFalse(sortby_str_iden) then
-			return flag, self.id, -1
-		end
-	end
-
-	local id_list = {}
-	if flag then
-		local manager_key = rule_manager_prefix .. self.__name
-		local score = db:zscore(manager_key, combine_str_iden)
-		local item_key = rule_query_result_pattern:format(self.__name, math.floor(score))
-		id_list = db:lrange(item_key, 0, -1)
-		local length = #id_list
-		local model = self:getClass()
-		local func = extractSortByArgs(sortby_str_iden)
-
-		local l, r = 1, #id_list
-		local left_obj
-		local right_obj
-		local bflag, left_flag, right_flag, pflag
-
-		left_obj = model:getById(id_list[l])
-		right_obj = model:getById(id_list[r])
-		if left_obj == nil or right_obj == nil then
-			return nil, id_list[#id_list], #id_list
-		end
-		bflag = func(left_obj, right_obj)
-
-		p = l
-		while (r ~= l) do
-
-			left_flag = func(left_obj, self)
-			right_flag = func(self, right_obj)
-			if bflag == left_flag and bflag == right_flag then
-			-- between
-				p = math.floor((l + r)/2)
-			elseif bflag == left_flag then
-			-- and unequal to right_flag
-			-- on the right hand
-				p = r
-				break
-			elseif bflag == right_flag then
-			-- and unequal to left_flag
-			-- on the left hand
-				p = l - 1
-				break
-			end
-
-			local mobj = model:getById(id_list[p])
-			if mobj == nil then
-				return nil, id_list[#id_list], #id_list
-			end
-
-			pflag = func(mobj, self)
-			if pflag == bflag then
-				l = p + 1
-			else
-				r = p - 1
-			end
-
-			left_obj = model:getById(id_list[l])
-			right_obj = model:getById(id_list[r])
-			if left_obj == nil or right_obj == nil then
-				return nil, id_list[#id_list], #id_list
-			end
-		end
-	end
-
-	return flag, id_list[p], p
-end
-
-
-
-
-
--------------------------------------------------------------------------
 local compressQueryArgs = function (query_args)
 	local out = {}
 	local qtype = type(query_args)
@@ -841,42 +763,78 @@ local extractQueryArgs = function (qstr)
 	return query_args
 end
 
-local checkLogicRelation = function (obj, query_args, logic_choice, model)
-	-- NOTE: query_args can't contain [1]
-	-- here, obj may be object or string
-	-- when obj is string, query_args must be function;
-	-- when query_args is table, obj must be table, and must be real object.
-	local flag = logic_choice
-	if type(query_args) == 'table' then
-		local fields = model and model.__fields or obj.__fields
-		for k, v in pairs(query_args) do
-			-- to redundant query condition, once meet, jump immediately
-			if not fields[k] then flag=false; break end
-
-			if type(v) == 'function' then
-				flag = v(obj[k])
-			else
-				flag = (obj[k] == v)
-			end
-			---------------------------------------------------------------
-			-- logic_choice,       flag,      action,          append?
-			---------------------------------------------------------------
-			-- true (and)          true       next field       --
-			-- true (and)          false      break            no
-			-- false (or)          true       break            yes
-			-- false (or)          false      next field       --
-			---------------------------------------------------------------
-			if logic_choice ~= flag then break end
+-- query_str_iden is at least ''
+local compressSortByArgs = function (sortby_args)
+	local strs = {}
+	for i = 1, #sortby_args do
+       		local v = sortby_args[i]
+		local ctype = type(v)
+		if ctype == 'string' then
+            		tinsert(strs, v)
+        	-- may don't appear
+        	elseif ctype == 'nil' then
+            		tinsert(strs, 'nil')
+        	elseif ctype == 'function' then
+			tinsert(strs, string.dump(v))
 		end
-	else
-		-- call this query args function
-		flag = query_args(obj)
 	end
 
-	return flag
+	return table.concat(strs, rule_index_divider)
 end
 
-canInstanceFitQueryRule = function (self, qstr)
+local compressTwoPartArgs = function (query_str_iden, sortby_str_iden)
+	return query_str_iden .. rule_index_query_sortby_divider .. sortby_str_iden	
+end
+
+
+local extractSortByArgs = function (sortby_str_iden)
+	assert(sortby_str_iden ~= '', "[Error] @extractSortByArgs - sortby_str_iden should not be emply!")
+	local sortby_args = luasplit(sortby_str_iden, rule_index_divider)
+	--local sortby_args = sortby_str_iden:split(rule_index_divider)
+	-- [1] is string or function, [2] is nil or string, 
+	local first_arg = sortby_args[1]
+	local first_arg_compile = loadstring(first_arg)
+	if type(first_arg_compile) == 'function' then
+		return first_arg_compile
+	elseif not first_arg_compile then
+		-- if type(first_arg_compile) ~= 'function', first_arg_compile is a nil
+		if #first_arg > 0 then
+			local key = first_arg
+			local dir = (sortby_args[2] == 'desc' and 'desc' or 'asc')
+			return function (a, b)
+				local af = a[key]
+				local bf = b[key]
+				if af and bf then
+					if dir == 'asc' then
+						return af < bf
+					elseif dir == 'desc' then
+						return af > bf
+					end
+				else
+					return nil
+				end
+			end
+		end
+	else
+		return nil
+	end
+end
+
+local function divideQueryPartAndSortbyPart (combine_str_iden)
+	local query_str_iden, sortby_str_iden
+	local divider_start, divider_stop = combine_str_iden:find(rule_index_query_sortby_divider)
+	if divider_start then
+		query_str_iden = combine_str_iden:sub(1, divider_start - 1)
+		sortby_str_iden = combine_str_iden:sub(divider_stop + 1, -1)
+	else
+		query_str_iden = combine_str_iden
+		sortby_str_iden = nil
+	end
+	
+	return query_str_iden, sortby_str_iden	
+end
+
+local canInstanceFitQueryRule = function (self, qstr)
 	local query_args = extractQueryArgs(qstr)
 	--DEBUG(query_args)
 	local logic_choice = true
@@ -884,6 +842,97 @@ canInstanceFitQueryRule = function (self, qstr)
 	return checkLogicRelation(self, query_args, logic_choice)
 end
 
+local canInstanceFitQueryRuleAndFindProperPosition = function (self, combine_str_iden)
+	local p = 0
+--[[	local divider_start, divider_stop = combine_str_iden:find(rule_index_query_sortby_divider)
+	if divider_start then
+		query_str_iden = combine_str_iden:sub(1, divider_start - 1)
+		sortby_str_iden = combine_str_iden:sub(divider_stop + 1, -1)
+	else
+		query_str_iden = combine_str_iden
+		sortby_str_iden = nil
+	end
+--]]
+
+	local query_str_iden, sortby_str_iden = divideQueryPartAndSortbyPart(combine_str_iden)
+	local flag = true
+
+	if query_str_iden ~= '' then
+		flag = canInstanceFitQueryRule (self, query_str_iden)
+		-- if no sortby part, return directly
+		if isFalse(sortby_str_iden) then
+			return flag, self.id, -1
+		end
+	end
+
+	local id_list = {}
+	if flag then
+		local manager_key = rule_manager_prefix .. self.__name
+		local score = db:zscore(manager_key, combine_str_iden)
+		local item_key = rule_query_result_pattern:format(self.__name, math.floor(score))
+		id_list = db:lrange(item_key, 0, -1)
+		local length = #id_list
+		local model = self:getClass()
+		local func = extractSortByArgs(sortby_str_iden)
+
+		local l, r = 1, #id_list
+		local left_obj
+		local right_obj
+		local bflag, left_flag, right_flag, pflag
+
+		left_obj = model:getById(id_list[l])
+		right_obj = model:getById(id_list[r])
+		if left_obj == nil or right_obj == nil then
+			return nil, id_list[#id_list], #id_list
+		end
+		bflag = func(left_obj, right_obj)
+
+		p = l
+		while (r ~= l) do
+
+			left_flag = func(left_obj, self)
+			right_flag = func(self, right_obj)
+			if bflag == left_flag and bflag == right_flag then
+			-- between
+				p = math.floor((l + r)/2)
+			elseif bflag == left_flag then
+			-- and unequal to right_flag
+			-- on the right hand
+				p = r
+				break
+			elseif bflag == right_flag then
+			-- and unequal to left_flag
+			-- on the left hand
+				p = l - 1
+				break
+			end
+
+			local mobj = model:getById(id_list[p])
+			if mobj == nil then
+				return nil, id_list[#id_list], #id_list
+			end
+
+			pflag = func(mobj, self)
+			if pflag == bflag then
+				l = p + 1
+			else
+				r = p - 1
+			end
+
+			left_obj = model:getById(id_list[l])
+			right_obj = model:getById(id_list[r])
+			if left_obj == nil or right_obj == nil then
+				return nil, id_list[#id_list], #id_list
+			end
+		end
+	end
+
+	return flag, id_list[p], p
+end
+
+-------------------------------------------------------------------------
+--  
+--
 local updateInstanceToIndexOnRule = function (self, qstr)
 	local rule_manager_prefix, rule_result_pattern = specifiedRulePrefix()
 
@@ -1028,28 +1077,31 @@ local getIndexFromManager = function (self, str_iden, getnum)
 	end
 end
 
+
+----------------------------------------------------------------------
+--- save process
 -- called by save
 -- self is instance
 local processBeforeSave = function (self, params)
-    local indexfd = self.__indexfd
-    local fields = self.__fields
-    local store_kv = {}
-    --- save an hash object
-    -- 'id' are essential in an object instance
-    tinsert(store_kv, 'id')
-    tinsert(store_kv, self.id)
+	local primarykey = self.__primarykey
+	local fields = self.__fields
+	local store_kv = {}
+	--- save an hash object
+	-- 'id' are essential in an object instance
+	tinsert(store_kv, 'id')
+	tinsert(store_kv, self.id)
 
-    -- if parameters exist, update it
-    if params and type(params) == 'table' then
+	-- if parameters exist, update it
+	if params and type(params) == 'table' then
 		for k, v in pairs(params) do
 			if k ~= 'id' and fields[k] then
 				self[k] = tostring(v)
 			end
 		end
-    end
+	end
 
-    assert(not isFalse(self[indexfd]) ,
-    	format("[Error] instance's index field %s's value must not be nil. Please check your model defination.", indexfd))
+	assert(not isFalse(self[primarykey]) ,
+		format("[Error] instance's index field %s's value must not be nil. Please check your model defination.", primarykey))
 
 	-- check required field
 	-- TODO: later we should update this to validate most attributes for each field
@@ -1059,7 +1111,7 @@ local processBeforeSave = function (self, params)
 		end
 	end
 
-    for k, v in pairs(self) do
+	for k, v in pairs(self) do
 		-- when save, need to check something
 		-- 1. only save fields defined in model defination
 		-- 2. don't save the functional member, and _parent
@@ -1074,34 +1126,15 @@ local processBeforeSave = function (self, params)
 				tinsert(store_kv, tostring(v))
 			end
 		end
-    end
+	end
 
-    return self, store_kv
+	return self, store_kv
 end
 
-local transEdgeFromLuaToRedis = function (start, stop)
-	local istart, istop
-	
-	if start > 0 then
-		istart = start - 1
-	else
-		istart = start
-	end
-	
-	if stop > 0 then
-		istop = stop - 1
-	else 
-		istop = stop
-	end
-	
-	return istart, istop
-end
 ------------------------------------------------------------------------
--- Model Define
+-- Model Definition
 -- Model is the basic object of Bamboo Database Abstract Layer
 ------------------------------------------------------------------------
-
-
 Model = Object:extend {
 	__name = 'Model';
 	__fields = {
@@ -1550,7 +1583,7 @@ Model = Object:extend {
 	
 	
 	-- delete self instance object
-	    -- self can be instance or query set
+	-- self can be instance or query set
 	delById = function (self, ids)
 		I_AM_CLASS(self)
 		if bamboo.config.use_fake_deletion == true then
@@ -1587,7 +1620,7 @@ Model = Object:extend {
 	-----------------------------------------------------------------
 	-- validate form parameters by model defination
 	-- usually, params = Form:parse(req)
-	--
+	-- TODO: should perfect 
 	validate = function (self, params)
 		I_AM_CLASS(self)
 		checkType(params, 'table')
@@ -1618,9 +1651,9 @@ Model = Object:extend {
 
 		local new_case = true
 		-- here, we separate the new create case and update case
-		-- if backwards to Model, the __indexfd is 'id'
-		local indexfd = self.__indexfd
-		assert(type(indexfd) == 'string', "[Error] the __indexfd should be string.")
+		-- if backwards to Model, the __primarykey is 'id'
+		local primarykey = self.__primarykey
+		assert(type(primarykey) == 'string', "[Error] the __primarykey should be string.")
 
 		-- if self has id attribute, it is an instance saved before. use id to separate two cases
 		if self.id then new_case = false end
@@ -1639,10 +1672,10 @@ Model = Object:extend {
 				self.id = db:get(countername)
 				local model_key = getNameIdPattern(self)
 				local self, store_kv = processBeforeSave(self, params)
-				-- assert(not db:zscore(index_key, self[indexfd]), "[Error] save duplicate to an unique limited field, aborted!")
-				if db:zscore(index_key, self[indexfd]) then print(format("[Warning] save duplicate to an unique limited field: %s.", indexfd)); return nil end
+				-- assert(not db:zscore(index_key, self[primarykey]), "[Error] save duplicate to an unique limited field, aborted!")
+				if db:zscore(index_key, self[primarykey]) then print(format("[Warning] save duplicate to an unique limited field: %s.", primarykey)); return nil end
 
-				db:zadd(index_key, self.id, self[indexfd])
+				db:zadd(index_key, self.id, self[primarykey])
 				-- update object hash store key
 				db:hmset(model_key, unpack(store_kv))
 
@@ -1663,17 +1696,17 @@ Model = Object:extend {
 					mih.index(self,false);--update hash index
 				end
 
-				local score = db:zscore(index_key, self[indexfd])
+				local score = db:zscore(index_key, self[primarykey])
 				-- assert(score == self.id or score == nil, "[Error] save duplicate to an unique limited field, aborted!")
 				-- score is number, self.id is string
-				if not (tostring(score) == self.id or score == nil) then print(format("[Warning] save duplicate to an unique limited field: %s.", indexfd)); return nil  end
+				if not (tostring(score) == self.id or score == nil) then print(format("[Warning] save duplicate to an unique limited field: %s.", primarykey)); return nil  end
 
-				-- if modified indexfd, score will be nil, remove the old id-indexfd pair, for later new save indexfd
+				-- if modified primarykey, score will be nil, remove the old id-primarykey pair, for later new save primarykey
 				if not score then
 					db:zremrangebyscore(index_key, self.id, self.id)
 				end
 				-- update __index score and member
-				db:zadd(index_key, self.id, self[indexfd])
+				db:zadd(index_key, self.id, self[primarykey])
 				-- update object hash store key
 				db:hmset(model_key, unpack(store_kv))
 			end, options)
@@ -1702,11 +1735,11 @@ Model = Object:extend {
 		local model_key = getNameIdPattern(self)
 		assert(db:exists(model_key), ("[Error] Key %s does't exist! Can't apply update."):format(model_key))
 
-		local indexfd = self.__indexfd
+		local primarykey = self.__primarykey
 
 		-- if field is indexed, need to update the __index too
-		if field == indexfd then
-			assert(new_value ~= nil, "[Error] Can not delete indexfd field");
+		if field == primarykey then
+			assert(new_value ~= nil, "[Error] Can not delete primarykey field");
 			local index_key = getIndexKey(self)
 			db:zremrangebyscore(index_key, self.id, self.id)
 		   	db:zadd(index_key, self.id, new_value)
@@ -1722,13 +1755,13 @@ Model = Object:extend {
 		--update object in database
 		if new_value == nil then
 			-- could not delete index field
-			if field ~= indexfd then
+			if field ~= primarykey then
 				db:hdel(model_key, field)
 			end
 		else
 			-- apply to db
 			-- if field is indexed, need to update the __index too
-			if field == indexfd then
+			if field == primarykey then
 				local index_key = getIndexKey(self)
 				db:zremrangebyscore(index_key, self.id, self.id)
 				db:zadd(index_key, self.id, new_value)
@@ -2191,7 +2224,7 @@ Model = Object:extend {
 	end;
 
 	------------------------------------------------------------------------
-	-- misc API
+	-- misc APIs
 	------------------------------------------------------------------------
 	--- deprecated
 	classname = function (self)
@@ -2212,7 +2245,8 @@ Model = Object:extend {
 	-- get the model's instance counter value
 	-- this can be call by Class and Instance
 	getCounter = getCounter;
-}
+}:include('bamboo.mixins.custom'):include('bamboo.mixins.fulltext')
+
 
 -- keep compatable with old version
 Model.__indexfd = Model.__primarykey

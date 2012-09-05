@@ -2,18 +2,16 @@
 local db = BAMBOO_DB
 
 local function getCustomKey(self, key)
-	return getClassName(self) + ':custom:' + key
+	return format('%s:custom:%s', self.__name, key)
 end
 
 local function getCustomIdKey(self, key)
-	return getClassName(self) + ':' + self.id + ':custom:'  + key
+	return format('%s:%s:custom:%s', self.__name, self.id, key)
 end
-
 
 local makeCustomKey = function (self, key)
 	local custom_key = self:isClass() and getCustomKey(self, key) or getCustomIdKey(self, key)
 end
-
 
 return function ()
 	
@@ -51,6 +49,8 @@ return function ()
 			checkType(key, 'string')
 			local custom_key = makeCustomKey(self, key)
 			db:incrby(custom_key,step or 1)
+			
+			return self
 		end;
 		
 		decrCustom = function(self, key, step)
@@ -58,6 +58,8 @@ return function ()
 			checkType(key, 'string')
 			local custom_key = makeCustomKey(self, key)
 			db:decrby(custom_key,step or 1);
+			
+			return self
 		end;
 
 		-- store customize key-value pair to db
@@ -81,7 +83,7 @@ return function ()
 			return self
 		end;
 
-		setCustomQuerySet = function (self, key, query_set, scores, is_cache, cache_life)
+		setCustomQuerySet = function (self, key, query_set, scores)
 			I_AM_CLASS_OR_INSTANCE(self)
 			I_AM_QUERY_SET(query_set)
 			checkType(key, 'string')
@@ -91,13 +93,13 @@ return function ()
 				for i, v in ipairs(query_set) do
 					tinsert(ids, v.id)
 				end
-				self:setCustom(key, ids, 'zset', scores, is_cache, cache_life)
+				self:setCustom(key, ids, 'zset', scores)
 			else
 				local ids = {}
 				for i, v in ipairs(query_set) do
 					tinsert(ids, v.id)
 				end
-				self:setCustom(key, ids, 'list', is_cache, cache_life)
+				self:setCustom(key, ids, 'list')
 			end
 
 			return self
@@ -112,12 +114,15 @@ return function ()
 			return custom_key, db:type(custom_key)
 		end;
 
-		--
+		-- TODO: Need to modify
+		-- compitable to old version, start is start or atype
 		getCustom = function (self, key, start, stop, is_rev)
 			I_AM_CLASS_OR_INSTANCE(self)
 			checkType(key, 'string')
+			
 			local custom_key = makeCustomKey(self, key)
 			if not db:exists(custom_key) then
+				local atype = start
 				print(("[Warning] @getCustom - Key %s doesn't exist!"):format(custom_key))
 				if not atype or atype == 'string' then return nil
 				elseif atype == 'list' then
@@ -130,11 +135,10 @@ return function ()
 
 			-- get the store type in redis
 			local store_type = db:type(custom_key)
-			if atype then assert(store_type == atype, '[Error] @getCustom - The specified type is not equal the type stored in db.') end
 			local store_module = getStoreModule(store_type)
 			local ids, scores = store_module.retrieve(custom_key)
 
-			if type(ids) == 'table' and (start or stop) then
+			if type(ids) == 'table' and (type(start)=='number' or stop) then
 				ids = ids:slice(start, stop, is_rev)
 				if type(scores) == 'table' then
 					scores = scores:slice(start, stop, is_rev)
@@ -147,7 +151,7 @@ return function ()
 		getCustomQuerySet = function (self, key, start, stop, is_rev)
 			I_AM_CLASS_OR_INSTANCE(self)
 			checkType(key, 'string')
-			local query_set_ids, scores = self:getCustom(key, nil, start, stop, is_rev)
+			local query_set_ids, scores = self:getCustom(key, start, stop, is_rev)
 			if isFalse(query_set_ids) then
 				return QuerySet(), nil
 			else
@@ -246,6 +250,7 @@ return function ()
 			local store_module = getStoreModule(store_type)
 			return store_module.num(custom_key)
 		end;
+	
 	
 	}
 end

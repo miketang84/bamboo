@@ -1,19 +1,26 @@
 
 if bamboo.config.fulltext_index_support then require 'mmseg' end
-local ft_words_manager = '_fulltext_words:%s:%s'	-- prefix:model:field
-local ft_rft_pattern = '_RFT:%s:%s'			-- prefix:model:id:field
-local ft_ft_pattern = '_FT:%s:%s:%s'			-- prefix:model:field:word
+
+local ft_words_manager = '_fulltext_words:%s:%s'	-- prefix:model:field		word set
+local ft_rft_pattern = '_RFT:%s:%s:%s'		-- prefix:model:id:field	word set
+local ft_ft_pattern = '_FT:%s:%s:%s'			-- prefix:model:field:word  	id set
 
 local clearFtIndexesOnDeletion = function (instance)
-	local model_key = getNameIdPattern(instance)
-	local words = db:smembers('_RFT:' + model_key)
-	db:pipeline(function (p)
-		for _, word in ipairs(words) do
-			p:srem(format('_FT:%s:%s', instance.__name, word), model_key)
-		end
-	end)
-	-- clear the reverse fulltext key
-	db:del('_RFT:' + model_key)
+	local model_key = format('%s:%s', instance.__name, instance.id)
+
+	local ftindex_fields = instance['__fulltext_index_fields']
+	if isFalse(ftindex_fields) then return false end
+
+	local words
+	for _, field in ipairs(ftindex_fields) do
+		words = db:smembers(format(ft_rft_pattern, instance.__name, instance.id, field))
+		db:pipeline(function (p)
+			for _, word in ipairs(words) do
+				p:srem(format(ft_ft_pattern, instance.__name, field, word), instance.id)
+			end
+		end)
+		db:del(format(ft_rft_pattern, instance.__name, instance.id, field))
+	end
 end
 
 
@@ -34,7 +41,7 @@ local makeFulltextIndexes = function (instance)
 				-- add this word to global word set
 				db:sadd(format(ft_words_manager, instance.__name, v), word)
 				-- add reverse fulltext index such as '_RFT:model:id', type is set, item is 'word'
-				db:sadd(format(ft_rft_pattern, getNameIdPattern(instance), v), word)
+				db:sadd(format(ft_rft_pattern, instance.__name, instance.id, v), word)
 				-- add fulltext index such as '_FT:model:word', type is set, item is 'id'
 				db:sadd(format(ft_ft_pattern, instance.__name, v, word), instance.id)
 			end
@@ -113,6 +120,7 @@ local searchOnFieldFulltextIndexes = function (self, field, tags, n, onlyids)
 	if onlyids == 'onlyids' then
 		return QuerySet(ids)
 	else
+		local getFromRedisPipeline = bamboo.intervals.getFromRedisPipeline
 		-- return objects
 		return getFromRedisPipeline(self, ids)
 	end
@@ -134,6 +142,7 @@ local searchOnFieldFulltextIndexesByOr = function (self, field, tags, n, onlyids
 	if onlyids == 'onlyids' then
 		results = QuerySet(id_set:members():slice(1, n))
 	else
+		local getFromRedisPipeline = bamboo.intervals.getFromRedisPipeline
 		results = getFromRedisPipeline(self, id_set:members():slice(1, n))
 	end
 	
@@ -141,7 +150,7 @@ local searchOnFieldFulltextIndexesByOr = function (self, field, tags, n, onlyids
 end
 
 -- here, tags is the whole tags dict
-local searchOnFulltextIndexes = function (self, tags, n, is_or, standalone)
+local searchOnFulltextIndexes = function (self, tags, n, is_or, standalone, onlyids)
 	
 	local ftindex_fields = self['__fulltext_index_fields']
 	if isFalse(ftindex_fields) then return QuerySet() end
@@ -157,10 +166,23 @@ local searchOnFulltextIndexes = function (self, tags, n, is_or, standalone)
 		end
 	end
 	
-	local results = QuerySet()
+	if onlyids == 'onlyids' then
+		if standalone == 'standalone' then
+			return field_dict
+		else
+			local id_set = Set()
+			for k, ids in pairs(field_dict) do
+				id_set = id_set:union(Set(ids))
+			end
+			return id_set:members():slice(1, n)
+		end
+	end
+	
+	local results
+	local getFromRedisPipeline = bamboo.intervals.getFromRedisPipeline
 	if standalone == 'standalone' then
 		for k, ids in pairs(field_dict) do
-			results[k] = getFromRedisPipeline(self, ids:slice(1, n))
+			results[k] = getFromRedisPipeline(self, ids)
 		end
 	else
 		local id_set = Set()
@@ -228,7 +250,7 @@ end
 
 
 local function searchOnLongWords (self, sentence)
-	local longwords_chosed = List()
+	local longwords_chosen = List()
 	local i, p, e = 1, 1, 1
 
 	local dataset = Set()
@@ -274,14 +296,14 @@ local function searchOnLongWords (self, sentence)
 				local longword = dataset:members()[1]
 				local thisword = sentence:utf8slice(p, e)
 				if thisword == longword then
-					longwords_chosed:append(longword)
+					longwords_chosen:append(longword)
 				end
 			else
 				local longwords = dataset:members()
 				local thisword = sentence:utf8slice(p, e)
 				for _, v in ipairs(longwords) do
 					if thisword == v then
-						longwords_chosed:append(thisword)
+						longwords_chosen:append(thisword)
 						break
 					end
 				end
@@ -291,72 +313,78 @@ local function searchOnLongWords (self, sentence)
 		
 	end
 	
-	return longwords_chosed
+	return chosen
 end
 
 
 return function (...)
-	return {
-		
+	
+	if bamboo.config.fulltext_index_support then 
+		require 'mmseg'
+		return {
 
-		makeFulltextIndexes = function (self)
-			I_AM_CLASS(self)
-			self:all():each(function (instance) makeFulltextIndexes(instance) end)
-			return true
-		end;
-		
-		-- for fulltext index API
-		fulltextSearch = function (self, ask_str, n)
-			I_AM_CLASS(self)
-			local tags = wordSegmentOnFtIndex(self, ask_str)
-			return searchOnFulltextIndexes(self, tags, n)
-		end;
-
-		-- for fulltext index API
-		fulltextSearchByOr = function (self, ask_str, n)
-			I_AM_CLASS(self)
-			local tags = wordSegmentOnFtIndex(self, ask_str)
-			return searchOnFulltextIndexes(self, tags, n, 'or')
-		end;
-
-		-- for fulltext index API
-		fulltextSearchByFieldByOr = function (self, field, ask_str, n)
-			I_AM_CLASS(self)
-			local tags = wordSegmentOnFieldFtIndex(self, field, ask_str)
-			return searchOnFieldFulltextIndexesByOr(self, field, tags, n)
-		end;
-
-		-- for fulltext index API
-		fulltextSearchByField = function (self, field, ask_str, n)
-			I_AM_CLASS(self)
-			local tags = wordSegmentOnFieldFtIndex(self, field, ask_str)
-			return searchOnFieldFulltextIndexes(self, field, tags, n)
-		end;
-
-		-- for fulltext index API
-		fulltextSearchByWord = function (self, word, n)
-			I_AM_CLASS(self)
-			local ftindex_fields = self['__fulltext_index_fields']
-			if isFalse(ftindex_fields) then return QuerySet() end
-		
-			local tags = {}
-			for _, field in ipairs(ftindex_fields) do
-				tags[field] = {word}
-			end
-			return searchOnFulltextIndexes(self, tags, n)
-		end;
-
-		-- for fulltext index API
-		fulltextSearchByFieldByWord = function (self, field, word, n)
-			I_AM_CLASS(self)
-			return searchOnFieldFulltextIndexes(self, field, {word}, n)
-		end;
-
-		makeLongWordIndexes = makeLongWordIndexes;
-		searchOnLongWords = searchOnLongWords;
-		didLongWordIndexed = didLongWordIndexed;
+			makeFulltextIndexes = function (self)
+				I_AM_CLASS(self)
+				self:all():each(function (instance) makeFulltextIndexes(instance) end)
+				return true
+			end;
 			
-		
-	}
+			-- for fulltext index API
+			fulltextSearch = function (self, ask_str, n)
+				I_AM_CLASS(self)
+				local tags = wordSegmentOnFtIndex(self, ask_str)
+				return searchOnFulltextIndexes(self, tags, n)
+			end;
+
+			-- for fulltext index API
+			fulltextSearchByOr = function (self, ask_str, n)
+				I_AM_CLASS(self)
+				local tags = wordSegmentOnFtIndex(self, ask_str)
+				return searchOnFulltextIndexes(self, tags, n, 'or')
+			end;
+
+			-- for fulltext index API
+			fulltextSearchByFieldByOr = function (self, field, ask_str, n)
+				I_AM_CLASS(self)
+				local tags = wordSegmentOnFieldFtIndex(self, field, ask_str)
+				return searchOnFieldFulltextIndexesByOr(self, field, tags, n)
+			end;
+
+			-- for fulltext index API
+			fulltextSearchByField = function (self, field, ask_str, n)
+				I_AM_CLASS(self)
+				local tags = wordSegmentOnFieldFtIndex(self, field, ask_str)
+				return searchOnFieldFulltextIndexes(self, field, tags, n)
+			end;
+
+			-- for fulltext index API
+			fulltextSearchByWord = function (self, word, n)
+				I_AM_CLASS(self)
+				local ftindex_fields = self['__fulltext_index_fields']
+				if isFalse(ftindex_fields) then return QuerySet() end
+			
+				local tags = {}
+				for _, field in ipairs(ftindex_fields) do
+					tags[field] = {word}
+				end
+				return searchOnFulltextIndexes(self, tags, n)
+			end;
+
+			-- for fulltext index API
+			fulltextSearchByFieldByWord = function (self, field, word, n)
+				I_AM_CLASS(self)
+				return searchOnFieldFulltextIndexes(self, field, {word}, n)
+			end;
+
+			---------------------------------------------------------------------
+			-- long word APIs
+			makeLongWordIndexes = makeLongWordIndexes;
+			searchOnLongWords = searchOnLongWords;
+			didLongWordIndexed = didLongWordIndexed;
+		}
+	else
+		return {}
+	end
+	
 end
 
