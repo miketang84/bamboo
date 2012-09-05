@@ -1370,7 +1370,6 @@ Model = Object:extend {
 			'[Error] the query_args passed to filter must be table or function.')
 		local no_sort_rule = true
 		-- regular the args
-		local nargs = select('#', ...)
 		local sort_field, sort_dir, sort_func, start, stop, is_rev, no_cache
 		local first_arg = select(1, ...)
 		if type(first_arg) == 'function' then
