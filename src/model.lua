@@ -1373,11 +1373,10 @@ Model = Object:extend {
 
 	--- fitler some instances belong to this model
 	-- @param query_args: query arguments in a table
-	-- @param start: specify which index to start slice, note: this is the position after filtering
-	-- @param stop: specify the end of slice
-	-- @param is_rev: specify the direction of the search result, 'rev'
-	-- @return: query_set, an object list (query set)
-	-- @note: this function can be called by class object and query set
+	-- @param 
+	-- @param 
+	-- @param 
+	-- @return
 	filter = function (self, query_args, ...)
 		I_AM_CLASS_OR_QUERY_SET(self)
 		assert(type(query_args) == 'table' or type(query_args) == 'function', 

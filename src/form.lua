@@ -2,7 +2,6 @@
 module(..., package.seeall)
 
 local http = require 'lglib.http'
-local json = require 'json'
 
 
 local ENCODING_MATCH = '^%s-([%w/%-]+);*(.*)$'
