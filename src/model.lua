@@ -1324,7 +1324,6 @@ local canInstanceFitQueryRuleAndFindProperPosition = function (self, combine_str
 		sortby_str_iden = nil
 	end
 --]]
-
 	local query_str_iden, sortby_str_iden = divideQueryPartAndSortbyPart(combine_str_iden)
 	local flag = true
 
@@ -1429,10 +1428,20 @@ local compressQueryArgs = function (query_args)
 			tinsert(out, k)
 			if type(v) ~= 'function' then
 				tinsert(out, tostring(v))
+				tinsert(out, type(v))
 			else
 				local _, func_name, cmp_obj = v(uglystr)
-				local queryt_iden = {func_name, cmp_obj}
-				-- XXX: here, queryt_iden[2] may be nil, this will be stored now
+				local queryt_iden
+				local _args = {}
+				if type(cmp_obj) == 'table' then
+					for _, v in ipairs(cmp_obj) do
+						tinsert(_args, tostring(v), type(v))
+					end
+					queryt_iden = {func_name, unpack(_args)}
+				else
+					queryt_iden = {func_name, tostring(cmp_obj), type(cmp_obj)}
+				end
+				-- XXX: here, queryt_iden[2] may be nil, this will not be stored now
                 		for _, item in ipairs(queryt_iden) do
 					tinsert(out, item)
 				end
@@ -1507,20 +1516,42 @@ local extractQueryArgs = function (qstr)
 			-- kt[1] is 'key', [2] is 'closure', [3] .. are closure's parameters
 			local key = kt[1]
 			local closure = kt[2]
-			if #kt > 2 then
-				local _args = {}
+			if #kt > 3 then
+				-- here, all args are string type
+				local flat_args = {}
 				for j=3, #kt do
-					tinsert(_args, kt[j])
+					tinsert(flat_args, kt[j])
+				end
+				local _args = {}
+				for i=1, #flat_args, 2 do
+					local ctype = flat_args[i+1]
+					if ctype == 'number' then
+						tinsert(_args, tonumber(flat_args[i]))
+					elseif ctype == 'boolean' then
+						tinsert(_args, flat_args[i] == 'true')
+					elseif ctype == 'nil' then
+						-- XXX: won't workable
+						tinsert(_args, nil)
+						
+					end
+
 				end
 				-- compute closure now
-				query_args[key] = _G[closure](unpack(_args))
+				query_args[key] = _G[closure]( #_args > 0 and unpack(_args) or nil)
 			else
-				-- no args, means this 'closure' is a string
-				query_args[key] = closure
+					local ctype = kt[3]
+					local val = closure
+					if ctype == 'number' then
+						val = tonumber(val)
+					elseif ctype == 'boolean' then
+						val = val == 'true'
+					end
+				
+				-- no args, means this 'closure' is a string, here, we only store string type?
+				query_args[key] = val
 			end
 		end
 	end
-
 	return query_args
 end
 
@@ -1555,7 +1586,6 @@ local checkLogicRelation = function (obj, query_args, logic_choice, model)
 		-- call this query args function
 		flag = query_args(obj)
 	end
-
 	return flag
 end
 
@@ -1603,7 +1633,8 @@ local updateInstanceToIndexOnRule = function (self, qstr)
 --				db:zadd(manager_key, math.floor(score), qstr)
 				db:exec()
 			end
---[[		else
+---[[	
+	else
 			if db:exists(item_key) then
 				-- delete the old one id
 				db:lrem(item_key, 1, self.id)
@@ -2034,7 +2065,7 @@ Model = Object:extend {
 	filter = function (self, query_args, ...)
 		I_AM_CLASS_OR_QUERY_SET(self)
 		assert(type(query_args) == 'table' or type(query_args) == 'function', '[Error] the query_args passed to filter must be table or function.')
-		local no_sort_rule
+		local no_sort_rule = true
 		-- regular the args
                 local nargs = select('#', ...)
                 local is_count = (nargs ~= 0) and select(nargs, ...) or nil
