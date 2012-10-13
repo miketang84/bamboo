@@ -1,6 +1,6 @@
 module(..., package.seeall)
 
-local pluto = require 'pluto'
+local cmsgpack = require 'cmsgpack'
 
 local PLUGIN_ARGS_DBKEY = "_plugin_args:%s:%s"
 
@@ -134,11 +134,11 @@ function persist(plugin_name, args)
 	assert(type(args) == 'table', "[Error] @plugin persist - #2 args should be table.")
 	assert(type(args._tag) == 'string', "[Error] @plugin persist - args._tag should be string.")
 
-	-- use pluto to persist
+	-- use cmsgpack to persist
 	-- here, must use deepCopy to remove all the metatables in args
-	-- pluto now can not process those metatables correctly, will report "[Error] Attempt to persist a C function."
-	-- local buf = pluto.persist({}, deepCopyWithModelName(args))
-	local ok, buf = pcall(pluto.persist, {}, deepCopyWithModelName(args))
+	-- cmsgpack now can not process those metatables correctly, will report "[Error] Attempt to persist a C function."
+	-- local buf = cmsgpack.pack({}, deepCopyWithModelName(args))
+	local ok, buf = pcall(cmsgpack.pack, {}, deepCopyWithModelName(args))
 	if not ok then 
 		return print(format('[Warning] plugin %s: arguments persisting failed.', plugin_name))
 	end
@@ -156,10 +156,10 @@ function unpersist(plugin_name, _tag)
 
 	local db = BAMBOO_DB
 	local buf = db:get(format(PLUGIN_ARGS_DBKEY, plugin_name, _tag))
-	-- local tbl = pluto.unpersist({}, buf)
+	-- local tbl = cmsgpack.unpersist({}, buf)
 	if not buf then return {} end
 	
-	local ok, tbl = pcall(pluto.unpersist, {}, buf)
+	local ok, tbl = pcall(cmsgpack.unpack, {}, buf)
 	if not ok then 
 		return print(format('[Warning] plugin %s: arguments unpersisting failed.', plugin_name))
 	end

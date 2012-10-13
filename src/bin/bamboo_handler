@@ -77,11 +77,11 @@ if config.monserver_dir then
 end
 config.route = config.route or '/'
 
-local m2 = require 'bamboo.m2'
-m2.loadConfig(config)
+local driver = require 'bamboo.server_driver'
+driver.loadConfig(config)
 -- make a connection as the pipe interact with mongrel2
-local conn = assert(m2.connect(config), "Failed to connect to monserver. ")
-bamboo.conn = conn
+local driver_conn = assert(driver.connect(config), "Failed to connect to monserver.")
+bamboo.conn = driver_conn
 
 local Web = require 'bamboo.web'
 
@@ -445,7 +445,7 @@ end
 local function start(config)
 
     -- boot main loop
-    run(conn, config)
+    run(bamboo.conn, config)
 end
 
 collectConfig(config)
