@@ -2,7 +2,6 @@
 module(..., package.seeall)
 
 local http = require 'lglib.http'
-local json = require 'json'
 
 
 local ENCODING_MATCH = '^%s-([%w/%-]+);*(.*)$'
@@ -62,8 +61,6 @@ end;
 
 
 local Form = Object:extend {
-    __tag = 'Bamboo.Form';
-    
     parse = function (self, req)
         I_AM_CLASS(self)
         local headers = req.headers

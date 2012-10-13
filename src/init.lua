@@ -13,12 +13,14 @@ local Set = require 'lglib.set'
 local List = require 'lglib.list'
 local FieldType = require 'bamboo.mvm.prototype'
 local util = require 'bamboo.util'
+require 'bamboo.globals'
 
 config = {}
 -- for global rendering usage
 context = {}
 userdata = {}
 plugindata = {}
+internals = {}
 compiled_views_tmpls = {}
 compiled_views = {}
 compiled_views_locals = {}
@@ -32,6 +34,8 @@ SESSION_LIFE = 3600 * 24
 CACHE_LIFE = 1800
 -- for rule index life time
 RULE_LIFE = 1800
+-- for plugin args life time
+PLUGIN_ARGS_LIFE = 3600
 
 -- global URLS definition
 URLS = {}
@@ -306,7 +310,7 @@ registerModule = function (mdl, extra_params)
 					if ret and mdl.finish and type(mdl.finish) == 'function' then
 						ret, last_params = mdl.finish(finished_params)
 					end
-					if not ret then print(format("[Warning] abort in module %s's finish function.", mdl._NAME or '')) end
+					-- if ret == false then print(format("[Warning] abort in module %s's finish function.", mdl._NAME or '')) end
 					
 					-- make no sense
 					return ret, last_params or finished_params or inited_params
@@ -335,23 +339,17 @@ end
 ------------------------------------------------------------------------
 MODEL_LIST = {}
 
-local function getClassName(model)
-	return model.__tag:match('%.(%w+)$')
-end
-
 registerModel = function (model)
 	checkType(model, 'table')
-	assert( model.__tag, 'Registered model __tag must not be missing.' )
-	local model_name = getClassName(model)
+	assert( model.__name, 'Registered model __name must not be missing.' )
+	local model_name = model.__name
 
-	if not MODEL_LIST[model_name] then
+	if MODEL_LIST[model_name] then
+		print('[Warning] The same __name model had been registered.')
+		return
+	else
 		MODEL_LIST[model_name] = model
 
-		-- dynamic fields
-		if model:hasDynamicField() then
-			model:importDynamicFields()
-		end
-		
 		-- set metatable for each field
 		for field, fdt in pairs(model.__fields) do
 			setmetatable(fdt, {__index = FieldType[fdt.widget_type or 'text']})

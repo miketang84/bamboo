@@ -149,8 +149,6 @@ end
             
 -- NOTE: the instance of this class is a function
 local View = Object:extend {
-    __tag = "Object.View";
-    __name = 'View';
     ------------------------------------------------------------------------
     --
     -- if config.PRODUCTION is true, means it is in production mode, it will only be compiled once every call View()

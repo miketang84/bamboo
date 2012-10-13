@@ -6,7 +6,6 @@ local Form  = require 'bamboo.form'
 local View = require 'bamboo.view'
 
 local Web = Object:extend {
-	__tag = 'Bamboo.Web';
 	__name = 'Web';
 	init = function (self, conn, main, req, stateful)
 		local controller

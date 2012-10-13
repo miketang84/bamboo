@@ -163,54 +163,52 @@ end
 
 local Session 
 Session = Object:extend {
-	__tag = 'Object.Session';
-    --__name = 'Session';
-    -- nothing to do
+	-- nothing to do
 	init = function (self) return self end;
 
-    set = function (self)
-        local session_key = PREFIX + req.session_id
-        if not db:hexists(session_key, 'session_id') then
-            db:hset(session_key, 'session_id', req.session_id)
-        end
+	set = function (self)
+		local session_key = PREFIX + req.session_id
+		if not db:hexists(session_key, 'session_id') then
+		    db:hset(session_key, 'session_id', req.session_id)
+		end
 
-        local session = db:hgetall(session_key)
-        for k, v in pairs(session) do
-			session[k] = getStructure(session_key, k, v)
-        end
-        -- in session, we could not use User model to record something,
-		-- because session is lower api, and shouldn't be limited as User model
-        if session['user_id'] then
-            local user_id = session['user_id']
-            local model_name, id = user_id:match('^(%w+):(%d+)$')
-            assert(model_name and id, "[ERROR] Session user_id format is not right.")
-            local model = bamboo.getModelByName(model_name)
-            assert(model, "[ERROR] This user model doesn't registerd.")
-            -- get the real user instance, assign it to req.user
-            req['user'] = model:getById(id)
+		local session = db:hgetall(session_key)
+		for k, v in pairs(session) do
+				session[k] = getStructure(session_key, k, v)
+		end
+		-- in session, we could not use User model to record something,
+			-- because session is lower api, and shouldn't be limited as User model
+		if session['user_id'] then
+		    local user_id = session['user_id']
+		    local model_name, id = user_id:match('^(%w+):(%d+)$')
+		    assert(model_name and id, "[ERROR] Session user_id format is not right.")
+		    local model = bamboo.getModelByName(model_name)
+		    assert(model, "[ERROR] This user model doesn't registerd.")
+		    -- get the real user instance, assign it to req.user
+		    req['user'] = model:getById(id)
+				
+		end
 			
-        end
-		
-		local expiration = session.expiration or bamboo.config.expiration or bamboo.SESSION_LIFE
-        db:expire(session_key, expiration)
-        req['session'] = session
+			local expiration = session.expiration or bamboo.config.expiration or bamboo.SESSION_LIFE
+		db:expire(session_key, expiration)
+		req['session'] = session
 
-        return true
-    end;
+		return true
+	end;
 
-    get = function (self, session_id)
-        local session_key = PREFIX + (session_id or req.session_id)
-        local session_t = db:hgetall(session_key)
+	get = function (self, session_id)
+		local session_key = PREFIX + (session_id or req.session_id)
+		local session_t = db:hgetall(session_key)
 
-        for k, v in pairs(session_t) do
-			session_t[k] = getStructure(session_key, k, v)
-        end
+		for k, v in pairs(session_t) do
+				session_t[k] = getStructure(session_key, k, v)
+		end
 
-		if bamboo.config.relative_expiration then
-			db:expire(session_key, session_t.expiration or bamboo.config.expiration or bamboo.SESSION_LIFE)
-        end
+			if bamboo.config.relative_expiration then
+				db:expire(session_key, session_t.expiration or bamboo.config.expiration or bamboo.SESSION_LIFE)
+		end
 		return session_t
-    end;
+	end;
 
 	userHash = function (self, user, session_id)
 		local user_id = format("%s:%s", user:classname(), user.id)

@@ -23,7 +23,6 @@ function loadConfig(config)
 	local config_file = loadfile(config.config_file)
 	-- release the global variables to config table
 	setfenv(assert(config_file, "Failed to load monserver config file."), config)()
-	ptable(config)
 
     local handler = findHandler(config, config.route, config.host)
     assert(handler, "Failed to find route: " .. config.route ..

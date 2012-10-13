@@ -5,10 +5,7 @@ require 'luasql.mysql'
 local Model = require 'bamboo.model'
 
 local Mysql = Model:extend {
-    __tag = 'Bamboo.Model.Mysql';
     __name = 'Mysql';
-    __desc = 'Abstract mysql definition';
-
     __fields = {
         ['host']            = {};
         ['port']            = {};
