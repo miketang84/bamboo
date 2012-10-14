@@ -3,7 +3,7 @@
 require 'posix'
 require 'signal'
 require 'bamboo'
-local redis = require 'redis'
+local redis = require 'bamboo-redis'
 
 local util = require 'bamboo.util'
 local readSettings = util.readSettings
@@ -265,17 +265,17 @@ end
 local startProcesses = function (settings)
 	readSettings(config)
 	local appname = config.project_name
-	local monserver_dir = config.monserver_dir
+	local lgserver_dir = config.lgserver_dir
    
 	-- mount media directory
 --		local fd = io.popen('mount', 'r')
 --		local content = fd:read('*a')
 --		fd:close()
 --
---		local matched = content:match(("media on %ssites/%s type none"):format(monserver_dir, appname))
+--		local matched = content:match(("media on %ssites/%s type none"):format(lgserver_dir, appname))
 --		if not matched then
 --			-- mount it
---			local cmdstr = ("mount -B media  %ssites/%s"):format(monserver_dir, appname)
+--			local cmdstr = ("mount -B media  %ssites/%s"):format(lgserver_dir, appname)
 --			print(cmdstr)
 --			os.execute(cmdstr)
 --		end
@@ -363,54 +363,54 @@ COMMANDS = {
     
     createapp = function(settings)
         local appname = settings[1] or 'bambooapp'
-		readSettings(config)
-		local monserver_dir = config.monserver_dir
-		local bamboo_dir = config.bamboo_dir
+	readSettings(config)
+	local lgserver_dir = config.lgserver_dir
+	local bamboo_dir = config.bamboo_dir
 
-		-- create directory
+	-- create directory
         assert(posix.stat(appname) == nil, '[Error] Some file or directory of this name exists！')
         posix.mkdir(appname)
 
-		-- copy files
+	-- copy files
         local cmdstr = ('cp -rf %s/src/cmd_tmpls/createapp/* ./%s/'):format(bamboo_dir, appname)
         os.execute(cmdstr)
 
-		-- create media directory and later copy files to it
-        local mediadir = ('%s/sites/%s'):format(monserver_dir, appname)
+--[=[
+	-- create media directory and later copy files to it
+        local mediadir = ('%s/sites/%s'):format(lgserver_dir, appname)
         --os.execute(('mkdir -p %s'):format(mediadir))
 		os.execute(('ln -sdf $(pwd)/%s/media %s'):format(appname, mediadir))
 
         -- do mount --bind
         -- os.execute(('sudo mount -B %s/media %s'):format(appname, mediadir))        
-
         -- modify the md5 string in settings.lua
         local fd = io.open(('%s/settings.lua'):format(appname), 'r')
-		local ctx = fd:read('*all')
-		fd:close()
+	local ctx = fd:read('*all')
+	fd:close()
 
-		ctx = ([[
+	ctx = ([[
 project_name = "%s"
 host = "%s"
 ]]):format(appname, appname) .. ctx
 		
-		local md5str = makemd5()
-		ctx = ctx:gsub('####', md5str)
+	local md5str = makemd5()
+	ctx = ctx:gsub('####', md5str)
 
-		local fd = io.open(('%s/settings.lua'):format(appname), 'w')
-		fd:write(ctx)
-		fd:close()
-		
-		-- modify the monserver config file template string
-        local fd = io.open(('%s/monconfig.lua'):format(appname), 'r')
-		local ctx = fd:read('*all')
-		fd:close()
+	local fd = io.open(('%s/settings.lua'):format(appname), 'w')
+	fd:write(ctx)
+	fd:close()
+	
+	-- modify the lgserver config file template string
+	local fd = io.open(('%s/monconfig.lua'):format(appname), 'r')
+	local ctx = fd:read('*all')
+	fd:close()
 
-		ctx = ctx:gsub('%$PROJECT_NAME%$', appname)
+	ctx = ctx:gsub('%$PROJECT_NAME%$', appname)
 
-		local fd = io.open(('%s/monconfig.lua'):format(appname), 'w')
-		fd:write(ctx)
-		fd:close()
-		
+	local fd = io.open(('%s/monconfig.lua'):format(appname), 'w')
+	fd:write(ctx)
+	fd:close()
+--]=]	
 		
         print(('[OK] Successfully created application %s.'):format(appname))
     end;
@@ -419,7 +419,7 @@ host = "%s"
         local plugin_name = settings[1] or 'bambooplugin'
    		readSettings(config)
         local appname = config.project_name
-		local monserver_dir = config.monserver_dir
+		local lgserver_dir = config.lgserver_dir
 		local bamboo_dir = config.bamboo_dir
         
         -- create dir
@@ -429,7 +429,7 @@ host = "%s"
         local cmdstr = ('cp -rf %s/src/cmd_tmpls/createplugin/* ./%s/'):format(bamboo_dir, plugin_name)
         os.execute(cmdstr)
 
-        local mediadir = ('%s/sites/%s/plugins/%s/'):format(monserver_dir, appname, plugin_name)
+        local mediadir = ('%s/sites/%s/plugins/%s/'):format(lgserver_dir, appname, plugin_name)
         os.execute(('mkdir -p %s'):format(mediadir))
         
         local cmdstr = ('cp -rf %s/src/cmd_tmpls/pluginmedia/*  %s'):format(bamboo_dir, mediadir)
@@ -659,7 +659,7 @@ host = "%s"
 		local servername = settings[1]
 		local config_file = settings.config_file or 'config.lua'
 		local _config = {}
-		setfenv(assert(loadfile(config_file), "Failed to load the monserver's config: " .. config_file), _config)()
+		setfenv(assert(loadfile(config_file), "Failed to load the lgserver's config: " .. config_file), _config)()
 		
 		if not servername then
 			print("You can start the following servers:")
@@ -671,14 +671,14 @@ host = "%s"
 			print("================== Ready to start servers ===================")
 			for _, server in ipairs(_config.servers) do
 				assert(server and server.name, '[ERROR] server or server.name is nil.')
-				os.execute(('monserver %s %s'):format(config_file, server.name))
+				os.execute(('lgserver %s %s'):format(config_file, server.name))
 			end
 			print("OK.")
 		else
 			print("================== Ready to start server ===================")
 			for _, server in ipairs(_config.servers) do
 				if server and server.name == servername then
-					os.execute(('monserver %s %s'):format(config_file, server.name))
+					os.execute(('lgserver %s %s'):format(config_file, server.name))
 				end
 			end
 			print("OK.")
@@ -690,7 +690,7 @@ host = "%s"
 		local servername = settings[1]
 		local config_file = settings.config_file or 'config.lua'
 		local _config = {}
-		setfenv(assert(loadfile(config_file), "Failed to load the monserver's config: " .. config_file), _config)()
+		setfenv(assert(loadfile(config_file), "Failed to load the lgserver's config: " .. config_file), _config)()
 					
 		if not servername then
 			print("You can stop the following servers:")
@@ -717,8 +717,8 @@ host = "%s"
 	end;
     
 	importadmin = function (settings)
-        readSettings(config)
-		local monserver_dir = config.monserver_dir
+		readSettings(config)
+		local lgserver_dir = config.lgserver_dir
 		local bamboo_dir = config.bamboo_dir
 
 		-- copy admin files to app

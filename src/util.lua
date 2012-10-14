@@ -69,10 +69,10 @@ function readSettings(config)
 [Error] You should make sure the existance of ~/.bambooconfig 
 
 You can use:
-	bamboo config -monserver_dir your_monserver_dir
+	bamboo config -lgserver_dir your_lgserver_dir
 	bamboo config -bamboo_dir your_bamboo_dir
 
-to create this config file. Good Luck.
+to create this config file. Good Luck!
 ]]
 		os.exit()
 	end

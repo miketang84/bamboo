@@ -1,9 +1,12 @@
 module(..., package.seeall)
 
 local json = require 'cjson'
-local zmq = require 'zmq'
+-- local zmq = require 'zmq'
 local cmsgpack = require 'cmsgpack'
+local luv = require('luv')
 
+local insert, concat = table.insert, table.concat
+local format = string.format
 
 local Connection = {}
 Connection.__index = Connection
@@ -39,9 +42,12 @@ end
 
 -- data is string
 -- extra is table
-local function wrap(data, extra)
+local function wrap(data, code, status, headers, extra)
 	local ret = {
 		data = data,
+		code = code,
+		status = status,
+		headers = headers,
 		extra = extra
 	}
 
@@ -54,7 +60,7 @@ end
     Upon error while parsing the data, returns nil and an error message.
 ]]
 function Connection:recv()
-	local reqstr, err = self.reqs:recv()
+	local reqstr, err = self.channel_req:recv()
 	local req = cmsgpack.unpack(reqstr)
 	-- add some headers
 	if req and type(req) == 'table' then
@@ -71,13 +77,15 @@ end
     used internally.
 ]]
 function Connection:send(msg)
-    return self.resp:send(msg)
+    return self.channel_res:send(msg)
 end
 
 function Connection:reply(req, data, code, status, headers)
-    local msg = wrap(http_response(data, code, status, headers),
+--	local msg = wrap(http_response(data, code, status, headers),
+--		{sender_id=req.sender_id, conn_id=req.conn_id})
+	local msg = wrap(data, code, status, headers,
 		{sender_id=req.sender_id, conn_id=req.conn_id})
-    return self:send(msg)
+	return self:send(msg)
 end
 
 
@@ -155,10 +163,20 @@ end
     Internal use only, call ctx:new_context instead.
 ]]
 local function new_connection(sender_id, sub_addr, pub_addr)
+
+	local zmq = luv.zmq.create(2)
+
+	local channel_req = zmq:socket(luv.zmq.PULL)
+	channel_req:connect(sub_addr)
+
+	local channel_res = zmq:socket(luv.zmq.PUSH)
+	channel_res:bind(pub_addr)
+
+--[[
 	local ctx, err = zmq.init(2)
 
 	-- Create and connect to the PULL (request) socket.
-	local channel_req, err = ctx:socket(zmq.PULL);
+	local channel_req, err = ctx:socket(zmq.PULL)
 	if not channel_req then return nil, err end
 
 	local good, err = channel_req:connect(sub_addr)
@@ -168,22 +186,22 @@ local function new_connection(sender_id, sub_addr, pub_addr)
 	local channel_res, err = ctx:socket(zmq.PUSH)
 	if not channel_res then return nil, err end
 
-	good, err = channel_res:connect(pub_addr)
+	good, err = channel_res:bind(pub_addr)
 	if not good then return nil, err end
 
-	-- good, err = resp:setopt(zmq.IDENTITY, sender_id)
-	-- if not good then return nil, err end
+	good, err = channel_res:setopt(zmq.IDENTITY, sender_id)
+	if not good then return nil, err end
+--]]
 
 	-- Build the object and give it a metatable.
 	local obj = {
-		ctx = ctx;
 		sender_id = sender_id;
 
 		sub_addr = sub_addr;
 		pub_addr = pub_addr;
 
-		reqs = reqs;
-		resp = resp;
+		channel_req = channel_req;
+		channel_res = channel_res;
 	}
 
 	return setmetatable(obj, Connection)
@@ -212,7 +230,7 @@ end
 --]]
 
 function findHandler(lgserver_config, server_name, host_name, route )
-	local server = lgserver_config['server_name']
+	local server = lgserver_config[server_name]
 	local host_name = host_name or server.default_host
 
 	for _, host in ipairs(server.hosts) do

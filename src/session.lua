@@ -83,14 +83,14 @@ end
 -- @return: session identifier
 ------------------------------------------------------------------------
 local manuSessionIdHttp = function (req)
-    local ident = parseSessionId(req.headers['cookie'])
+    local ident = parseSessionId(req.headers['Cookie'])
 
     if not ident then
         ident = makeSessionId()
         local cookie = makeSessionCookie(ident, bamboo.config.expiration)
 
-        req.headers['set-cookie'] = cookie
-        req.headers['cookie'] = cookie
+        req.headers['Set-Cookie'] = cookie
+        req.headers['Cookie'] = cookie
 
 	else
 		if bamboo.config.expiration then
@@ -104,15 +104,15 @@ local manuSessionIdHttp = function (req)
 				-- for relative expiration, we need keep the expiration field in session, if have
 				-- update the same cookie and session for every visit
 				local cookie = makeSessionCookie(ident, custom_expiration or bamboo.config.expiration)
-				req.headers['set-cookie'] = cookie
-				req.headers['cookie'] = cookie
+				req.headers['Set-Cookie'] = cookie
+				req.headers['Cookie'] = cookie
 		
 			else
 				-- for absolute expiration
 				if custom_expiration then
 					local cookie = makeSessionCookie(ident, custom_expiration)
-					req.headers['set-cookie'] = cookie
-					req.headers['cookie'] = cookie
+					req.headers['Set-Cookie'] = cookie
+					req.headers['Cookie'] = cookie
 					-- clear the custom expiration flag, for absolute expiration, we only need it once
 					db:hdel(session_key, 'expiration')
 				end

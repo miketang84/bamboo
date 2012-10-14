@@ -31,10 +31,6 @@ local Web = Object:extend {
         return self.req.headers.METHOD
     end;
 
-    isRequestJson = function (self)
-        return self.req.headers.METHOD == "JSON" or
-            self.req.headers['content-type'] == 'application/json'
-    end;
 
     isAjax = function (self)
         return self.req.headers['x-requested-with'] == "XMLHttpRequest"
@@ -104,13 +100,13 @@ local Web = Object:extend {
             headers['set-cookie'] = self.req.headers['set-cookie']
         end
 
-        headers['server'] = 'Bamboo on Monserver'
-        local ctype = headers['content-type']
+        headers['server'] = 'Bamboo on lgserver'
+        local ctype = headers['Content-Type']
 
         if ctype == nil then
-            headers['content-type'] = 'text/html'
+            headers['Content-Type'] = 'text/html'
         elseif ctype == false then
-            headers['content-type'] = nil
+            headers['Content-Type'] = nil
         end
 
         self.conn:reply_http(self.req, data, code, status, headers)
