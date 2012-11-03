@@ -65,7 +65,6 @@ end
 function Connection:recv()
 	local reqstr, err = self.channel_req:recv()
 	local req = cmsgpack.unpack(reqstr)
-print('req', req)
 	-- -- add some headers
 	-- if req and type(req) == 'table' then
 	-- 	req['sender_id'] = self.sender_id

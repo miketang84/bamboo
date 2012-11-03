@@ -329,7 +329,7 @@ local function run(conn, config)
 		-- Get a message from the Mongrel2 server, if have no, block to wait
 		req = conn:recv()
 		-- update the latest request object to global request reference
-		-- req.conn_id = req.meta.conn_id
+		req.conn_id = req.meta.conn_id
 		_G['req'] = req
 
 		if req then
@@ -354,7 +354,7 @@ local function run(conn, config)
 					if req.headers['x-requested-with'] == 'XMLHttpRequest' then req.ajax = true end
 					req.userdata = {}
 
-					print(("req %s: %s"):format(config.route, req.conn_id), os.date(), req.path, req.method, req.session_id)
+					print(("req %s: %s"):format(config.route, req.meta.conn_id), os.date(), req.path, req.method, req.session_id)
 					
 					-------------------------------------------------
 					-- according coming path, find the corresponding handler function
@@ -373,7 +373,6 @@ local function run(conn, config)
 						--if URLS_STATES[copath] then
 						--	runCoro(conn, main, req, before, after)
 						--else
-						print('-- ready to do handler')
 						runStateless(conn, main, req, before, after)
 						--end
 					end
