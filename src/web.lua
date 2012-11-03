@@ -114,9 +114,9 @@ local Web = Object:extend {
     end;
 
     html = function (self, html_tmpl, tbl)
-	local tbl = tbl or {}
-	self:page(View(html_tmpl)(tbl))
-	return false
+		local tbl = tbl or {}
+		self:page(View(html_tmpl)(tbl))
+		return false
     end;
 	
     ok = function (self, msg) self:page(msg or 'OK', 200, 'OK') end;

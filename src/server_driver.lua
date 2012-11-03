@@ -1,9 +1,9 @@
 module(..., package.seeall)
 
 local json = require 'cjson'
--- local zmq = require 'zmq'
+local zmq = require 'zmq'
 local cmsgpack = require 'cmsgpack'
-local luv = require('luv')
+-- local luv = require('luv')
 
 local insert, concat = table.insert, table.concat
 local format = string.format
@@ -40,15 +40,18 @@ local function http_response(body, code, status, headers)
     return format(HTTP_FORMAT, code, status, concat(raw, '\r\n'), body)
 end
 
+-- data structure return to lgserver
 -- data is string
 -- extra is table
-local function wrap(data, code, status, headers, extra)
+-- conns: a list of connection keys
+local function wrap(data, code, status, headers, conns, extra)
 	local ret = {
-		data = data,
-		code = code,
-		status = status,
-		headers = headers,
-		extra = extra
+		data = data,  			-- body string to reply
+		code = code,			-- http code to reply
+		status = status,		-- http status to reply
+		headers = headers,		-- http headers to reply
+		conns = conns,			-- http connections to receive this reply
+		extra = extra			-- some other info to lgserver
 	}
 
 	return cmsgpack.pack(ret)
@@ -62,12 +65,13 @@ end
 function Connection:recv()
 	local reqstr, err = self.channel_req:recv()
 	local req = cmsgpack.unpack(reqstr)
-	-- add some headers
-	if req and type(req) == 'table' then
-		req['sender_id'] = self.sender_id
-		req['conn_id'] = conn_id or 0
-		-- req.data = {}
-	end
+print('req', req)
+	-- -- add some headers
+	-- if req and type(req) == 'table' then
+	-- 	req['sender_id'] = self.sender_id
+	-- 	--req['conn_id'] = conn_id or 0
+	-- 	-- req.data = {}
+	-- end
 
 	return req
 end
@@ -80,11 +84,16 @@ function Connection:send(msg)
     return self.channel_res:send(msg)
 end
 
-function Connection:reply(req, data, code, status, headers)
---	local msg = wrap(http_response(data, code, status, headers),
---		{sender_id=req.sender_id, conn_id=req.conn_id})
-	local msg = wrap(data, code, status, headers,
-		{sender_id=req.sender_id, conn_id=req.conn_id})
+-- req.meta.conn_id and conns[i] are all connection id 
+function Connection:reply(req, data, code, status, headers, conns)
+	local msg = wrap(
+		data, 
+		code, 
+		status, 
+		headers, 
+		conns,
+		{sender_id=req.meta.sender_id, conn_id=req.meta.conn_id} )
+	
 	return self:send(msg)
 end
 
@@ -93,9 +102,14 @@ end
     Same as reply, but tries to convert data to JSON first.
     data: table
 ]]
-function Connection:reply_json(req, data)
-    return self:reply(req, json.encode(data), 200, 'OK', 
-		{['Content-Type'] = 'application/json'})
+function Connection:reply_json(req, data, conns)
+    return self:reply(
+		req, 
+		json.encode(data), 
+		200, 
+		'OK', 
+		{['Content-Type'] = 'application/json'},
+		conns )
 end
 
 --[[
@@ -103,60 +117,18 @@ end
     any headers you've made, and encode them so that the 
     browser gets them.
 ]]
-function Connection:reply_http(req, body, code, status, headers)
-    return self:reply(req, body, code, status, headers)
+function Connection:reply_http(req, body, code, status, headers, conns)
+    return self:reply(req, body, code, status, headers, conns)
 end
 
-
---[=[
---[[
-    This lets you send a single message to many currently
-    connected clients.  There's a MAX_IDENTS that you should
-    not exceed, so chunk your targets as needed.  Each target
-    will receive the message once by lgserver, but you don't have
-    to loop which cuts down on reply volume.
-]]
-function Connection:deliver(uuid, idents, data)
-    return self:send(uuid, concat(idents, ' '), data)
-end
-
---[[
-    Same as deliver, but converts to JSON first.
-]]
-function Connection:deliver_json(uuid, idents, data)
-    --return self:deliver(uuid, idents, json.encode(data))
-	return self:deliver(uuid, idents, http_response(
-		json.encode(data), 200, 'OK', {['content-type'] = 'application/json'}))
-
-end
-
---[[
-    Same as deliver, but builds a HTTP response.
-]]
-function Connection:deliver_http(uuid, idents, body, code, status, headers)
-    code = code or 200
-    status = status or 'OK'
-    headers = headers or {}
-    return self:deliver(uuid, idents, http_response(body, code, status, headers))
-end
-
---]=]
 
 --[[
 -- Tells lgserver to explicitly close the HTTP connection.
 --]]
-function Connection:close(req)
-    return self:reply(req, "")
-end
+-- function Connection:close(req)
+--     return self:reply(req, "")
+-- end
 
---[=[
---[[
--- Sends and explicit close to multiple idents with a single message.
---]]
-function Connection:deliver_close(uuid, idents)
-    return self:deliver(uuid, idents, "")
-end
---]=]
 
 --[[
     Creates a new connection object.
@@ -164,13 +136,17 @@ end
 ]]
 local function new_connection(sender_id, sub_addr, pub_addr)
 
-	local zmq = luv.zmq.create(2)
+	local ctx = zmq.init()
 
-	local channel_req = zmq:socket(luv.zmq.PULL)
+	local channel_req = ctx:socket(zmq.PULL)
 	channel_req:bind(sub_addr)
 
-	local channel_res = zmq:socket(luv.zmq.PUSH)
+	local channel_res = ctx:socket(zmq.PUSH)
 	channel_res:connect(pub_addr)
+
+	-- local channel_res = ctx:socket(zmq.PUB)
+	-- channel_res:bind(pub_addr)
+	-- channel_res:setopt(zmq.IDENTITY, sender_id)
 
 --[[
 	local ctx, err = zmq.init(2)
@@ -195,6 +171,7 @@ local function new_connection(sender_id, sub_addr, pub_addr)
 
 	-- Build the object and give it a metatable.
 	local obj = {
+		ctx = ctx,
 		sender_id = sender_id;
 
 		sub_addr = sub_addr;

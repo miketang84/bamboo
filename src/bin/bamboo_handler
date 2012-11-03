@@ -7,7 +7,6 @@ require 'posix'
 require 'lglib'
 require 'bamboo'
 local util = require 'bamboo.util'
-local luv = require 'luv'
 --require 'zmq.poller'
 --local poller = zmq.poller(64)
 --bamboo.poller = poller
@@ -328,11 +327,9 @@ local function run(conn, config)
 	-- main loop
 	local lgserver_request = function ()
 		-- Get a message from the Mongrel2 server, if have no, block to wait
-		print('--->')
 		req = conn:recv()
 		-- update the latest request object to global request reference
-		fptable(req)
-		req.conn_id = req.meta.conn_id
+		-- req.conn_id = req.meta.conn_id
 		_G['req'] = req
 
 		if req then
@@ -376,6 +373,7 @@ local function run(conn, config)
 						--if URLS_STATES[copath] then
 						--	runCoro(conn, main, req, before, after)
 						--else
+						print('-- ready to do handler')
 						runStateless(conn, main, req, before, after)
 						--end
 					end
@@ -387,29 +385,17 @@ local function run(conn, config)
 		end
 	end
     
-	-- main loop
-	local main = luv.fiber.create(function()
-		while true do 
-			lgserver_request() 
-		end
-	end)
+	-- if istesting then
+	while true do lgserver_request() end
+	-- else
+	-- 	print('Enter polling....')
+	-- 	-- add the main lgserver request to poll
+	-- 	-- conn.channel_req is the socket pull from lgserver
+	-- 	poller:add(conn.channel_req, zmq.POLLIN, lgserver_request)
+	-- 	-- start the main loop
+	-- 	poller:start()
+	-- end
 
-	-- main:ready()
-	main:join()
-
-	--[[
-	if istesting then
-		while true do lgserver_request() end
-	else
-		print('poller.....')
-		ptable(conn)
-		-- add the main lgserver request to poll
-		-- conn.channel_req is the socket pull from lgserver
-		poller:add(conn.channel_req, zmq.POLLIN, lgserver_request)
-		-- start the main loop
-		poller:start()
-	end
-	--]]
 	print('Bamboo main loop aborted!')
 end
 
