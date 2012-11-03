@@ -18,7 +18,7 @@ signal.signal("SIGINT", function (...)
     end
 end)
 
-signal.signal("SIGCLD", 'ignore')
+--signal.signal("SIGCLD", 'ignore')
 
 ------------------------------------------------------------------------------
 -- load configuration

@@ -167,10 +167,10 @@ local function new_connection(sender_id, sub_addr, pub_addr)
 	local zmq = luv.zmq.create(2)
 
 	local channel_req = zmq:socket(luv.zmq.PULL)
-	channel_req:connect(sub_addr)
+	channel_req:bind(sub_addr)
 
 	local channel_res = zmq:socket(luv.zmq.PUSH)
-	channel_res:bind(pub_addr)
+	channel_res:connect(pub_addr)
 
 --[[
 	local ctx, err = zmq.init(2)

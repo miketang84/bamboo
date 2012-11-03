@@ -328,8 +328,11 @@ local function run(conn, config)
 	-- main loop
 	local lgserver_request = function ()
 		-- Get a message from the Mongrel2 server, if have no, block to wait
+		print('--->')
 		req = conn:recv()
 		-- update the latest request object to global request reference
+		fptable(req)
+		req.conn_id = req.meta.conn_id
 		_G['req'] = req
 
 		if req then
@@ -391,7 +394,7 @@ local function run(conn, config)
 		end
 	end)
 
-	main:ready()
+	-- main:ready()
 	main:join()
 
 	--[[
