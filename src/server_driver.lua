@@ -44,14 +44,14 @@ end
 -- data is string
 -- extra is table
 -- conns: a list of connection keys
-local function wrap(data, code, status, headers, conns, extra)
+local function wrap(data, code, status, headers, conns, meta)
 	local ret = {
 		data = data,  			-- body string to reply
 		code = code,			-- http code to reply
 		status = status,		-- http status to reply
 		headers = headers,		-- http headers to reply
 		conns = conns,			-- http connections to receive this reply
-		extra = extra			-- some other info to lgserver
+		meta = meta				-- some other info to lgserver
 	}
 
 	return cmsgpack.pack(ret)
@@ -137,8 +137,14 @@ local function new_connection(sender_id, sub_addr, pub_addr)
 
 	local ctx = zmq.init()
 
+	-- local channel_req = ctx:socket(zmq.PULL)
+	-- channel_req:bind(sub_addr)
+
+	-- local channel_res = ctx:socket(zmq.PUSH)
+	-- channel_res:connect(pub_addr)
+
 	local channel_req = ctx:socket(zmq.PULL)
-	channel_req:bind(sub_addr)
+	channel_req:connect(sub_addr)
 
 	local channel_res = ctx:socket(zmq.PUSH)
 	channel_res:connect(pub_addr)
