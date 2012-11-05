@@ -21,13 +21,13 @@ function start(config)
     print("BACKGROUND TASK " .. config.spec .. " STARTED.")
 
     if not config.custom_mainloop then
-	while true do
-	    -- receive data from client
-	    local data = assert(conn:recv())
-	    main(conn, data)
-	end
+		while true do
+			-- receive data from client
+			local data = assert(conn:recv())
+			main(conn, data)
+		end
     else
-	main(conn) 
+		main(conn) 
     end
 
     print('Task main loop terminated!')
@@ -57,23 +57,23 @@ function connect(config)
 
     -- conn_dispatcher is the default bamboo connecion dispatcher
     function TaskConn:wait()
-	bamboo.poller:add(conn, zmq.POLLIN, bamboo.conn_dispatcher)
-	-- yield return data from task process
-	return coroutine.yield()
+		bamboo.poller:add(conn, zmq.POLLIN, bamboo.internals.connDispatcher)
+		-- yield return data from task process
+		return coroutine.yield()
     end
 
     -- callback(conn, revents)
     function TaskConn:send_and_wait(data, callback)
         self.conn:send(data, zmq.NOBLOCK)
-	bamboo.poller:add(conn, zmq.POLLIN, callback)
+		bamboo.poller:add(conn, zmq.POLLIN, callback)
     end
 
 
     function TaskConn:term()
-	bamboo.SUSPENDED_TASKS[conn] = nil
-	bamboo.poller:remove(conn)
+		bamboo.SUSPENDED_TASKS[conn] = nil
+		bamboo.poller:remove(conn)
 
-	self.conn:close()
+		self.conn:close()
         self.ctx:term()
     end
 

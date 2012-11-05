@@ -6,31 +6,34 @@ package.path = './?.lua;./?/init.lua;./?/src/init.lua;/usr/local/lib/lua/5.1/?.l
 require 'posix'
 require 'lglib'
 require 'bamboo'
-local util = require 'bamboo.util'
+local utils = require 'bamboo.utils'
+local normalizePath = require('lglib.path').normalize
+
 --require 'zmq.poller'
 --local poller = zmq.poller(64)
 --bamboo.poller = poller
-------------------------------------------------------------------------
---- Global variables delarations: in top project code, we can see these variables
+
+-- ==============================================================
+-- Global variables delarations: in top project code, we can see these variables
 -- two important global variables
 _G['web'] = nil
 _G['req'] = nil
-
 local DEFAULT_ALLOWED_METHODS = {GET = true, POST = true, PUT = true, JSON = true, XML = true}
 
-------------------------------------------------------------------------
-local istesting = false
+-- ==============================================================
+-- 
+local is_testing = false
 -- APP_DIR: application directory, default is './', because we start it in application directory
 local APP_DIR = './'
---print(arg[1], arg[2])
 if arg[1] == '-f' and arg[2]:startsWith('tests/') then
-	istesting = true
+	is_testing = true
 else
 	APP_DIR = arg[1] or './'
 end
+
 -- arg[2]: target file, every process handle one entry file, arg[2] is that file, default is 'handler_entry.lua'
 local handler_file = 'app/handler_entry.lua'
-if not istesting and arg[2] then
+if not is_testing and arg[2] then
    handler_file = arg[2]
 end
 
@@ -40,17 +43,18 @@ local PROCESS_DIR = posix.getcwd()
 -- the full directory of one application
 local PROJECT_DIR = PROCESS_DIR + '/' + APP_DIR
 
--- read settings
-local config = util.readSettings(bamboo.config)
-
-
 -- add the project's direcotry to the lua searching path, to simplify the calling relation
 package.path = package.path + (";%s/?.lua;%s/?/init.lua;"):format(PROJECT_DIR, PROJECT_DIR)
-------------------------------------------------------------------------
 
 
+-- ==============================================================
+-- read config from settings file
+local config = utils.readSettings(bamboo.config)
+bamboo.config = config
 
-local redis = require 'bamboo.redis'
+-- ==============================================================
+-- connect redis, basic db
+local redis = require 'bamboo.db.redis'
 
 local DB_HOST = config.DB_HOST or '127.0.0.1'
 local DB_PORT = config.DB_PORT or 6379
@@ -62,52 +66,58 @@ local AUTH = config.AUTH or nil
 BAMBOO_DB = redis.connect {host=DB_HOST, port=DB_PORT, which = WHICH_DB, auth = AUTH}
 assert(BAMBOO_DB, '[Error] Database connection is failed.')
 
-require 'bamboo.util'
+
 _G['View'] = require 'bamboo.view'
 _G['Form'] = require 'bamboo.form'
 _G['Model'] = require 'bamboo.model'
 _G['Session'] = require 'bamboo.session'
 
-
-
+-- ==============================================================
+-- write some attributes to config
+-- 
+config.APP_DIR = APP_DIR
 config.config_file = config.config_file or "config.lua"
 if config.lgserver_dir then
-	-- format full directory of config_file, to find mongrel2's configuration
+	-- format full directory of config_file, to find lgserver's configuration
 	config.config_file = config.lgserver_dir + '/' + config.config_file
 end
 config.route = config.route or '/'
 
-local driver = require 'bamboo.server_driver'
+local driver = require 'bamboo.lgserver_driver'
 driver.loadConfig(config)
--- make a connection as the pipe interact with mongrel2
-local driver_conn = assert(driver.connect(config), "Failed to connect to lgserver.")
-print('---->', driver_conn)
-ptable(driver_conn)
-bamboo.conn = driver_conn
-config.conn = driver_conn
+local lgserver_conn = assert(driver.connect(config), "Failed to connect to lgserver.")
 
+bamboo.lgserver_conn = lgserver_conn
+
+
+
+-- ==============================================================
+-- load handler_entry file
 local Web = require 'bamboo.web'
-
-------------------------------------------------------------------------
--- URLS combination
 local childenv = {}
 -- load file handler_xxx.lua, make its environment as childenv, extract global variables in handler_xxx.lua to childenv
 setfenv(assert(loadfile(handler_file)), setmetatable(childenv, {__index=_G}))()
 
 -- get the router and simplify the entry file's URLS
 -- assert(not isFalse(childenv.URLS[1]), '[Error] URLS value is not right. URLS[1] must be string and NOT be blank.')
-local router = childenv.URLS[1] or '/'
+local router = config.route
 if childenv.URLS[1] then childenv.URLS[1] = nil end
 
 table.update(bamboo.URLS, childenv.URLS)
 childenv.URLS = bamboo.URLS
+-- make handler_entry file as a module
+-- make init() and finish() workable
+bamboo.registerModule(childenv)
+
+-- hook the disconnect handler
 config.disconnect = childenv.disconnect
 
-bamboo.registerModule(childenv)
-local URLS = bamboo.URLS
+local URLS = childenv.URLS
 
 
-------------------------------------------------------------------------
+-- ==============================================================
+-- helper functions
+-- 
 -- check the structure legality
 local function checkURLS(urls)
 	for k, v in pairs(urls) do
@@ -116,10 +126,6 @@ local function checkURLS(urls)
 end
 checkURLS(URLS)
 
-
-local normalizePath = require('lglib.path').normalize
-
--- urls processing work
 local function makeUrlHandlerMapping(URLS)
 	local table_concrete = {}
 	local table_pattern = {}
@@ -140,16 +146,19 @@ local function makeUrlHandlerMapping(URLS)
 	
 	return table_concrete, table_pattern
 end
+
 local MappingTableConcrete, MappingTablePattern = makeUrlHandlerMapping(URLS)
 -- keep syncronization
 bamboo.URLS = MappingTableConcrete
 bamboo.PATTERN_URLS = MappingTablePattern
+config.URLS = MappingTableConcrete
+config.PATTERN_URLS = MappingTablePattern
+
 
 if not config.PRODUCTION then
-print('-------------------- URL Settings --------------------')
+print('-->> URL Settings')
 ptable(MappingTableConcrete)
 ptable(MappingTablePattern)
-print('------------------------------------------------------')
 end
 ------------------------------------------------------------------------
 -- find handler function by path
@@ -195,6 +204,23 @@ local function getHandlerByPath(path)
 end
 
 
+
+local SUSPENDED_TASKS = {}
+bamboo.SUSPENDED_TASKS = SUSPENDED_TASKS
+-- conn: zmq connection
+-- revents: return events
+local connDispatcher = function (conn, revents)
+    local state = SUSPENDED_TASKS[conn]
+    if not state then return nil end
+
+    return coroutine.resume(state.controller, conn:recv())
+end
+bamboo.internals.connDispatcher = connDispatcher
+
+
+
+
+
 local function preparse(req)
 	if req.method == 'GET' then
 		req.GET = Form:parseQuery(req)
@@ -208,128 +234,63 @@ local function preparse(req)
 end
 
 
--- local function createStateRecorder(STATE, mapt)
---	for k, _ in pairs(mapt) do
---		STATE[k] = {}
---	end
---	return STATE
--- end
+local function preprocessRequest (req)
+	-- keep capatible
+	req.conn_id = req.meta.conn_id
 
--- local STATE = createStateRecorder(setmetatable({}, {__mode="k"}), MappingTableConcrete)
-
-
-
-------------------------------------------------------------------------
--- execute passed in function
--- @param state:  	web object
--- @param req:		request object
--- @param before:	before function
--- @param after:	after function
--- @param action_func:	  action function
--- @return true|false 
-------------------------------------------------------------------------
-local function execState(state, req, before, after, action_func)
-    local good, err
-
-	if before then
-        good, err = pcall(before, state, req)
-        if not good then return good, err end
-        if not err then return false end
-    end
-	
-    good, err = action_func(state, req)
-   
-    if after then
-        local after_good, after_err = pcall(after, state, req)
-        if not after_good then return after_good, after_err end
-        if not after_err then return false end
-    end
-
-    return good, err
+	if req.headers['x-requested-with'] == 'XMLHttpRequest' then req.ajax = true end
+	req.userdata = {}
 end
+
 
 ------------------------------------------------------------------------
 -- stateless programming
--- @param conn:		connection object
+-- @param lgserver_conn:		connection object
 -- @param main:		application main function
 -- @param req:		request object
--- @param before:	before function
--- @param after:	after function
 -- @return: none
 ------------------------------------------------------------------------
-local function runStateless(conn, main, req, before, after)
-    local state = Web(conn, main, req, false)
+local function execute(lgserver_conn, main, req)
+    local web = Web(lgserver_conn, main, req, false)
     -- update the latest web state to global variale web
-    _G['web'] = state
+    _G['web'] = web
 	
-    local good, err = execState(state, req, before, after, function(s,r)
-	return pcall(s.controller, s, r)
-    end)
-
+	local good, err = main(web, req)
     if not good and err then
+		-- production mode
 		if config.PRODUCTION then
-			web.conn:reply_http(req, '<h2>Page error.</h2>', 500, 'Page error.', req.headers)
+			web.conn:reply_http(req, '<h2>Page error.</h2>', 500, 'Page error.')
+			
+			-- print debug info in console log
 			print('[Error] Page error.')
 			print("[Error]", err)
-
+			print( debug.traceback() )
 		else
+			-- dev mode
 			local errors = require 'bamboo.errors'
 			errors.reportError(conn, req, err, state)
 		end
     end
 end
 
-local function runCoro(conn, main, req, before, after)
-    local state = Web(conn, main, req, true)
-    _G['web'] = state
-    -- only run once
-    local good, err = execState(state, req, before, after, function (s, r)
-	return coroutine.resume(state.controller, state, req) 
-    end)
 
-    if not good and err then
-	if config.PRODUCTION then
-	    web.conn:reply_http(req, '<h2>Page error.</h2>', 500, 'Page error.', req.headers)
-	    print('[Error] Page error.')
-	else
-	    local errors = require 'bamboo.errors'
-	    errors.reportError(conn, req, err, state)
-	end
-    end
-end
-
-local SUSPENDED_TASKS = {}
-bamboo.SUSPENDED_TASKS = SUSPENDED_TASKS
--- conn: zmq connection
--- revents: return events
-local conn_dispatcher = function (conn, revents)
-    local state = SUSPENDED_TASKS[conn]
-    if not state then return nil end
-
-    return coroutine.resume(state.controller, conn:recv())
-end
-bamboo.conn_dispatcher = conn_dispatcher
-local URLS_STATES = bamboo.URLS_STATES
 
 ------------------------------------------------------------------------
 -- Bamboo's main loop for every bamboo process
--- @param conn:	 	connection object
--- @param config:	config table from external
--- @return:			none
+-- @param lgserver_conn:	 	connection object
+-- @param config:		config table from external
+-- @return:				none
 ------------------------------------------------------------------------
-local function run(conn, config)
-	local main, ident, disconnect = config.main, config.ident, config.disconnect
-	local before, after = config.before, config.after
-	local good, err
-	local req, msg_type, controller
-	local path
+local function run(lgserver_conn, config)
+	local disconnect = ident, config.disconnect
+	local req, path
+	local makeSession = Session.identRequest
 
 	-- main loop
 	local lgserver_request = function ()
-		-- Get a message from the Mongrel2 server, if have no, block to wait
+		-- Get a message from the lgserver, if have no, block to wait
 		req = conn:recv()
 		-- update the latest request object to global request reference
-		req.conn_id = req.meta.conn_id
 		_G['req'] = req
 
 		if req then
@@ -339,42 +300,36 @@ local function run(conn, config)
 				errors.basicError(conn, req, "Method Not Allowed",
 						405, "Method Not Allowed", {Allow = config.allowed_methods_header})
 			else
-				msg_type = req.data.type
-						
 				-- if client close the connection
-				if msg_type == 'disconnect' then
+				if req.type == 'disconnect' then
 					print("DISCONNECT", req.conn_id)
 					if disconnect then disconnect(req) end
 				else
-					-- generate req.session_id
-					ident(req)
 					-- normalize the path's format
 					path = normalizePath(req.path)
-
-					if req.headers['x-requested-with'] == 'XMLHttpRequest' then req.ajax = true end
-					req.userdata = {}
-
-					print(("req %s: %s"):format(config.route, req.meta.conn_id), os.date(), req.path, req.method, req.session_id)
-					
 					-------------------------------------------------
 					-- according coming path, find the corresponding handler function
 					local main, copath = getHandlerByPath(path)
 					if not main then
 						-- return 404 page
 						print(('[Warning] No handler to process this path: %s.'):format(path))
-						conn:reply_http(req, '<h2>Page Not Found.</h2>', 404, 'Not Found', req.headers)
+						lgserver_conn:reply_http(req, '<h2>Page Not Found.</h2>', 404, 'Not Found')
 					else
+						-- generate req.session_id
+						makeSession(req)
+						-- add some other attributes
+						preprocessRequest(req)
+
+						print(("req %s: %s"):format(config.route, req.meta.conn_id), os.date(), req.path, req.method, req.session_id)
+
 						-- record session
 						Session:set(req)
 					
 						-- inject req.GET, req.POST, req.PARAMS
 						preparse(req)
-						-- this is the default way
-						--if URLS_STATES[copath] then
-						--	runCoro(conn, main, req, before, after)
-						--else
-						runStateless(conn, main, req, before, after)
-						--end
+						
+						-- call process handler to work
+						execute(conn, main, req)
 					end
 
 				end
@@ -384,58 +339,18 @@ local function run(conn, config)
 		end
 	end
     
-	-- if istesting then
-	while true do lgserver_request() end
-	-- else
-	-- 	print('Enter polling....')
-	-- 	-- add the main lgserver request to poll
-	-- 	-- conn.channel_req is the socket pull from lgserver
-	-- 	poller:add(conn.channel_req, zmq.POLLIN, lgserver_request)
-	-- 	-- start the main loop
-	-- 	poller:start()
-	-- end
-
-	print('Bamboo main loop aborted!')
-end
-
-
-
-local function collectConfig(config)
-
-	-- config can be from three places:
-	-- 1. application settings.lua
-	-- 2. default values bamboo defined
-	-- 3. mognrel2's config sqlite3 file
-	local config = config or {}
-	config.APP_DIR = APP_DIR
-	-- bamboo app and mongrel2's interface
-	config.route = router
-	config.MappingTableConcrete = MappingTableConcrete
-	config.MappingTablePattern = MappingTablePattern
-	
-    -- templates' directory
-	config.templates = config.templates or (APP_DIR + 'views/')
-	config.views = config.views or config.templates
-	
-    -- identifier generator, user can define their own
-	config.ident = config.ident or Session.identRequest
-    -- HTTP directive white list, user can define their own
-    config.methods = config.methods or DEFAULT_ALLOWED_METHODS
-
-    local allowed = {}
-    for m, yes in pairs(config.methods) do
-        if yes then allowed[#allowed + 1] = m end
-    end
-    -- make allowed_methods_header
-	config.allowed_methods_header = table.concat(allowed, ' ')
-	
-	config.config_file = config.config_file or "config.lua"
-	if config.lgserver_dir then
-		-- format full directory of config_file, to find mongrel2's configuration
-		config.config_file = config.lgserver_dir + '/' + config.config_file
+	if is_testing then
+		while true do lgserver_request() end
+	else
+		print('Enter polling....')
+		-- add the main lgserver request to poll
+		-- lgserver_conn.channel_req is the socket pull from lgserver
+		poller:add(lgserver_conn.channel_req, zmq.POLLIN, lgserver_request)
+		-- start the main loop
+		poller:start()
 	end
 
-	return config
+	print('Bamboo main loop aborted!')
 end
 
 
@@ -445,13 +360,10 @@ end
 -- @return:			none
 ------------------------------------------------------------------------
 local function start(config)
-
     -- boot main loop
-    run(config.conn, config)
+    run(config.lgserver_conn, config)
 end
 
-collectConfig(config)
---bamboo.config = config
 bamboo.EXPORT_FOR_TESTING = {
 	config = config,
 	run = run,
@@ -467,7 +379,7 @@ bamboo.EXPORT_FOR_TESTING = {
 -- START BAMBOO
 ------------------------------------------------------------
 -- normal case
-if not istesting then
+if not is_testing then
    start(config)
 end
    
