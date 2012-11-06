@@ -136,10 +136,8 @@ function persist(plugin_name, args)
 
 	-- use cmsgpack to persist
 	-- here, must use deepCopy to remove all the metatables in args
-	-- cmsgpack now can not process those metatables correctly, will report "[Error] Attempt to persist a C function."
-	-- local buf = cmsgpack.pack({}, deepCopyWithModelName(args))
-	local ok, buf = pcall(cmsgpack.pack, {}, deepCopyWithModelName(args))
-	if not ok then 
+	local buf = cmsgpack.pack(deepCopyWithModelName(args))
+	if not buf then 
 		return print(format('[Warning] plugin %s: arguments persisting failed.', plugin_name))
 	end
 	-- store to db
@@ -156,15 +154,15 @@ function unpersist(plugin_name, _tag)
 
 	local db = BAMBOO_DB
 	local buf = db:get(format(PLUGIN_ARGS_DBKEY, plugin_name, _tag))
-	-- local tbl = cmsgpack.unpersist({}, buf)
 	if not buf then return {} end
 	
-	local ok, tbl = pcall(cmsgpack.unpack, {}, buf)
-	if not ok then 
+	local tbl = cmsgpack.unpack(buf)
+	if not tbl then 
 		return print(format('[Warning] plugin %s: arguments unpersisting failed.', plugin_name))
 	end
 	
 	assert(type(tbl) == 'table', "[Error] @plugin unpersist - unpersisted result should be table.")
 	tbl = table2model(tbl)
+
 	return tbl
 end

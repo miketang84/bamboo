@@ -9,9 +9,9 @@ require 'bamboo'
 local utils = require 'bamboo.utils'
 local normalizePath = require('lglib.path').normalize
 
---require 'zmq.poller'
---local poller = zmq.poller(64)
---bamboo.poller = poller
+require 'zmq.poller'
+local poller = zmq.poller(64)
+bamboo.poller = poller
 
 -- ==============================================================
 -- Global variables delarations: in top project code, we can see these variables
@@ -88,7 +88,7 @@ driver.loadConfig(config)
 local lgserver_conn = assert(driver.connect(config), "Failed to connect to lgserver.")
 
 bamboo.lgserver_conn = lgserver_conn
-
+bamboo.cluster_channel_pub = lgserver_conn.cluster_channel_pub
 
 
 -- ==============================================================
@@ -111,6 +111,7 @@ bamboo.registerModule(childenv)
 
 -- hook the disconnect handler
 config.disconnect = childenv.disconnect
+config.clusterSubHandler = childenv.clusterSubHandler
 
 local URLS = childenv.URLS
 

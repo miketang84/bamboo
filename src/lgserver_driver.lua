@@ -133,7 +133,7 @@ end
     Creates a new connection object.
     Internal use only, call ctx:new_context instead.
 ]]
-local function new_connection(sender_id, sub_addr, pub_addr)
+local function newConnection(sender_id, sub_addr, pub_addr, cluster_addr)
 
 	local ctx = zmq.init()
 
@@ -149,30 +149,15 @@ local function new_connection(sender_id, sub_addr, pub_addr)
 	local channel_res = ctx:socket(zmq.PUSH)
 	channel_res:connect(pub_addr)
 
-	-- local channel_res = ctx:socket(zmq.PUB)
-	-- channel_res:bind(pub_addr)
-	-- channel_res:setopt(zmq.IDENTITY, sender_id)
+	-- if set cluster channel
+	if cluster_channel_addr then
+		cluster_channel_pub = ctx:socket(zmq.PUB)
+		cluster_channel_pub:bind(cluster_addr)
 
---[[
-	local ctx, err = zmq.init(2)
-
-	-- Create and connect to the PULL (request) socket.
-	local channel_req, err = ctx:socket(zmq.PULL)
-	if not channel_req then return nil, err end
-
-	local good, err = channel_req:connect(sub_addr)
-	if not good then return nil, err end
-
-	-- Create and connect to the PUSH (response) socket.
-	local channel_res, err = ctx:socket(zmq.PUSH)
-	if not channel_res then return nil, err end
-
-	good, err = channel_res:bind(pub_addr)
-	if not good then return nil, err end
-
-	good, err = channel_res:setopt(zmq.IDENTITY, sender_id)
-	if not good then return nil, err end
---]]
+		local cluster_channel_sub = ctx:socket(zmq.SUB)
+		cluster_channel_sub:setopt(zmq.SUBSCRIBE, "")
+		cluster_channel_sub:connect(cluster_addr)
+	end
 
 	-- Build the object and give it a metatable.
 	local obj = {
@@ -181,9 +166,12 @@ local function new_connection(sender_id, sub_addr, pub_addr)
 
 		sub_addr = sub_addr;
 		pub_addr = pub_addr;
+		cluster_addr = cluster_addr;
 
 		channel_req = channel_req;
 		channel_res = channel_res;
+		cluster_channel_pub = cluster_channel_pub;
+		cluster_channel_sub = cluster_channel_sub
 	}
 
 	return setmetatable(obj, Connection)
@@ -252,9 +240,13 @@ end
 ------------------------------------------------------------------------
 function connect(config)
     local sub_addr, pub_addr = config.sub_addr, config.pub_addr
-    print("CONNECTING", config.route, config.sender_id, sub_addr, pub_addr)
-  
-    local conn = new_connection(config.sender_id, sub_addr, pub_addr)
+	math.randomseed(os.time())
+	local sender_id = config.sender_id or 'bamboo_handler_'..math.random(100000, 999999)
+    print("CONNECTING", config.route, sender_id, sub_addr, pub_addr)
+	
+	local cluster_addr = config.cluster_addr or 'tcp://127.0.0.1:12315'
+
+    local conn = newConnection(sender_id, sub_addr, pub_addr, cluster_addr)
 
     assert(conn, "Failed to start lgserver connection.")
 
