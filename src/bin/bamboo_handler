@@ -252,7 +252,7 @@ end
 -- @return: none
 ------------------------------------------------------------------------
 local function execute(lgserver_conn, main, req)
-    local web = Web(lgserver_conn, main, req, false)
+    local web = Web(lgserver_conn, main, req)
     -- update the latest web state to global variale web
     _G['web'] = web
 	

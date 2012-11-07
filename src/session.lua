@@ -302,6 +302,7 @@ Session = Object:extend {
     end;
 
     parseSessionId = parseSessionId;
+	makeSessionCookie = makeSessionCookie;
 
 	-- redefine global expiration parameter
 	setGlobalExpiration = function (self, seconds)
