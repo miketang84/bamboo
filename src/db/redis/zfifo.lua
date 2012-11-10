@@ -3,7 +3,7 @@
 module(..., package.seeall)
 
 local List = require 'lglib.list'
-local rdzset = require 'bamboo.redis.zset'
+local rdzset = require 'bamboo.redis.db.zset'
 local db = BAMBOO_DB
 
 function save(key,tbl,length)

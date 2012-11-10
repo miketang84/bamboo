@@ -12,7 +12,6 @@ module('bamboo', package.seeall)
 local Set = require 'lglib.set'
 local List = require 'lglib.list'
 local FieldType = require 'bamboo.mvm.prototype'
-local util = require 'bamboo.util'
 require 'bamboo.globals'
 
 config = {}

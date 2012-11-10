@@ -1,8 +1,8 @@
-module('bamboo.redis', package.seeall)
 
+local RDS = {}
 local redis = require 'bamboo-redis'
 
-function connect(config_t)
+function RDS.connect(config_t)
 --	local params = {
 	local host = config_t.host or '127.0.0.1'
 	local port = config_t.port or 6379
@@ -18,4 +18,4 @@ function connect(config_t)
 	return redis_db
 end
 
-
+return RDS
