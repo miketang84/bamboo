@@ -1,5 +1,5 @@
 module(..., package.seeall)
-local socket = require 'socket'
+
 local mih = require 'bamboo.model-indexhash'
 require 'bamboo.queryset'
 
@@ -10,13 +10,13 @@ local db = BAMBOO_DB
 
 
 local List = require 'lglib.list'
-local rdstring = require 'bamboo.redis.string'
-local rdlist = require 'bamboo.redis.list'
-local rdset = require 'bamboo.redis.set'
-local rdzset = require 'bamboo.redis.zset'
-local rdfifo = require 'bamboo.redis.fifo'
-local rdzfifo = require 'bamboo.redis.zfifo'
-local rdhash = require 'bamboo.redis.hash'
+local rdstring = require 'bamboo.db.redis.string'
+local rdlist = require 'bamboo.db.redis.list'
+local rdset = require 'bamboo.db.redis.set'
+local rdzset = require 'bamboo.db.redis.zset'
+local rdfifo = require 'bamboo.db.redis.fifo'
+local rdzfifo = require 'bamboo.db.redis.zfifo'
+local rdhash = require 'bamboo.db.redis.hash'
 
 
 
@@ -103,8 +103,15 @@ end
 bamboo.internals['getStoreModule'] = getStoreModule
 
 ------------------------------------------------------------------------------------
--- swithes
+local getModelByName  = bamboo.getModelByName
+local dcollector= 'DELETED:COLLECTOR'
+local rule_manager_prefix = '_RULE_INDEX_MANAGER:'
+local rule_query_result_pattern = '_RULE:%s:%s'   -- _RULE:Model:num
+local rule_index_query_sortby_divider = ' |^|^| '
+local rule_index_divider = ' ^_^ '
+local Model
 
+-- switches
 -- can be called by instance and class
 local isUsingFulltextIndex = function (self)
 	local model = self
@@ -123,14 +130,6 @@ local isUsingRuleIndex = function ()
 	return true
 end
 
-
-local getModelByName  = bamboo.getModelByName
-local dcollector= 'DELETED:COLLECTOR'
-local rule_manager_prefix = '_RULE_INDEX_MANAGER:'
-local rule_query_result_pattern = '_RULE:%s:%s'   -- _RULE:Model:num
-local rule_index_query_sortby_divider = ' |^|^| '
-local rule_index_divider = ' ^_^ '
-local Model
 
 
 
@@ -588,6 +587,7 @@ local checkLogicRelation = function (obj, query_args, logic_choice, model)
 
 	return flag
 end
+bamboo.internals.checkLogicRelation = checkLogicRelation
 
 ---------------------------------------------------------------------------------
 -- RULE INDEX CODE

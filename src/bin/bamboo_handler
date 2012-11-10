@@ -205,7 +205,7 @@ local function getHandlerByPath(path)
 end
 
 
-
+-- For background tasks
 local SUSPENDED_TASKS = {}
 bamboo.SUSPENDED_TASKS = SUSPENDED_TASKS
 -- conn: zmq connection
@@ -285,7 +285,7 @@ end
 local function run(lgserver_conn, config)
 	local disconnect = ident, config.disconnect
 	local req, path
-	local makeSession = Session.identRequest
+	local makeSessionId = Session.identRequest
 
 	-- main loop
 	local lgserver_request = function ()
@@ -317,7 +317,7 @@ local function run(lgserver_conn, config)
 						lgserver_conn:reply_http(req, '<h2>Page Not Found.</h2>', 404, 'Not Found')
 					else
 						-- generate req.session_id
-						makeSession(req)
+						makeSessionId(req)
 						-- add some other attributes
 						preprocessRequest(req)
 

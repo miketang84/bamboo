@@ -1,11 +1,11 @@
 #!/usr/bin/lua
 require 'bamboo'
 
-local redis = require 'bamboo.redis'
-local util = require 'bamboo.util'
+local redis = require 'bamboo.db.redis'
+local utils = require 'bamboo.utils'
 
 -- load configuration
-local config = util.readSettings(bamboo.config)
+local config = utils.readSettings(bamboo.config)
 ptable(config)
 config.is_shell = true
 

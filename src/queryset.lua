@@ -1,6 +1,37 @@
 
 local QuerySetMeta = {__spectype='QuerySet'}
 
+-- require neccessary methods
+local checkLogicRelation = bamboo.internals.checkLogicRelation
+
+
+QuerySetMeta.get = function (self, query_args, find_rev)
+	I_AM_QUERY_SET(self)
+
+	local checkRelation = function (obj)
+		-- logic check
+		flag = checkLogicRelation(obj, query_args, logic == 'and')
+		if flag then return obj end
+
+		return nil
+	end
+	
+	local obj
+	if find_rev == 'rev' then
+		for i=#self, 1, -1 do
+			return checkRelation(self[i])
+		end
+	else
+		for i=1, #self do
+			return checkRelation(self[i])
+		end
+		
+	end
+
+
+	
+end
+
 QuerySetMeta.filter = function (self, query_args, ...)
 	I_AM_QUERY_SET(self)
 	local objs = self
