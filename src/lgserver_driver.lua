@@ -246,3 +246,5 @@ function driver.connect(config)
 
     return conn
 end
+
+return driver
