@@ -261,7 +261,7 @@ local function execute(lgserver_conn, main, req)
     if not good and err then
 		-- production mode
 		if config.PRODUCTION then
-			web.conn:reply_http(req, '<h2>Page error.</h2>', 500, 'Page error.')
+			web.conn:reply_http('<h2>Page error.</h2>', 500, 'Page error.', nil, nil, req.meta)
 			
 			-- print debug info in console log
 			print('[Error] Page error.')
@@ -296,39 +296,39 @@ local function run(lgserver_conn, config)
 		_G['req'] = req
 
 		if req then
-				-- if client close the connection
-				if req.type == 'disconnect' then
-					print("DISCONNECT", req.conn_id)
-					if disconnect then disconnect(req) end
+			-- if client close the connection
+			if req.meta.type == 'disconnect' then
+				print("DISCONNECT", req.meta.conn_id)
+				if disconnect then disconnect(req) end
+			else
+				-- normalize the path's format
+				path = normalizePath(req.path)
+				-------------------------------------------------
+				-- according coming path, find the corresponding handler function
+				local main, copath = getHandlerByPath(path)
+				if not main then
+					-- return 404 page
+					print(('[Warning] No handler to process this path: %s.'):format(path))
+					lgserver_conn:reply_http('<h2>Page Not Found.</h2>', 404, 'Not Found', nil, nil, req.meta)
 				else
-					-- normalize the path's format
-					path = normalizePath(req.path)
-					-------------------------------------------------
-					-- according coming path, find the corresponding handler function
-					local main, copath = getHandlerByPath(path)
-					if not main then
-						-- return 404 page
-						print(('[Warning] No handler to process this path: %s.'):format(path))
-						lgserver_conn:reply_http('<h2>Page Not Found.</h2>', 404, 'Not Found')
-					else
-						-- generate req.session_id
-						makeSessionId(req)
-						-- add some other attributes
-						preprocessRequest(req)
+					-- generate req.session_id
+					makeSessionId(req)
+					-- add some other attributes
+					preprocessRequest(req)
 
-						print(("req %s: %s"):format(config.route, req.meta.conn_id), os.date(), req.path, req.method, req.session_id)
+					print(("req %s: %s"):format(config.route, req.meta.conn_id), os.date(), req.path, req.method, req.session_id)
 
-						-- record session
-						Session:set(req)
+					-- record session
+					Session:set(req)
 					
-						-- inject req.GET, req.POST, req.PARAMS
-						preparse(req)
-						
-						-- call process handler to work
-						execute(lgserver_conn, main, req)
-					end
-
+					-- inject req.GET, req.POST, req.PARAMS
+					preparse(req)
+					
+					-- call process handler to work
+					execute(lgserver_conn, main, req)
 				end
+
+			end
 		else
 			print("FATAL ERROR", good, req, err)
 		end

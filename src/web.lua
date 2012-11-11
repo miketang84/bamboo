@@ -9,7 +9,6 @@ local Web = Object:extend {
 		self.conn = conn
 		self.req = req
         self.main = main 
-        self.stateful = stateful
 		-- for state programming
 		self.controller = coroutine.create(main)
 		return self
@@ -58,7 +57,7 @@ local Web = Object:extend {
             headers['content-type'] = nil
         end
 
-        self.conn:reply_http(self.req, data, code, status, headers, conns)
+        self.conn:reply_http(data, code, status, headers, conns, self.req.meta)
 		return false
     end;
 

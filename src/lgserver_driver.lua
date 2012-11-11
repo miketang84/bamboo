@@ -46,12 +46,12 @@ end
 -- conns: a list of connection keys
 local function wrap(data, code, status, headers, conns, meta)
 	local ret = {
-		data = data,  			-- body string to reply
-		code = code,			-- http code to reply
-		status = status,		-- http status to reply
-		headers = headers,		-- http headers to reply
-		conns = conns,			-- http connections to receive this reply
-		meta = meta				-- some other info to lgserver
+		data = data or '',  			-- body string to reply
+		code = code or 200,				-- http code to reply
+		status = status or "OK",		-- http status to reply
+		headers = headers or {},		-- http headers to reply
+		conns = conns or {},			-- http connections to receive this reply
+		meta = meta						-- some other info to lgserver
 	}
 
 	return cmsgpack.pack(ret)
@@ -78,15 +78,14 @@ function Connection:send(msg)
 end
 
 -- req.meta.conn_id and conns[i] are all connection id 
-function Connection:reply(data, code, status, headers, conns, req)
+function Connection:reply(data, code, status, headers, conns, meta)
 	local msg = wrap(
 		data, 
 		code, 
 		status, 
 		headers, 
 		conns,
---		{sender_id= req and req.meta.sender_id or '', conn_id= req and req.meta.conn_id or ''} )
-		{sender_id= '', conn_id= ''} )
+		meta)
 	
 	return self:send(msg)
 end
@@ -96,13 +95,13 @@ end
     Same as reply, but tries to convert data to JSON first.
     data: table
 ]]
-function Connection:reply_json(data, conns, req)
+function Connection:reply_json(data, conns, meta)
     return self:reply( 
 		json.encode(data), 
 		200, 
 		'OK', 
 		{['content-type'] = 'application/json'},
-		conns )
+		conns, meta )
 end
 
 --[[
@@ -110,8 +109,8 @@ end
     any headers you've made, and encode them so that the 
     browser gets them.
 ]]
-function Connection:reply_http(body, code, status, headers, conns, req)
-    return self:reply(body, code, status, headers, conns, req)
+function Connection:reply_http(body, code, status, headers, conns, meta)
+    return self:reply(body, code, status, headers, conns, meta)
 end
 
 
