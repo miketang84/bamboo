@@ -257,7 +257,7 @@ local function execute(lgserver_conn, main, req)
     -- update the latest web state to global variale web
     _G['web'] = web
 	
-	local good, err = main(web, req)
+	local good, err = pcall(main, web, req)
     if not good and err then
 		-- production mode
 		if config.PRODUCTION then
