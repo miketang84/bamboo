@@ -107,7 +107,7 @@ function Connection:reply_json(req, data, conns)
 		json.encode(data), 
 		200, 
 		'OK', 
-		{['Content-Type'] = 'application/json'},
+		{['content-type'] = 'application/json'},
 		conns )
 end
 

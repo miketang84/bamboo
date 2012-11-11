@@ -5,7 +5,7 @@
 module(..., package.seeall)
 
 local List = require 'lglib.list'
-local rdlist = require 'bamboo.redis.db.list'
+local rdlist = require 'bamboo.db.redis.list'
 local db = BAMBOO_DB
 
 function save (key, tbl, length)

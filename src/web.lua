@@ -28,8 +28,8 @@ local Web = Object:extend {
         self.conn:close(self.req)
     end;	
 
-    json = function (self, data, ctype)
-        self:page(json.encode(data), 200, "OK", {['content-type'] = ctype or 'application/json'})
+    json = function (self, data, conns)
+        self:page(json.encode(data), 200, "OK", {['content-yype'] = 'application/json'}, conns)
     end;
 
     jsonError = function (self, err_code, err_desc)
@@ -42,7 +42,7 @@ local Web = Object:extend {
 		self:json(tbl)
     end;
 	
-    page = function (self, data, code, status, headers)
+    page = function (self, data, code, status, headers, conns)
         headers = headers or {}
 
         if self.req.headers['set-cookie'] then
@@ -50,15 +50,15 @@ local Web = Object:extend {
         end
 
         headers['server'] = 'Bamboo on lgserver'
-        local ctype = headers['Content-Type']
+        local ctype = headers['content-type']
 
         if ctype == nil then
-            headers['Content-Type'] = 'text/html'
+            headers['content-type'] = 'text/html'
         elseif ctype == false then
-            headers['Content-Type'] = nil
+            headers['content-type'] = nil
         end
 
-        self.conn:reply_http(self.req, data, code, status, headers)
+        self.conn:reply_http(self.req, data, code, status, headers, conns)
 		return false
     end;
 
