@@ -9,12 +9,12 @@ local HOSTID = posix.hostid()
 local RNG_BYTES = 8 						-- 64 bits of randomness should be good
 local RNG_DEVICE = '/dev/urandom'
 
-local rdlist = require 'bamboo.redis.list'
-local rdset = require 'bamboo.redis.set'
-local rdzset = require 'bamboo.redis.zset'
-local rdfifo = require 'bamboo.redis.fifo'
-local rdzfifo = require 'bamboo.redis.zfifo'
-local rdhash = require 'bamboo.redis.hash'
+local rdlist = require 'bamboo.db.redis.list'
+local rdset = require 'bamboo.db.redis.set'
+local rdzset = require 'bamboo.db.redis.zset'
+local rdfifo = require 'bamboo.db.redis.fifo'
+local rdzfifo = require 'bamboo.db.redis.zfifo'
+local rdhash = require 'bamboo.db.redis.hash'
 
 local db = BAMBOO_DB
 -- Thouge Session is not a model, but we use model way to process it

@@ -1,15 +1,15 @@
-module(..., package.seeall)
+--module(..., package.seeall)
+local driver = {}
 
 local json = require 'cjson'
 local zmq = require 'zmq'
 local cmsgpack = require 'cmsgpack'
--- local luv = require('luv')
 
 local insert, concat = table.insert, table.concat
 local format = string.format
 
 local Connection = {}
-Connection.__index = Connection
+local Connection_meta = {__index = Connection}
 
 
 --[[
@@ -65,12 +65,6 @@ end
 function Connection:recv()
 	local reqstr, err = self.channel_req:recv()
 	local req = cmsgpack.unpack(reqstr)
-	-- -- add some headers
-	-- if req and type(req) == 'table' then
-	-- 	req['sender_id'] = self.sender_id
-	-- 	--req['conn_id'] = conn_id or 0
-	-- 	-- req.data = {}
-	-- end
 
 	return req
 end
@@ -84,14 +78,15 @@ function Connection:send(msg)
 end
 
 -- req.meta.conn_id and conns[i] are all connection id 
-function Connection:reply(req, data, code, status, headers, conns)
+function Connection:reply(data, code, status, headers, conns, req)
 	local msg = wrap(
 		data, 
 		code, 
 		status, 
 		headers, 
 		conns,
-		{sender_id=req.meta.sender_id, conn_id=req.meta.conn_id} )
+--		{sender_id= req and req.meta.sender_id or '', conn_id= req and req.meta.conn_id or ''} )
+		{sender_id= '', conn_id= ''} )
 	
 	return self:send(msg)
 end
@@ -101,9 +96,8 @@ end
     Same as reply, but tries to convert data to JSON first.
     data: table
 ]]
-function Connection:reply_json(req, data, conns)
-    return self:reply(
-		req, 
+function Connection:reply_json(data, conns, req)
+    return self:reply( 
 		json.encode(data), 
 		200, 
 		'OK', 
@@ -116,8 +110,8 @@ end
     any headers you've made, and encode them so that the 
     browser gets them.
 ]]
-function Connection:reply_http(req, body, code, status, headers, conns)
-    return self:reply(req, body, code, status, headers, conns)
+function Connection:reply_http(body, code, status, headers, conns, req)
+    return self:reply(body, code, status, headers, conns, req)
 end
 
 
@@ -135,7 +129,7 @@ end
 ]]
 local function newConnection(sender_id, sub_addr, pub_addr, cluster_addr)
 
-	local ctx = zmq.init()
+	local ctx = zmq.init(1)
 
 	-- local channel_req = ctx:socket(zmq.PULL)
 	-- channel_req:bind(sub_addr)
@@ -162,19 +156,19 @@ local function newConnection(sender_id, sub_addr, pub_addr, cluster_addr)
 	-- Build the object and give it a metatable.
 	local obj = {
 		ctx = ctx,
-		sender_id = sender_id;
+		sender_id = sender_id,
 
-		sub_addr = sub_addr;
-		pub_addr = pub_addr;
-		cluster_addr = cluster_addr;
+		sub_addr = sub_addr,
+		pub_addr = pub_addr,
+		cluster_addr = cluster_addr,
 
-		channel_req = channel_req;
-		channel_res = channel_res;
-		cluster_channel_pub = cluster_channel_pub;
+		channel_req = channel_req,
+		channel_res = channel_res,
+		cluster_channel_pub = cluster_channel_pub,
 		cluster_channel_sub = cluster_channel_sub
 	}
 
-	return setmetatable(obj, Connection)
+	return setmetatable(obj, Connection_meta)
 end
 
 --[[
@@ -199,8 +193,8 @@ end
 
 --]]
 
-function findHandler(lgserver_config, server_name, host_name, route )
-	local server = lgserver_config[server_name]
+local function findHandler(lgserver_config, host_name, route )
+	local server = lgserver_config.server
 	local host_name = host_name or server.default_host
 
 	for _, host in ipairs(server.hosts) do
@@ -215,14 +209,14 @@ end
 --- load configuration from lgserver's config.sqlite
 -- 
 ------------------------------------------------------------------------
-function loadConfig(config)
+function driver.loadConfig(config)
 	config.lgserver_config = {}
 	local config_file = loadfile(config.config_file)
 	-- release the global variables to config table
 	setfenv(assert(config_file, "Failed to load lgserver config file."), 
 		config.lgserver_config)()
 	
-	local handler = findHandler(config.lgserver_config, config.server, config.host, config.route)
+	local handler = findHandler(config.lgserver_config, config.host, config.route)
 	assert(handler, "Failed to find route: " .. config.route ..
             ". Make sure you set config.host to a host in your config.lua.")
 
@@ -238,7 +232,7 @@ end
 --- create a new connection between bamboo and mognrel2 (via zeromq)
 -- @return conn: new created connection
 ------------------------------------------------------------------------
-function connect(config)
+function driver.connect(config)
     local sub_addr, pub_addr = config.sub_addr, config.pub_addr
 	math.randomseed(os.time())
 	local sender_id = config.sender_id or 'bamboo_handler_'..math.random(100000, 999999)

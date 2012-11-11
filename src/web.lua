@@ -29,7 +29,7 @@ local Web = Object:extend {
     end;	
 
     json = function (self, data, conns)
-        self:page(json.encode(data), 200, "OK", {['content-yype'] = 'application/json'}, conns)
+        self:page(json.encode(data), 200, "OK", {['content-type'] = 'application/json'}, conns)
     end;
 
     jsonError = function (self, err_code, err_desc)

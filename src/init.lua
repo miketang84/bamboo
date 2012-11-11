@@ -1,7 +1,7 @@
 ------------------------------------------------------------------------
 -- Bamboo is a Lua web framework
 --
--- Bamboo is BSD licensed the same as Mongrel2.
+-- Bamboo is BSD licensed.
 ------------------------------------------------------------------------
 
 package.path = package.path .. './?.lua;./?/init.lua;../?.lua;../?/init.lua;'

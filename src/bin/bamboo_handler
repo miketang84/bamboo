@@ -71,6 +71,7 @@ _G['View'] = require 'bamboo.view'
 _G['Form'] = require 'bamboo.form'
 _G['Model'] = require 'bamboo.model'
 _G['Session'] = require 'bamboo.session'
+local Web = require 'bamboo.web'
 
 -- ==============================================================
 -- write some attributes to config
@@ -88,12 +89,12 @@ driver.loadConfig(config)
 local lgserver_conn = assert(driver.connect(config), "Failed to connect to lgserver.")
 
 bamboo.lgserver_conn = lgserver_conn
+config.lgserver_conn = lgserver_conn
 bamboo.cluster_channel_pub = lgserver_conn.cluster_channel_pub
 
 
 -- ==============================================================
 -- load handler_entry file
-local Web = require 'bamboo.web'
 local childenv = {}
 -- load file handler_xxx.lua, make its environment as childenv, extract global variables in handler_xxx.lua to childenv
 setfenv(assert(loadfile(handler_file)), setmetatable(childenv, {__index=_G}))()
@@ -269,7 +270,7 @@ local function execute(lgserver_conn, main, req)
 		else
 			-- dev mode
 			local errors = require 'bamboo.errors'
-			errors.reportError(conn, req, err, state)
+			errors.reportError(lgserver_conn, req, err, state)
 		end
     end
 end
@@ -290,17 +291,11 @@ local function run(lgserver_conn, config)
 	-- main loop
 	local lgserver_request = function ()
 		-- Get a message from the lgserver, if have no, block to wait
-		req = conn:recv()
+		req = lgserver_conn:recv()
 		-- update the latest request object to global request reference
 		_G['req'] = req
 
 		if req then
-			-- if http directive is not in the range of bamboo specified 
-			if not config.methods[req.method] then
-				local errors = require 'bamboo.errors'
-				errors.basicError(conn, req, "Method Not Allowed",
-						405, "Method Not Allowed", {Allow = config.allowed_methods_header})
-			else
 				-- if client close the connection
 				if req.type == 'disconnect' then
 					print("DISCONNECT", req.conn_id)
@@ -314,7 +309,7 @@ local function run(lgserver_conn, config)
 					if not main then
 						-- return 404 page
 						print(('[Warning] No handler to process this path: %s.'):format(path))
-						lgserver_conn:reply_http(req, '<h2>Page Not Found.</h2>', 404, 'Not Found')
+						lgserver_conn:reply_http('<h2>Page Not Found.</h2>', 404, 'Not Found')
 					else
 						-- generate req.session_id
 						makeSessionId(req)
@@ -330,11 +325,10 @@ local function run(lgserver_conn, config)
 						preparse(req)
 						
 						-- call process handler to work
-						execute(conn, main, req)
+						execute(lgserver_conn, main, req)
 					end
 
 				end
-			end
 		else
 			print("FATAL ERROR", good, req, err)
 		end
