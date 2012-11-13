@@ -11,35 +11,6 @@ local format = string.format
 local Connection = {}
 local Connection_meta = {__index = Connection}
 
-
---[[
-    A Connection object manages the connection between your handler
-    and a lgserver server (or servers).  It can receive raw requests
-    or JSON encoded requests whether from HTTP or MSG request types,
-    and it can send individual responses or batch responses either
-    raw or as JSON.  It also has a way to encode HTTP responses
-    for simplicity since that'll be fairly common.
-]]
-
--- (code) (status)\r\n(headers)\r\n\r\n(body)
-local HTTP_FORMAT = 'HTTP/1.1 %s %s\r\n%s\r\n\r\n%s'
-
-local function http_response(body, code, status, headers)
-    code = code or 200
-    status = status or "OK"
-    headers = headers or {}
-    headers['Content-Type'] = headers['Content-Type'] or 'text/plain'
-    body = tostring(body) or ''
-    headers['Content-Length'] = #body
-    
-    local raw = {}
-    for k, v in pairs(headers) do
-        insert(raw, format('%s: %s', tostring(k), tostring(v)))
-    end
-    
-    return format(HTTP_FORMAT, code, status, concat(raw, '\r\n'), body)
-end
-
 -- data structure return to lgserver
 -- data is string
 -- extra is table
@@ -51,7 +22,7 @@ local function wrap(data, code, status, headers, conns, meta)
 		status = status or "OK",		-- http status to reply
 		headers = headers or {},		-- http headers to reply
 		conns = conns or {},			-- http connections to receive this reply
-		meta = meta						-- some other info to lgserver
+		meta = meta or {}				-- some other info to lgserver
 	}
 
 	return cmsgpack.pack(ret)
@@ -65,7 +36,6 @@ end
 function Connection:recv()
 	local reqstr, err = self.channel_req:recv()
 	local req = cmsgpack.unpack(reqstr)
-
 	return req
 end
 
@@ -210,6 +180,7 @@ end
 ------------------------------------------------------------------------
 function driver.loadConfig(config)
 	config.lgserver_config = {}
+	print('Ready to load config file: ', config.config_file)
 	local config_file = loadfile(config.config_file)
 	-- release the global variables to config table
 	setfenv(assert(config_file, "Failed to load lgserver config file."), 

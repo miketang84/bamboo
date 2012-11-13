@@ -9,11 +9,7 @@ function reportError(conn, request, err, state)
     local info
     local source = nil
 
-    if state.stateful then
-        info = debug.getinfo(state.controller, state.main)
-    else
-        info = debug.getinfo(state.main)
-    end
+    info = debug.getinfo(state.controller, state.main)
 
     if info.source:match("@.+$") then
 		-- if code comes from file, display the code lines errored in that file
@@ -60,7 +56,7 @@ local ERROR_PAGE = View.compileView [[
 
     local pretty_req = "Request\n " +  serialize(request or {})
     local page = ERROR_PAGE {err=trace, source=source, request=pretty_req, erroutput = erroutput}
-    conn:reply_http(request, page, 500, "Internal Server Error")
+    conn:reply_http(page, 500, "Internal Server Error", nil, nil, req.meta)
 end
 
 
@@ -69,6 +65,6 @@ function basicError(conn, req, body, code, status, headers)
     headers['content-type'] = 'text/plain'
     headers['server'] = 'Bamboo on Monserver'
 
-    conn:reply_http(req, body, code, status, headers)
+    conn:reply_http(body, code, status, headers, nil, req.meta)
 end
 

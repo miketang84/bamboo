@@ -63,13 +63,13 @@ local Web = Object:extend {
 
 
     redirect = function (self, url)
-        self:page("", 303, "See Other", {Location=url, ['Content-Type'] = false})
+        self:page("", 303, "See Other", {Location=url, ['content-type'] = false})
         return true
     end;
 
     error = function (self, data, code, status, headers)
 		data = data or 'error'
-        self:page(data, code, status, headers or {['Content-Type'] = false})
+        self:page(data, code, status, headers or {['content-type'] = false})
         self:close()
         return false
     end;

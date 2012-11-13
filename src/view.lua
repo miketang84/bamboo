@@ -239,12 +239,12 @@ local View = Object:extend {
 			local act = VIEW_ACTIONS[block:sub(1,2)]
 
 			if act then
-				code[#code+1] =  '_result[#_result+1] = [==[' + text + ']==]'
+				code[#code+1] = '_result[#_result+1] = [==[' + text + ']==]'
 				code[#code+1] = act(block:sub(3,-3))
 			elseif #block > 2 then
 				code[#code+1] = '_result[#_result+1] = [==[' + text + block + ']==]'
 			else
-				code[#code+1] =  '_result[#_result+1] = [==[' + text + ']==]'
+				code[#code+1] = '_result[#_result+1] = [==[' + text + ']==]'
 			end
 		end
 
@@ -291,7 +291,7 @@ local View = Object:extend {
 					end
 				else
 					-- NOTE: here, 4 is empiric value
-					context = getlocals(context, 4)
+					context = getlocals(context, 3)
 				end
 			end
 			

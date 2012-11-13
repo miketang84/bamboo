@@ -270,7 +270,7 @@ local function execute(lgserver_conn, main, req)
 		else
 			-- dev mode
 			local errors = require 'bamboo.errors'
-			errors.reportError(lgserver_conn, req, err, state)
+			errors.reportError(lgserver_conn, req, err, web)
 		end
     end
 end
