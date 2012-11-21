@@ -295,7 +295,7 @@ local function run(lgserver_conn, config)
 		-- update the latest request object to global request reference
 		_G['req'] = req
 
-		if req then
+		if req and req.meta then
 			-- if client close the connection
 			if req.meta.type == 'disconnect' then
 				print("DISCONNECT", req.meta.conn_id)
@@ -303,6 +303,7 @@ local function run(lgserver_conn, config)
 			else
 				-- normalize the path's format
 				path = normalizePath(req.path)
+              req.path = path
 				-------------------------------------------------
 				-- according coming path, find the corresponding handler function
 				local main, copath = getHandlerByPath(path)

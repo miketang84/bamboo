@@ -64,25 +64,28 @@ local Form = Object:extend {
     parse = function (self, req)
         I_AM_CLASS(self)
         local headers = req.headers
+        local method = req.method
+        local query_string = req.query_string
+        local body = req.body
         local params = {}
 
-        if headers.METHOD == 'GET' then
-            if headers.QUERY then
+        if method == 'GET' then
+            if query_string then
                 -- params is the dictory of query
-                params = http.parseURL(headers.QUERY)
+                params = http.parseURL(query_string)
             end
-        elseif headers.METHOD == 'POST' then
+        elseif method == 'POST' then
             local ctype = headers['content-type'] or ""
             local encoding, encparams = ctype:match(ENCODING_MATCH)
             if encoding then encoding = encoding:lower() end
 
             if encoding == URL_ENCODED_FORM then
-                if req.body then
+                if body then
                     -- POST data is placed in body
-                    params = http.parseURL(req.body)
+                    params = http.parseURL(body)
                 end
             elseif encoding == MULTIPART_ENCODED_FORM then
-                params = extractMultiparts(req.body, encparams)
+                params = extractMultiparts(body, encparams)
                 params.multipart = true
             else
                 -- for other format case
@@ -95,8 +98,8 @@ local Form = Object:extend {
 
 	parseQuery = function (self, req)
 		I_AM_CLASS(self)
-		if req.headers.QUERY then
-            return http.parseURL(req.headers.QUERY)
+		if req.query_string then
+            return http.parseURL(req.query_string)
         else
             return {}
         end

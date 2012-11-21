@@ -10,6 +10,8 @@ QuerySetMeta.get = function (self, query_args, find_rev)
 
 	local checkRelation = function (obj)
 		-- logic check
+local checkLogicRelation = bamboo.internals.checkLogicRelation
+        
 		flag = checkLogicRelation(obj, query_args, logic == 'and')
 		if flag then return obj end
 
@@ -99,11 +101,12 @@ QuerySetMeta.filter = function (self, query_args, ...)
 	local walkcheck = function (objs)
 		for i, obj in ipairs(objs) do
 			-- check the object's legalery, only act on valid object
+local checkLogicRelation = bamboo.internals.checkLogicRelation
 			local flag = checkLogicRelation(obj, query_args, logic_choice)
 
 			-- if walk to this line, means find one
 			if flag then
-				tinsert(query_set, obj)
+				table.insert(query_set, obj)
 			end
 		end
 	end

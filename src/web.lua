@@ -2,6 +2,7 @@
 module(..., package.seeall)
 
 local View = require 'bamboo.view'
+local json = require 'cjson'
 
 local Web = Object:extend {
 	__name = 'Web';
