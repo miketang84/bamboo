@@ -13,6 +13,7 @@ local Set = require 'lglib.set'
 local List = require 'lglib.list'
 local FieldType = require 'bamboo.mvm.prototype'
 require 'bamboo.globals'
+local cmsgpack = require 'cmsgpack'
 
 config = {}
 -- for global rendering usage
@@ -40,6 +41,14 @@ PLUGIN_ARGS_LIFE = 3600
 URLS = {}
 URLS_STATES = {}
 PATTERN_URLS = {}
+------------------------------------------------------------------------
+
+bamboo.cluster_channel_pub = lgserver_conn.cluster_channel_pub
+
+pubToCluster = function (msg_obj)
+	bamboo.cluster_channel_pub:send(cmsgpack.pack(msg_obj))
+end
+
 ------------------------------------------------------------------------
 PLUGIN_LIST = {}
 PLUGIN_CALLBACKS = {}
