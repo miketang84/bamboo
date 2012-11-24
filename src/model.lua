@@ -299,6 +299,7 @@ local getFromRedis = function (self, model_key)
 	local data = db:hgetall(model_key)
 	return makeObject(self, data)
 end
+bamboo.internals['getFromRedis'] = getFromRedis
 
 ------------------------------------------------------------
 -- get objects from redis with pipeline
@@ -325,6 +326,7 @@ local getFromRedisPipeline = function (self, ids)
 
 	return objs, nils
 end
+bamboo.internals['getFromRedisPipeline'] = getFromRedisPipeline
 
 
 ------------------------------------------------------------
@@ -358,6 +360,7 @@ local getFromRedisPipeline2 = function (pattern_list)
 
 	return objs, nils
 end
+bamboo.internals['getFromRedisPipeline2'] = getFromRedisPipeline2
 
 
 ------------------------------------------------------------

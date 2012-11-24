@@ -43,8 +43,6 @@ URLS_STATES = {}
 PATTERN_URLS = {}
 ------------------------------------------------------------------------
 
-bamboo.cluster_channel_pub = lgserver_conn.cluster_channel_pub
-
 pubToCluster = function (msg_obj)
 	bamboo.cluster_channel_pub:send(cmsgpack.pack(msg_obj))
 end

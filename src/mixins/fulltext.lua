@@ -1,5 +1,6 @@
 
 if bamboo.config.fulltext_index_support then require 'mmseg' end
+local db = BAMBOO_DB
 
 local ft_words_manager = '_fulltext_words:%s:%s'	-- prefix:model:field		word set
 local ft_rft_pattern = '_RFT:%s:%s:%s'		-- prefix:model:id:field	word set
@@ -120,7 +121,7 @@ local searchOnFieldFulltextIndexes = function (self, field, tags, n, onlyids)
 	if onlyids == 'onlyids' then
 		return QuerySet(ids)
 	else
-		local getFromRedisPipeline = bamboo.intervals.getFromRedisPipeline
+		local getFromRedisPipeline = bamboo.internals.getFromRedisPipeline
 		-- return objects
 		return getFromRedisPipeline(self, ids)
 	end
@@ -142,7 +143,7 @@ local searchOnFieldFulltextIndexesByOr = function (self, field, tags, n, onlyids
 	if onlyids == 'onlyids' then
 		results = QuerySet(id_set:members():slice(1, n))
 	else
-		local getFromRedisPipeline = bamboo.intervals.getFromRedisPipeline
+		local getFromRedisPipeline = bamboo.internals.getFromRedisPipeline
 		results = getFromRedisPipeline(self, id_set:members():slice(1, n))
 	end
 	
@@ -179,7 +180,7 @@ local searchOnFulltextIndexes = function (self, tags, n, is_or, standalone, only
 	end
 	
 	local results
-	local getFromRedisPipeline = bamboo.intervals.getFromRedisPipeline
+	local getFromRedisPipeline = bamboo.internals.getFromRedisPipeline
 	if standalone == 'standalone' then
 		for k, ids in pairs(field_dict) do
 			results[k] = getFromRedisPipeline(self, ids)

@@ -162,7 +162,7 @@ local View = Object:extend {
 		if bamboo.config.PRODUCTION then
             -- if cached
 	        -- NOTE: here, 5 is an empiric value
-    	    bamboo.compiled_views_locals[name] = getlocals({}, 5)
+    	    bamboo.compiled_views_locals[name] = getlocals({}, 4)
             
             local view = bamboo.compiled_views[name]
             if view and type(view) == 'function' then
