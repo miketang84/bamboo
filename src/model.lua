@@ -241,7 +241,7 @@ end
 local makeObject = function (self, data)
 	-- if data is invalid, return nil
 	if not isValidInstance(data) then
-		print("[Warning] @makeObject - Object is invalid.")
+		--print("[Warning] @makeObject - Object is invalid.")
 		-- print(debug.traceback())
 		return nil
 	end
@@ -445,7 +445,7 @@ local delFromRedis = function (self, id)
 
 	-- clear fulltext index, only when it is instance
 	if isUsingFulltextIndex(self) and self.id then
-		clearFtIndexesOnDeletion(self)
+		bamboo.internals.clearFtIndexesOnDeletion(self)
 	end
 	if isUsingRuleIndex(self) and self.id then
 		updateIndexByRules(self, 'del')
@@ -491,7 +491,7 @@ local fakedelFromRedis = function (self, id)
 
 	-- clear fulltext index
 	if isUsingFulltextIndex(self) and self.id then
-		clearFtIndexesOnDeletion(self)
+		bamboo.internals.clearFtIndexesOnDeletion(self)
 	end
 	if isUsingRuleIndex(self) and self.id then
 		updateIndexByRules(self, 'del')
@@ -1759,7 +1759,7 @@ Model = Object:extend {
 
 		-- make fulltext indexes
 		if isUsingFulltextIndex(self) then
-			makeFulltextIndexes(self)
+			bamboo.internals.makeFulltextIndexes(self)
 		end
 		if isUsingRuleIndex(self) then
 			updateIndexByRules(self, 'update')
@@ -1823,7 +1823,7 @@ Model = Object:extend {
 
 		-- if fulltext index
 		if fld.fulltext_index and isUsingFulltextIndex(self) then
-			makeFulltextIndexes(self)
+			bamboo.internals.makeFulltextIndexes(self)
 		end
 		if isUsingRuleIndex(self) then
 			updateIndexByRules(self, 'update')

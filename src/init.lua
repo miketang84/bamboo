@@ -304,7 +304,7 @@ registerModule = function (mdl, extra_params)
 				nfun = function (web, req)
 					local ret, inited_params = mdl.init(extra_params or {})
 					
-					if not ret then print(format("[Warning] abort in module %s's init function.", mdl._NAME or '')) end
+					-- if not ret then print(format("[Warning] abort in module %s's init function.", mdl._NAME or '')) end
 					local finished_params
 					local last_params
 					if ret then

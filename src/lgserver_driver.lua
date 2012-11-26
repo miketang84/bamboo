@@ -112,7 +112,8 @@ local function newConnection(sender_id, sub_addr, pub_addr, cluster_addr)
 --	local channel_res = ctx:socket(zmq.PUSH)
 --	channel_res:connect(pub_addr)
 	local channel_res = ctx:socket(zmq.PUB)
-	channel_res:bind(pub_addr)
+	-- channel_res:bind(pub_addr)
+	channel_res:connect(pub_addr)
 
 	-- if set cluster channel
 	if cluster_channel_addr then

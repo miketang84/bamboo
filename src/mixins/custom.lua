@@ -15,6 +15,8 @@ local makeCustomKey = function (self, key)
 	return self:isClass() and getCustomKey(self, key) or getCustomIdKey(self, key)
 end
 
+local rdstring = require 'bamboo.db.redis.string'
+
 return function ()
 	
 	return {

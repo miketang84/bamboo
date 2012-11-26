@@ -23,7 +23,7 @@ local clearFtIndexesOnDeletion = function (instance)
 		db:del(format(ft_rft_pattern, instance.__name, instance.id, field))
 	end
 end
-
+bamboo.internals.clearFtIndexesOnDeletion = clearFtIndexesOnDeletion
 
 -- Full Text Search utilities
 -- @param instance the object to be full text indexes
@@ -51,7 +51,7 @@ local makeFulltextIndexes = function (instance)
 
 	return true
 end
-
+bamboo.internals.makeFulltextIndexes = makeFulltextIndexes
 
 local wordSegmentOnFieldFtIndex = function (self, field, ask_str)
 	local search_tags = mmseg.segment(ask_str)
