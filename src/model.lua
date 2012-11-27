@@ -240,48 +240,47 @@ end
 --- make lua object from redis' raw data table
 local makeObject = function (self, data)
 	-- if data is invalid, return nil
-	if not isValidInstance(data) then
-		--print("[Warning] @makeObject - Object is invalid.")
-		-- print(debug.traceback())
-		return nil
-	end
+	-- if not isValidInstance(data) then
+	-- 	--print("[Warning] @makeObject - Object is invalid.")
+	-- 	-- print(debug.traceback())
+	-- 	return nil
+	-- end
 	-- XXX: keep id as string for convienent, because http and database are all string
+
+	-- data is the form of {key1, val1, key2, val2, key3, val3}
+	-- change form
+	local hash_data = {}
+	for i = 1, #data, 2 do
+		hash_data[data[i]] = data[i+1]
+	end
 
 	local fields = self.__fields
 	for k, fld in pairs(fields) do
-		-- ensure the correction of field description table
-		checkType(fld, 'table')
-		-- convert the number type field
-
 		if fld.foreign then
 			local st = fld.st
 			-- in redis, we don't save MANY foreign key in db, but we want to fill them when
-			-- form lua object
+			-- make lua object
 			if st == 'MANY' then
-				data[k] = 'FOREIGN MANY ' .. fld.foreign
+				hash_data[k] = 'FOREIGN MANY ' .. fld.foreign
 			elseif st == 'FIFO' then
-				data[k] = 'FOREIGN FIFO ' .. fld.foreign
+				hash_data[k] = 'FOREIGN FIFO ' .. fld.foreign
 			elseif st == 'ZFIFO' then
-				data[k] = 'FOREIGN ZFIFO ' .. fld.foreign
+				hash_data[k] = 'FOREIGN ZFIFO ' .. fld.foreign
 			elseif st == 'LIST' then
-				data[k] = 'FOREIGN LIST ' .. fld.foreign
+				hash_data[k] = 'FOREIGN LIST ' .. fld.foreign
 			end
 		else
 			if fld.type == 'number' then
-				data[k] = tonumber(data[k])
+				hash_data[k] = tonumber(hash_data[k])
 			elseif fld.type == 'boolean' then
-				data[k] = data[k] == 'true' and true or false
-				end
+				hash_data[k] = hash_data[k] == 'true' and true or false
+			end
 		end
 
 	end
 
 	-- generate an object
-	-- XXX: maybe can put 'data' as parameter of self()
-	local obj = self()
-	table.update(obj, data)
-	return obj
-
+	return self(hash_data)
 end
 
 -------------------------------------------------------------------------------------
@@ -306,21 +305,48 @@ bamboo.internals['getFromRedis'] = getFromRedis
 -- @param self:	Model
 -- @param ids:	id list
 --
+
+--- make a list, 
+-- each element is 'Model_name:id'
+local function makeModelKeyList(self, ids)
+	local key_list = List()
+	for _, v in ipairs(ids) do
+		key_list:append(getNameIdPattern2(self, v))
+	end
+	return key_list
+end
+
+local cjson = require 'cjson'
+local cmsgpack = require 'cmsgpack'
+local SNIPPET_hgetall_by_ids = 
+[=[
+local model_name, ids_string = unpack(ARGV);								 
+local ids = cmsgpack.unpack(ids_string)
+local obj_list = {}
+for i, id in ipairs(ids) do
+	local key = ('%s:%s'):format(model_name, id)
+	local obj = redis.call('HGETALL', key)
+	table.insert(obj_list, obj)
+end
+
+-- here, obj_list is the form of 
+-- {{key1, val1, key2, val2}, {key1, val1, key2, val2}, {...}}
+return obj_list
+]=]
+
 local getFromRedisPipeline = function (self, ids)
-	local key_list = makeModelKeyList(self, ids)
-	-- all fields are strings
-	local data_list = db:pipeline(function (p)
-		for _, v in ipairs(key_list) do
-			p:hgetall(v)
-		end
-	end)
+
+	local model_name = self.__name
+	local ids_string = cmsgpack.pack(ids)
+	local data_list = db:command('EVAL', SNIPPET_hgetall_by_ids, 0, model_name, ids_string)
+
 	local objs = QuerySet()
 	local nils = {}
-	local obj
 	for i, v in ipairs(data_list) do
-		obj = makeObject(self, v)
-		if obj then tinsert(objs, obj)
-		else tinsert(nils, ids[i])
+		if #v == 0 then
+			tinsert(nils, ids[i])
+		else
+			tinsert(objs, makeObject(self, v))
 		end
 	end
 
