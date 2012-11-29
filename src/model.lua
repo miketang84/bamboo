@@ -1,5 +1,9 @@
 module(..., package.seeall)
 
+local cjson = require 'cjson'
+local cmsgpack = require 'cmsgpack'
+
+
 local mih = require 'bamboo.model-indexhash'
 require 'bamboo.queryset'
 
@@ -7,7 +11,7 @@ local tinsert, tremove = table.insert, table.remove
 local format = string.format
 
 local db = BAMBOO_DB
-
+local dbc = BAMBOO_DBC
 
 local List = require 'lglib.list'
 local rdstring = require 'bamboo.db.redis.string'
@@ -316,8 +320,6 @@ local function makeModelKeyList(self, ids)
 	return key_list
 end
 
-local cjson = require 'cjson'
-local cmsgpack = require 'cmsgpack'
 local SNIPPET_hgetall_by_ids = 
 [=[
 local model_name, ids_string = unpack(ARGV);								 
@@ -338,7 +340,7 @@ local getFromRedisPipeline = function (self, ids)
 
 	local model_name = self.__name
 	local ids_string = cmsgpack.pack(ids)
-	local data_list = db:command('EVAL', SNIPPET_hgetall_by_ids, 0, model_name, ids_string)
+	local data_list = dbc:command('EVAL', SNIPPET_hgetall_by_ids, 0, model_name, ids_string)
 
 	local objs = QuerySet()
 	local nils = {}
@@ -355,32 +357,45 @@ end
 bamboo.internals['getFromRedisPipeline'] = getFromRedisPipeline
 
 
+local SNIPPET_hgetall_by_modelids = 
+[=[
+local modelids_string = unpack(ARGV);								 
+local modelids = cmsgpack.unpack(modelids_string)
+local obj_list = {}
+for i, key in ipairs(modelids) do
+	local obj = redis.call('HGETALL', key)
+	table.insert(obj_list, obj)
+end
+
+-- here, obj_list is the form of 
+-- {{key1, val1, key2, val2}, {key1, val1, key2, val2}, {...}}
+return obj_list
+]=]
+
 ------------------------------------------------------------
 -- get objects from redis with pipeline
 -- @param pattern_list:	list of 'Model_name:id' string
 --
 local getFromRedisPipeline2 = function (pattern_list)
 	-- 'list' store model and id info
-	local model_list = List()
+	local model_list = {}
 	for _, v in ipairs(pattern_list) do
-		local model, id = seperateModelAndId(v)
-		model_list:append(model)
+		local model, id = v:match('^(%w+):(%d+)$')
+		tinsert(model_list, model)
 	end
 
-	-- all fields are strings
-	local data_list = db:pipeline(function (p)
-		for _, v in ipairs(pattern_list) do
-			p:hgetall(v)
-		end
-	end)
-
+	local modelids_string = cmsgpack.pack(pattern_list)
+	local data_list = dbc:command('EVAL', SNIPPET_hgetall_by_modelids, 0, modelids_string)
+	
 	local objs = QuerySet()
 	local nils = {}
 	local obj
 	for i, model in ipairs(model_list) do
-		obj = makeObject(model, data_list[i])
-		if obj then tinsert(objs, obj)
-		else tinsert(nils, pattern_list[i])
+		if #data_list[i] == 0 then
+			tinsert(nils, pattern_list[i])
+		else
+			local model_obj = getModelByName(model)
+			tinsert(objs, makeObject(model_obj, data_list[i]))
 		end
 	end
 
@@ -388,6 +403,24 @@ local getFromRedisPipeline2 = function (pattern_list)
 end
 bamboo.internals['getFromRedisPipeline2'] = getFromRedisPipeline2
 
+
+
+local SNIPPET_hmget_by_ids_fields = 
+[=[
+local model_name, ids_string, fields_string = unpack(ARGV);								 
+local ids = cmsgpack.unpack(ids_string)
+local fields = cmsgpack.unpack(fields_string)
+local obj_list = {}
+for i, id in ipairs(ids) do
+	local key = ('%s:%s'):format(model_name, id)
+	local obj = redis.call('HMGET', key, unpack(fields))
+	table.insert(obj_list, obj)
+end
+
+-- here, obj_list is the form of 
+-- {{key1, val1, key2, val2}, {key1, val1, key2, val2}, {...}}
+return obj_list
+]=]
 
 ------------------------------------------------------------
 -- get partial objects from redis with pipeline
@@ -398,13 +431,11 @@ bamboo.internals['getFromRedisPipeline2'] = getFromRedisPipeline2
 local getPartialFromRedisPipeline = function (self, ids, fields)
 	-- default retrieve 'id'
 	tinsert(fields, 'id')
-	local key_list = makeModelKeyList(self, ids)
 
-	local data_list = db:pipeline(function (p)
-		for _, v in ipairs(key_list) do
-			p:hmget(v, unpack(fields))
-		end
-	end)
+	local model_name = self.__name
+	local ids_string = cmsgpack.pack(ids)
+	local fields_string = cmsgpack.pack(fields)
+	local data_list = dbc:command('EVAL', SNIPPET_hmget_by_ids_fields, 0, model_name, ids_string, fields_string)
 
 	local proto_fields = self.__fields
 	-- all fields are strings
@@ -412,24 +443,21 @@ local getPartialFromRedisPipeline = function (self, ids, fields)
 	local objs = QuerySet()
 	-- here, data_list is fields' order values
 	for _, v in ipairs(data_list) do
-		local item = {}
-		for i, key in ipairs(fields) do
-			-- v[i] is the value of ith key
-			item[key] = v[i]
+		if #v > 0 then
+			local item = {}
+			for i, key in ipairs(fields) do
+				-- v[i] is the value of ith key
+				item[key] = v[i]
 
-			local fdt = proto_fields[key]
-			if fdt and fdt.type then
-				if fdt.type == 'number' then
-					item[key] = tonumber(item[key])
-				elseif fdt.type == 'boolean' then
-					item[key] = item[key] == 'true' and true or false
+				local fdt = proto_fields[key]
+				if fdt and fdt.type then
+					if fdt.type == 'number' then
+						item[key] = tonumber(item[key])
+					elseif fdt.type == 'boolean' then
+						item[key] = item[key] == 'true' and true or false
+					end
 				end
 			end
-		end
-		-- only has valid field other than id can be checked as fit object
-		if item[fields[1]] ~= nil then
-			-- tinsert(objs, makeObject(self, item))
-			-- here, we jumped the makeObject step, to promote performance
 			tinsert(objs, item)
 		end
 	end
@@ -439,16 +467,43 @@ end
 
 
 local updateIndexByRules
+
+
+local SNIPPET_del_instance_and_foreigns = 
+[=[
+local model_name, id, fields_string = unpack(ARGV);								 
+local fields = cmsgpack.unpack(fields_string)
+local index_key = string.format('%s:%s', model_name, '__index')
+local instance_key = string.format('%s:%s', model_name, id)
+local foreign_key
+for k, fld in pairs(fields) do
+	if fld and fld.foreign then
+		foreign_key = string.format('%s:%s', instance_key, k)
+		redis.call('DEL', foreign_key)
+	end
+end
+
+redis.call('DEL', instance_key)
+redis.call('ZREMRANGEBYSCORE', index_key, id, id)
+]=]
+
+
+
 --------------------------------------------------------------
 -- del object and its single relation in redis
 -- @param self:	Model
 -- @param id:		instance id
 --
 local delFromRedis = function (self, id)
-	assert(self.id or id, '[Error] @delFromRedis - must specify an id of instance.')
-	local model_key = id and getNameIdPattern2(self, id) or getNameIdPattern(self)
+	local id = id or self.id
+	local model_name = self.__name
 	local index_key = getIndexKey(self)
 
+	local fields_string = cmsgpack.pack(self.__fields)
+	local data_list = dbc:command('EVAL', SNIPPET_del_instance_and_foreigns, 0, model_name, id, fields_string)
+
+
+--[[
 	--del hash index
 	if bamboo.config.index_hash then
 		mih.indexDel(self);
@@ -476,20 +531,47 @@ local delFromRedis = function (self, id)
 	if isUsingRuleIndex(self) and self.id then
 		updateIndexByRules(self, 'del')
 	end
-
-	-- release the lua object
-	self = nil
+--]]
 end
 bamboo.internals['delFromRedis'] = delFromRedis
+
+
+local SNIPPET_fakedel_instance_and_foreigns = 
+[=[
+local model_name, id, fields_string, rubpot_key = unpack(ARGV);								 
+local fields = cmsgpack.unpack(fields_string)
+local index_key = string.format('%s:%s', model_name, '__index')
+local instance_key = string.format('%s:%s', model_name, id)
+local foreign_key
+for k, fld in pairs(fields) do
+	if fld and fld.foreign then
+		foreign_key = string.format('%s:%s', instance_key, k)
+		if redis.call('EXISTS', foreign_key) then
+			redis.call('RENAME', foreign_key, 'DELETED:' .. foreign_key)
+		end
+
+	end
+end
+
+redis.call('RENAME', instance_key, 'DELETED:' .. instance_key)
+redis.call('ZREMRANGEBYSCORE', index_key, id, id)
+local n = redis.call('ZCARD', rubpot_key)
+redis.call('ZADD', rubpot_key, n+1, instance_key)
+
+]=]
 
 --------------------------------------------------------------
 -- Fake Deletion
 --
 local fakedelFromRedis = function (self, id)
-	assert(self.id or id, '[Error] @fakedelFromRedis - must specify an id of instance.')
-	local model_key = id and getNameIdPattern2(self, id) or getNameIdPattern(self)
+	local id = id or self.id
+	local model_name = self.__name
 	local index_key = getIndexKey(self)
 
+	local fields_string = cmsgpack.pack(self.__fields)
+	local data_list = dbc:command('EVAL', SNIPPET_fakedel_instance_and_foreigns, 0, model_name, id, fields_string, dcollector)
+
+--[[
 	--del hash index
 	if bamboo.config.index_hash then
 		mih.indexDel(self);
@@ -522,9 +604,8 @@ local fakedelFromRedis = function (self, id)
 	if isUsingRuleIndex(self) and self.id then
 		updateIndexByRules(self, 'del')
 	end
+--]]
 
-	-- release the lua object
-	self = nil
 end
 bamboo.internals['fakedelFromRedis'] = fakedelFromRedis
 
