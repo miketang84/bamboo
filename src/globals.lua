@@ -100,11 +100,16 @@ end
 ------------------------------------------------------------------------
 local uglystr = '___hashindex^*_#@[]-+~~!$$$$'
 
-_G['eq'] = function ( cmp_obj )
-	return function (v)
-		-- XXX: here we should not open the below line. v can be nil
-		if v == uglystr then return nil, 'eq', cmp_obj; end--only return params
+_G.eq = function (cmp_obj)
+	return {'eq', cmp_obj}
+end
 
+
+SNIPPET_logic_methods = 
+[=[
+local LOGIC_METHODS = {}
+LOGIC_METHODS.eq = function ( cmp_obj )
+	return function (v)
 		if v == cmp_obj then
 			return true
 		else
@@ -113,11 +118,8 @@ _G['eq'] = function ( cmp_obj )
 	end
 end
 
-_G['uneq'] = function ( cmp_obj )
+local uneq = function ( cmp_obj )
 	return function (v)
-		-- XXX: here we should not open the below line. v can be nil
-		if v == uglystr then return nil, 'uneq', cmp_obj; end
-
 		if v ~= cmp_obj then
 			return true
 		else
@@ -126,10 +128,8 @@ _G['uneq'] = function ( cmp_obj )
 	end
 end
 
-_G['lt'] = function (limitation)
+local lt = function (limitation)
 	return function (v)
-		if v == uglystr then return nil, 'lt', limitation; end
-
 		if v and v < limitation then
 			return true
 		else
@@ -138,10 +138,8 @@ _G['lt'] = function (limitation)
 	end
 end
 
-_G['gt'] = function (limitation)
+local gt = function (limitation)
 	return function (v)
-		if v == uglystr then return nil, 'gt', limitation; end
-
 		if v and v > limitation then
 			return true
 		else
@@ -150,10 +148,8 @@ _G['gt'] = function (limitation)
 	end
 end
 
-_G['le'] = function (limitation)
+local le = function (limitation)
 	return function (v)
-		if v == uglystr then return nil, 'le', limitation; end
-
 		if v and v <= limitation then
 			return true
 		else
@@ -162,10 +158,8 @@ _G['le'] = function (limitation)
 	end
 end
 
-_G['ge'] = function (limitation)
+local ge = function (limitation)
 	return function (v)
-		if v == uglystr then return nil, 'ge', limitation; end
-
 		if v and v >= limitation then
 			return true
 		else
@@ -174,10 +168,8 @@ _G['ge'] = function (limitation)
 	end
 end
 
-_G['bt'] = function (small, big)
+local bt = function (small, big)
 	return function (v)
-		if v == uglystr then return nil, 'bt', {small, big}; end
-
 		if v and v > small and v < big then
 			return true
 		else
@@ -186,10 +178,8 @@ _G['bt'] = function (small, big)
 	end
 end
 
-_G['be'] = function (small, big)
+local be = function (small, big)
 	return function (v)
-		if v == uglystr then return nil, 'be', {small,big}; end
-
 		if v and v >= small and v <= big then
 			return true
 		else
@@ -198,10 +188,8 @@ _G['be'] = function (small, big)
 	end
 end
 
-_G['outside'] = function (small, big)
+local outside = function (small, big)
 	return function (v)
-		if v == uglystr then return nil, 'outside',{small,big}; end
-
 		if v and (v < small or v > big) then
 			return true
 		else
@@ -210,10 +198,8 @@ _G['outside'] = function (small, big)
 	end
 end
 
-_G['contains'] = function (substr)
+local contains = function (substr)
 	return function (v)
-		if v == uglystr then return nil, 'contains', substr; end
-
 		v = tostring(v)
 		if v:contains(substr) then
 			return true
@@ -223,10 +209,8 @@ _G['contains'] = function (substr)
 	end
 end
 
-_G['uncontains'] = function (substr)
+local uncontains = function (substr)
 	return function (v)
-		if v == uglystr then return nil, 'uncontains', substr; end
-
 		v = tostring(v)
 		if not v:contains(substr) then
 			return true
@@ -236,10 +220,8 @@ _G['uncontains'] = function (substr)
 	end
 end
 
-_G['startsWith'] = function (substr)
+local startsWith = function (substr)
 	return function (v)
-		if v == uglystr then return nil, 'startsWith', substr; end
-
 		v = tostring(v)
 		if v:startsWith(substr) then
 			return true
@@ -249,10 +231,8 @@ _G['startsWith'] = function (substr)
 	end
 end
 
-_G['unstartsWith'] = function (substr)
+local unstartsWith = function (substr)
 	return function (v)
-		if v == uglystr then return nil, 'unstartsWith', substr; end
-
 		v = tostring(v)
 		if not v:startsWith(substr) then
 			return true
@@ -263,10 +243,8 @@ _G['unstartsWith'] = function (substr)
 end
 
 
-_G['endsWith'] = function (substr)
+local endsWith = function (substr)
 	return function (v)
-		if v == uglystr then return nil, 'endsWith', substr; end
-		
 		v = tostring(v)
 		if v:endsWith(substr) then
 			return true
@@ -276,9 +254,8 @@ _G['endsWith'] = function (substr)
 	end
 end
 
-_G['unendsWith'] = function (substr)
+local unendsWith = function (substr)
 	return function (v)
-		if v == uglystr then return nil, 'unendsWith', substr; end
 		v = tostring(v)
 		if not v:endsWith(substr) then
 			return true
@@ -288,11 +265,9 @@ _G['unendsWith'] = function (substr)
 	end
 end
 
-_G['inset'] = function (...)
+local inset = function (...)
 	local args = {...}
 	return function (v)
-		if v == uglystr then return nil, 'inset', args; end
-		
 		v = tostring(v)
 		for _, val in ipairs(args) do
 			-- once meet one, ok
@@ -305,11 +280,9 @@ _G['inset'] = function (...)
 	end
 end
 
-_G['uninset'] = function (...)
+local uninset = function (...)
 	local args = {...}
 	local t = function (v)
-		if v == uglystr then return nil, 'uninset', args; end
-		
 		v = tostring(v)
 		for _, val in ipairs(args) do
 			-- once meet one, false
@@ -322,3 +295,7 @@ _G['uninset'] = function (...)
 	end
 	return t
 end
+
+]=]
+
+

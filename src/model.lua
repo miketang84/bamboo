@@ -320,28 +320,7 @@ local function makeModelKeyList(self, ids)
 	return key_list
 end
 
-local SNIPPET_hgetall_by_ids = 
-[=[
-local model_name, ids_string = unpack(ARGV);								 
-local ids = cmsgpack.unpack(ids_string)
-local obj_list = {}
-for i, id in ipairs(ids) do
-	local key = ('%s:%s'):format(model_name, id)
-	local obj = redis.call('HGETALL', key)
-	table.insert(obj_list, obj)
-end
-
--- here, obj_list is the form of 
--- {{key1, val1, key2, val2}, {key1, val1, key2, val2}, {...}}
-return obj_list
-]=]
-
-local getFromRedisPipeline = function (self, ids)
-
-	local model_name = self.__name
-	local ids_string = cmsgpack.pack(ids)
-	local data_list = dbc:command('EVAL', SNIPPET_hgetall_by_ids, 0, model_name, ids_string)
-
+local makeObjects = function (self, data_list)
 	local objs = QuerySet()
 	local nils = {}
 	for i, v in ipairs(data_list) do
@@ -354,7 +333,41 @@ local getFromRedisPipeline = function (self, ids)
 
 	return objs, nils
 end
+
+
+local SNIPPET_BASIC_hgetallByIds = 
+[=[
+local obj_list = {}
+for i, id in ipairs(ids) do
+	local key = ('%s:%s'):format(model_name, id)
+	local obj = redis.call('HGETALL', key)
+	table.insert(obj_list, obj)
+end
+
+-- here, obj_list is the form of 
+-- {{key1, val1, key2, val2}, {key1, val1, key2, val2}, {...}}
+return obj_list
+]=]
+
+local SNIPPET_hgetallByIds = 
+[=[
+local model_name, ids_string = unpack(ARGV);								 
+local ids = cmsgpack.unpack(ids_string)
+
+${hgetallByIds}
+
+]=] % { hgetallByIds = SNIPPET_BASIC_hgetallByIds }
+
+local getFromRedisPipeline = function (self, ids)
+
+	local model_name = self.__name
+	local ids_string = cmsgpack.pack(ids)
+	local data_list = dbc:command('EVAL', SNIPPET_hgetallByIds, 0, model_name, ids_string)
+
+	return makeObjects(data_list)
+end
 bamboo.internals['getFromRedisPipeline'] = getFromRedisPipeline
+
 
 
 local SNIPPET_hgetall_by_modelids = 
@@ -661,6 +674,55 @@ local retrieveObjectsByForeignType = function (foreign, list)
 	end
 
 end
+
+local SNIPPET_checkLogicRelation = 
+[=[
+local model_name, fields_string, logic, query_string, is_rev = unpack(ARGV)
+local fields = cmsgpack.unpack(query_string)
+local query_args = cmsgpack.unpack(query_string)
+
+local logic_choice = logic == 'and'
+local flag = logic_choice
+
+local index_key = string.format('%s:__index', model_name)
+local r
+if is_rev == 'rev' then
+	r = redis.call('ZREVRANGE', index_key, 0, -1, 'withscores')
+else
+	r = redis.call('ZRANGE', index_key, 0, -1, 'withscores')
+end
+	 
+local ids = {}
+for i = 1, #r, 2 do
+	table.insert(ids, r[i+1])
+end
+
+${hgetallByIds}
+
+
+for k, v in pairs(query_args) do
+	-- to redundant query condition, once meet, jump immediately
+	if not fields[k] then flag=false; break end
+
+	-- it uses a logic function
+	if type(v) == 'table' then
+		flag = LOGIC_METHODS[v[1]](obj[k])
+	else
+		flag = (obj[k] == v)
+	end
+	---------------------------------------------------------------
+	-- logic_choice,       flag,      action,          append?
+	---------------------------------------------------------------
+	-- true (and)          true       next field       --
+	-- true (and)          false      break            no
+	-- false (or)          true       break            yes
+	-- false (or)          false      next field       --
+	---------------------------------------------------------------
+	if logic_choice ~= flag then break end
+end
+
+
+]=]
 
 
 local checkLogicRelation = function (obj, query_args, logic_choice, model)
@@ -1332,10 +1394,12 @@ Model = Object:extend {
 		I_AM_CLASS(self)
 		if type(tonumber(id)) ~= 'number' then return nil end
 
-		local flag, name = checkExistanceById(self, id)
-		if isFalse(flag) or isFalse(name) then return nil end
+		local index_key = getIndexKey(self)
+		local r = dbc:command('ZRANGEBYSCORE', index_key, id, id)
+		if #r == 0 then return nil end
 
-		return name
+		-- return the first element, for r is a list
+		return r[1]
 	end;
 
 	-- return instance object by primary key value
@@ -1358,20 +1422,28 @@ Model = Object:extend {
 		
 		local index_key = getIndexKey(self)
 		-- id is the score of that index value
-		local _, ids = db:zrange(index_key, rank_index, rank_index, 'withscores')
-		return self:getById(ids[1])
+		local r = dbc:command('ZRANGE', index_key, rank_index, rank_index, 'withscores')
+		if #r == 0 then return nil end
+
+		local id = r[2]
+		--local _, ids = db:zrange(index_key, rank_index, rank_index, 'withscores')
+		return self:getById(id)
 	end;
 
 	getById = function (self, id)
 		I_AM_CLASS(self)
 		if type(tonumber(id)) ~= 'number' then return nil end
+		local SNIPPET_getById = 
+[[
+local model_name, id = unpack(ARGV)
+local key = string.format('%s:%s', model_name, id)
+if not redis.call('EXIST', key) then return nil end
+return redis.call('HGETALL', key)
+]]
 
-		-- check the existance in the index cache
-		-- if not checkExistanceById(self, id) then return nil end
-		-- and then check the existance in the key set
-		local key = getNameIdPattern2(self, id)
-		if not db:exists(key) then return nil end
-		return getFromRedis(self, key)
+		local data = dbc:command('EVAL', SNIPPET_getById, 0, self.__name, id)
+
+		return makeObject(self, data)
 	end;
 
 	getByIds = function (self, ids)
@@ -1387,13 +1459,18 @@ Model = Object:extend {
 	allIds = function (self, is_rev)
 		I_AM_CLASS(self)
 		local index_key = getIndexKey(self)
-		local all_ids
+		local r
 		if is_rev == 'rev' then
-			_, all_ids = db:zrevrange(index_key, 0, -1, 'withscores')
+			r = dbc:command('ZREVRANGE', index_key, 0, -1, 'withscores')
 		else
-			_, all_ids = db:zrange(index_key, 0, -1, 'withscores')
+			r = dbc:command('ZRANGE', index_key, 0, -1, 'withscores')
 		end
-
+		
+		local all_ids = {}
+		for i = 1, #r, 2 do
+			tinsert(all_ids, r[i+1])
+		end
+		
 		return List(all_ids)
 	end;
 
@@ -1402,17 +1479,23 @@ Model = Object:extend {
 	--
 	sliceIds = function (self, start, stop, is_rev)
 		I_AM_CLASS(self)
-		checkType(start, stop, 'number', 'number')
+		-- checkType(start, stop, 'number', 'number')
 		local index_key = getIndexKey(self)
 		local istart, istop = transEdgeFromLuaToRedis(start, stop)
-		local ids
-		_, ids = db:zrange(index_key, istart, istop, 'withscores')
-		if is_rev == 'rev' then
-			return List(ids):reverse()
-		else
-			return List(ids)
-		end
+		local r
+		r = dbc:command('ZRANGE', index_key, istart, istop, 'withscores')
 
+		local ids = List()
+		if is_rev == 'rev' then
+			for i = #r, 1, -2 do
+				tinsert(ids, r[i])
+			end
+		else
+			for i = 1, #r, 2 do
+				tinsert(ids, r[i+1])
+			end
+		end
+		return ids
 	end;
 
 	-- return all instance objects belong to this Model
@@ -1420,7 +1503,27 @@ Model = Object:extend {
 	all = function (self, is_rev)
 		I_AM_CLASS(self)
 		local all_ids = self:allIds(is_rev)
-		return getFromRedisPipeline(self, all_ids)
+local SNIPPET_all = 
+[=[
+local model_name, is_rev = unpack(ARGV)
+local index_key = string.format('%s:__index', model_name)
+local r
+if is_rev == 'rev' then
+	r = redis.call('ZREVRANGE', index_key, 0, -1, 'withscores')
+else
+	r = redis.call('ZRANGE', index_key, 0, -1, 'withscores')
+end
+	 
+local ids = {}
+for i = 1, #r, 2 do
+	table.insert(ids, r[i+1])
+end
+
+${hgetallByIds}
+]=] % {hgetallByIds = SNIPPET_BASIC_hgetallByIds}
+
+		local data_list = dbc:command('EVAL', SNIPPET_all, 0, self.__name, is_rev)
+		return makeObjects(data_list)
 	end;
 
 	-- slice instance object list, support negative index (-1)
@@ -1428,15 +1531,36 @@ Model = Object:extend {
 	slice = function (self, start, stop, is_rev)
 		-- !slice method won't be open to query set, because List has slice method too.
 		I_AM_CLASS(self)
-		local ids = self:sliceIds(start, stop, is_rev)
-		return getFromRedisPipeline(self, ids)
+local SNIPPET_slice = 
+[=[
+local model_name, istart, istop, is_rev = unpack(ARGV)
+local index_key = string.format('%s:__index', model_name)
+local r
+r = redis.call('ZRANGE', index_key, istart, istop, 'withscores')
+
+local ids = {}
+if is_rev == 'rev' then
+	for i = #r, 1, -2 do
+		table.insert(ids, r[i])
+	end
+else
+	for i = 1, #r, 2 do
+		table.insert(ids, r[i+1])
+	end
+end
+
+${hgetallByIds}
+]=] % {hgetallByIds = SNIPPET_BASIC_hgetallByIds}
+
+		local data_list = dbc:command('EVAL', SNIPPET_slice, 0, self.__name, istart, istop, is_rev)
+		return makeObjects(data_list)
 	end;
 
 	-- return the actual number of the instances
 	--
 	numbers = function (self)
 		I_AM_CLASS(self)
-		return db:zcard(getIndexKey(self))
+		return dbc:command('ZCARD', getIndexKey(self))
 	end;
 
 	-- return the first instance found by query set
