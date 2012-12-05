@@ -675,54 +675,6 @@ local retrieveObjectsByForeignType = function (foreign, list)
 
 end
 
-local SNIPPET_checkLogicRelation = 
-[=[
-local model_name, fields_string, logic, query_string, is_rev = unpack(ARGV)
-local fields = cmsgpack.unpack(query_string)
-local query_args = cmsgpack.unpack(query_string)
-
-local logic_choice = logic == 'and'
-local flag = logic_choice
-
-local index_key = string.format('%s:__index', model_name)
-local r
-if is_rev == 'rev' then
-	r = redis.call('ZREVRANGE', index_key, 0, -1, 'withscores')
-else
-	r = redis.call('ZRANGE', index_key, 0, -1, 'withscores')
-end
-	 
-local ids = {}
-for i = 1, #r, 2 do
-	table.insert(ids, r[i+1])
-end
-
-${hgetallByIds}
-
-
-for k, v in pairs(query_args) do
-	-- to redundant query condition, once meet, jump immediately
-	if not fields[k] then flag=false; break end
-
-	-- it uses a logic function
-	if type(v) == 'table' then
-		flag = LOGIC_METHODS[v[1]]()(obj[k])
-	else
-		flag = (obj[k] == v)
-	end
-	---------------------------------------------------------------
-	-- logic_choice,       flag,      action,          append?
-	---------------------------------------------------------------
-	-- true (and)          true       next field       --
-	-- true (and)          false      break            no
-	-- false (or)          true       break            yes
-	-- false (or)          false      next field       --
-	---------------------------------------------------------------
-	if logic_choice ~= flag then break end
-end
-
-
-]=]
 
 
 local checkLogicRelation = function (obj, query_args, logic_choice, model)
@@ -1567,6 +1519,67 @@ ${hgetallByIds}
 	--
 	get = function (self, query_args, find_rev)
 		I_AM_CLASS(self)
+
+
+local SNIPPET_get = 
+---[=[
+local model_name, fields_string, logic, query_string, is_rev = unpack(ARGV)
+local fields = cmsgpack.unpack(query_string)
+local query_args = cmsgpack.unpack(query_string)
+
+local logic_choice = logic == 'and'
+local flag = logic_choice
+
+local index_key = string.format('%s:__index', model_name)
+local r
+-- TODO: only for small project now
+if is_rev == 'rev' then
+	r = redis.call('ZREVRANGE', index_key, 0, -1, 'withscores')
+else
+	r = redis.call('ZRANGE', index_key, 0, -1, 'withscores')
+end
+
+for i = 1, #r, 2 do
+	local id = r[i+1]
+	local key = ('%s:%s'):format(model_name, id)
+	local obj = redis.call('HGETALL', key)
+
+	local hash_data = {}
+	for i = 1, #obj, 2 do
+		hash_data[obj[i]] = obj[i+1]
+	end
+
+	for k, v in pairs(query_args) do
+		-- to redundant query condition, once meet, jump immediately
+		if not fields[k] then flag=false; break end
+
+		-- it uses a logic function
+		if type(v) == 'table' then
+			local method = table.remove(v, 1)
+			flag = LOGIC_METHODS[method](unpack(v))(hash_data[k])
+		else
+			flag = (hash_data[k] == v)
+		end
+
+		---------------------------------------------------------------
+		-- logic_choice,       flag,      action,          append?
+		---------------------------------------------------------------
+		-- true (and)          true       next field       --
+		-- true (and)          false      break            no
+		-- false (or)          true       break            yes
+		-- false (or)          false      next field       --
+		---------------------------------------------------------------
+		if logic_choice ~= flag then break end
+	end
+
+	if flag then return obj end
+end
+
+--]=] --% { hgetallByIds = SNIPPET_BASIC_hgetallByIds }
+
+
+
+--[[
 		
 		local PART_LEN = 100
 		local total = self:numbers()
@@ -1603,6 +1616,7 @@ ${hgetallByIds}
 		end
 	
 		return nil
+--]]
 	end;
 
 	--- fitler some instances belong to this model
@@ -1613,6 +1627,71 @@ ${hgetallByIds}
 	-- @return
 	filter = function (self, query_args, ...)
 		I_AM_CLASS_OR_QUERY_SET(self)
+
+local SNIPPET_filter = 
+---[=[
+local model_name, fields_string, logic, query_string, is_rev = unpack(ARGV)
+local fields = cmsgpack.unpack(query_string)
+local query_args = cmsgpack.unpack(query_string)
+
+local logic_choice = logic == 'and'
+local flag = logic_choice
+
+local index_key = string.format('%s:__index', model_name)
+local r
+-- TODO: only for small project now
+if is_rev == 'rev' then
+	r = redis.call('ZREVRANGE', index_key, 0, -1, 'withscores')
+else
+	r = redis.call('ZRANGE', index_key, 0, -1, 'withscores')
+end
+
+local objs = {}
+for i = 1, #r, 2 do
+	local id = r[i+1]
+	local key = ('%s:%s'):format(model_name, id)
+	local obj = redis.call('HGETALL', key)
+
+	local hash_data = {}
+	for i = 1, #obj, 2 do
+		hash_data[obj[i]] = obj[i+1]
+	end
+
+	for k, v in pairs(query_args) do
+		-- to redundant query condition, once meet, jump immediately
+		if not fields[k] then flag=false; break end
+
+		-- it uses a logic function
+		if type(v) == 'table' then
+			local method = table.remove(v, 1)
+			flag = LOGIC_METHODS[method](unpack(v))(hash_data[k])
+		else
+			flag = (hash_data[k] == v)
+		end
+
+		---------------------------------------------------------------
+		-- logic_choice,       flag,      action,          append?
+		---------------------------------------------------------------
+		-- true (and)          true       next field       --
+		-- true (and)          false      break            no
+		-- false (or)          true       break            yes
+		-- false (or)          false      next field       --
+		---------------------------------------------------------------
+		if logic_choice ~= flag then break end
+	end
+
+	if flag then table.insert(objs, obj) end
+end
+
+return objs
+
+--]=] --% { hgetallByIds = SNIPPET_BASIC_hgetallByIds }
+
+
+
+
+
+--[[
 		assert(type(query_args) == 'table' or type(query_args) == 'function', 
 			'[Error] the query_args passed to filter must be table or function.')
 		local no_sort_rule = true
@@ -1844,6 +1923,8 @@ ${hgetallByIds}
 
 		-- return results
 		return query_set, total_length
+--]]
+
 	end;
 
 
