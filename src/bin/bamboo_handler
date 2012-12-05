@@ -339,6 +339,8 @@ local function run(lgserver_conn, config)
 		while true do lgserver_request() end
 	else
 		print('Enter polling....')
+		poller:add(lgserver_conn.cluster_channel_sub, zmq.POLLIN, lgserver_request)
+
 		-- add the main lgserver request to poll
 		-- lgserver_conn.channel_req is the socket pull from lgserver
 		poller:add(lgserver_conn.channel_req, zmq.POLLIN, lgserver_request)

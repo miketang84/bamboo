@@ -706,7 +706,7 @@ for k, v in pairs(query_args) do
 
 	-- it uses a logic function
 	if type(v) == 'table' then
-		flag = LOGIC_METHODS[v[1]](obj[k])
+		flag = LOGIC_METHODS[v[1]]()(obj[k])
 	else
 		flag = (obj[k] == v)
 	end
