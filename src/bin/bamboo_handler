@@ -9,6 +9,7 @@ require 'bamboo'
 local utils = require 'bamboo.utils'
 local normalizePath = require('lglib.path').normalize
 
+local cmsgpack = require 'cmsgpack'
 require 'zmq.poller'
 local poller = zmq.poller(64)
 bamboo.poller = poller
@@ -92,7 +93,6 @@ bamboo.lgserver_conn = lgserver_conn
 config.lgserver_conn = lgserver_conn
 bamboo.cluster_channel_pub = lgserver_conn.cluster_channel_pub
 
-
 -- ==============================================================
 -- load handler_entry file
 local childenv = {}
@@ -113,6 +113,15 @@ bamboo.registerModule(childenv)
 -- hook the disconnect handler
 config.disconnect = childenv.disconnect
 config.clusterSubHandler = childenv.clusterSubHandler
+
+local cluster_listener = function ()
+	local ch_sub = lgserver_conn.cluster_channel_sub
+	local msg = ch_sub:recv()
+	if childenv.clusterSubHandler then
+		childenv.clusterSubHandler(cmsgpack.unpack(msg))
+	end
+end
+
 
 local URLS = childenv.URLS
 
@@ -339,6 +348,8 @@ local function run(lgserver_conn, config)
 		while true do lgserver_request() end
 	else
 		print('Enter polling....')
+		
+		poller:add(lgserver_conn.cluster_channel_sub, zmq.POLLIN, cluster_listener)
 		-- add the main lgserver request to poll
 		-- lgserver_conn.channel_req is the socket pull from lgserver
 		poller:add(lgserver_conn.channel_req, zmq.POLLIN, lgserver_request)
