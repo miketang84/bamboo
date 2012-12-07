@@ -115,12 +115,13 @@ local function newConnection(sender_id, sub_addr, pub_addr, cluster_addr)
 	-- channel_res:bind(pub_addr)
 	channel_res:connect(pub_addr)
 
+	local cluster_channel_pub, cluster_channel_sub
 	-- if set cluster channel
-	if cluster_channel_addr then
+	if cluster_addr then
 		cluster_channel_pub = ctx:socket(zmq.PUB)
 		cluster_channel_pub:bind(cluster_addr)
 
-		local cluster_channel_sub = ctx:socket(zmq.SUB)
+		cluster_channel_sub = ctx:socket(zmq.SUB)
 		cluster_channel_sub:setopt(zmq.SUBSCRIBE, "")
 		cluster_channel_sub:connect(cluster_addr)
 	end
