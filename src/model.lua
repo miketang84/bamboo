@@ -1236,31 +1236,30 @@ end
 -- called by save
 -- self is instance
 local processBeforeSave = function (self, params)
+	local r_params = {}
 	local primarykey = self.__primarykey
 	local fields = self.__fields
-	local store_kv = {}
-	--- save an hash object
-	-- 'id' are essential in an object instance
-	tinsert(store_kv, 'id')
-	tinsert(store_kv, self.id)
 
 	-- if parameters exist, update it
 	if params and type(params) == 'table' then
 		for k, v in pairs(params) do
-			if k ~= 'id' and fields[k] then
+			local fdt = fields[k]
+			if k ~= 'id' and fdt and (fdt.foreign == nil or (fdt.foreign and fdt.st == 'ONE')) then
 				self[k] = tostring(v)
 			end
 		end
 	end
 
 	assert(not isFalse(self[primarykey]) ,
-		format("[Error] instance's index field %s's value must not be nil. Please check your model defination.", primarykey))
+		format("[Error] instance's primary field %s's value must not be nil. Please check your model definition.", 
+			   primarykey))
 
 	-- check required field
 	-- TODO: later we should update this to validate most attributes for each field
 	for field, fdt in pairs(fields) do
 		if fdt.required then
-			assert(self[field], format("[Error] @processBeforeSave - this field '%s' is required but its' value is nil.", field))
+			assert(self[field], 
+				   format("[Error] @processBeforeSave - this field '%s' is required but its' value is nil.", field))
 		end
 	end
 
@@ -1275,13 +1274,12 @@ local processBeforeSave = function (self, params)
 		if fdt then
 			if not fdt['foreign'] or ( fdt['foreign'] and fdt['st'] == 'ONE') then
 				-- save
-				tinsert(store_kv, k)
-				tinsert(store_kv, tostring(v))
+				r_params[k] = tostring(v)
 			end
 		end
 	end
 
-	return self, store_kv
+	return r_params
 end
 
 ------------------------------------------------------------------------
@@ -1876,69 +1874,69 @@ ${hgetallByIds}
 	save = function (self, params)
 		I_AM_INSTANCE(self)
 
-		local new_case = true
-		-- here, we separate the new create case and update case
-		-- if backwards to Model, the __primarykey is 'id'
-		local primarykey = self.__primarykey
-		assert(type(primarykey) == 'string', "[Error] the __primarykey should be string.")
+		local r_params = processBeforeSave(self, params)
 
-		-- if self has id attribute, it is an instance saved before. use id to separate two cases
-		if self.id then new_case = false end
+local SNIPPET_save = 
+[[
+local model_name, id, primarykey, params_str = unpack(ARGV)
+local key = string.format('%s:%s', model_name, id)
+local index_key = string.format('%s:__index', model_name)
+local params = cmsgpack.unpack(params_str)
+local new_case = true
+-- if self has id attribute, it is an instance saved before. use id to separate two cases
+if id then new_case = false end
 
+local countername = string.format("%s:__counter", model_name)
+local new_primary = params[primarykey]
+
+if new_case then
+	local new_id = redis.call('INCR', countername)
+	if new_primary then
+		local already_at = redis.call('ZSCORE', index_key, new_primary)
+		if already_at then return false end
+		-- if db:zscore(index_key, self[primarykey]) then print(format("[Warning] save duplicate to an unique limited field: %s.", primarykey)); return nil end
+		redis.call('ZADD', index_key, id, new_primary)
+	end
+
+	local store_kv = {
+		'id', new_id
+	}
+	for k, v in pairs(params) do
+		table.insert(store_kv, k, v)
+	end
+	
+	redis.call('HMSET', key, unpack(store_kv))
+
+else
+	local counter = redis.call('GET', countername)
+	if tonumber(id) > tonumber(counter) then return false end
+
+	if new_primary then
+		local score = redis.call('ZSCORE', index_key, new_primary)
+		if score and tostring(score) ~= id then return false end
+		redis.call('ZREMRANGEBYSCORE', index_key, id, id)
+		redis.call('ZADD', index_key, id, new_primary)
+	end
+
+	local store_kv = {}
+	for k, v in pairs(params) do
+		table.insert(store_kv, k, v)
+	end
+
+	redis.call('HMSET', key, unpack(store_kv))
+
+end
+
+redis.call('HSET', key, 'lastmodified_time', os.time())
+
+return true
+]]
+
+
+		db:eval(SNIPPET_save, 0, self.__name, self.id, self.__primarykey, cmsgpack.pack(r_params))
 		-- update the lastmodified_time
-		self.lastmodified_time = socket.gettime()
-
-		local index_key = getIndexKey(self)
-		local replies
-		if new_case then
-			local countername = getCounterName(self)
-			local options = { watch = {countername, index_key}, cas = true, retry = 2 }
-			replies = db:transaction(function(db)
-				-- increase the instance counter
-				db:incr(countername)
-				self.id = db:get(countername)
-				local model_key = getNameIdPattern(self)
-				local self, store_kv = processBeforeSave(self, params)
-				-- assert(not db:zscore(index_key, self[primarykey]), "[Error] save duplicate to an unique limited field, aborted!")
-				if db:zscore(index_key, self[primarykey]) then print(format("[Warning] save duplicate to an unique limited field: %s.", primarykey)); return nil end
-
-				db:zadd(index_key, self.id, self[primarykey])
-				-- update object hash store key
-				db:hmset(model_key, unpack(store_kv))
-
-				if bamboo.config.index_hash then
-					mih.index(self,true);--create hash index
-				end
-			end, options)
-		else
-			-- update case
-			assert(tonumber(getCounter(self)) >= tonumber(self.id), '[Error] @save - invalid id.')
-			-- in processBeforeSave, there is no redis action
-			local self, store_kv = processBeforeSave(self, params)
-			local model_key = getNameIdPattern(self)
-
-			local options = { watch = {index_key}, cas = true, retry = 2 }
-			replies = db:transaction(function(db)
-				if bamboo.config.index_hash then
-					mih.index(self,false);--update hash index
-				end
-
-				local score = db:zscore(index_key, self[primarykey])
-				-- assert(score == self.id or score == nil, "[Error] save duplicate to an unique limited field, aborted!")
-				-- score is number, self.id is string
-				if not (tostring(score) == self.id or score == nil) then print(format("[Warning] save duplicate to an unique limited field: %s.", primarykey)); return nil  end
-
-				-- if modified primarykey, score will be nil, remove the old id-primarykey pair, for later new save primarykey
-				if not score then
-					db:zremrangebyscore(index_key, self.id, self.id)
-				end
-				-- update __index score and member
-				db:zadd(index_key, self.id, self[primarykey])
-				-- update object hash store key
-				db:hmset(model_key, unpack(store_kv))
-			end, options)
-		end
-
+		self.lastmodified_time = os.time()
+--[[
 		-- make fulltext indexes
 		if isUsingFulltextIndex(self) then
 			bamboo.internals.makeFulltextIndexes(self)
@@ -1946,7 +1944,7 @@ ${hgetallByIds}
 		if isUsingRuleIndex(self) then
 			updateIndexByRules(self, 'update')
 		end
-
+--]]
 		return self
 	end;
 
@@ -1954,55 +1952,40 @@ ${hgetallByIds}
 	-- can only apply to none foreign field
 	update = function (self, field, new_value)
 		I_AM_INSTANCE(self)
-		checkType(field, 'string')
 		assert(type(new_value) == 'string' or type(new_value) == 'number' or type(new_value) == 'nil')
 		local fld = self.__fields[field]
 		if not fld then print(("[Warning] Field %s doesn't be defined!"):format(field)); return nil end
 		assert( not fld.foreign, ("[Error] %s is a foreign field, shouldn't use update function!"):format(field))
-		local model_key = getNameIdPattern(self)
-		assert(db:exists(model_key), ("[Error] Key %s does't exist! Can't apply update."):format(model_key))
 
-		local primarykey = self.__primarykey
 
-		-- if field is indexed, need to update the __index too
-		if field == primarykey then
-			assert(new_value ~= nil, "[Error] Can not delete primarykey field");
-			local index_key = getIndexKey(self)
-			db:zremrangebyscore(index_key, self.id, self.id)
-		   	db:zadd(index_key, self.id, new_value)
-		end
+local SNIPPET_update = 
+[[
+local model_name, id, primarykey, field, new_value = unpack(ARGV)
+local key = string.format('%s:%s', model_name, id)
+local index_key = string.format('%s:__index', model_name)
+if not redis.call('EXISTS', key) then return false end
+if field == primarykey then
+	if not new_value then return false end
+	redis.call('ZREMRANGEBYSCORE', index_key, id, id)
+	redis.call('ZADD', index_key, id, new_value)
+end
 
-		-- update the lua object
+if new_value == nil and field ~= primarykey then
+	redis.call('HDEL', key, field)
+else
+	redis.call('HSET', key, field, new_value)
+end
+
+redis.call('HSET', key, 'lastmodified_time', os.time())
+
+]]
+
+		self.lastmodified_time = os.time()
 		self[field] = new_value
-		--hash index
-		if bamboo.config.index_hash then
-			mih.index(self,false,field);
-		end
+		db:eval(SNIPPET_update, 0, self.__name, self.id, self.__primarykey, field, new_value)
+		return self
 
-		--update object in database
-		if new_value == nil then
-			-- could not delete index field
-			if field ~= primarykey then
-				db:hdel(model_key, field)
-			end
-		else
-			-- apply to db
-			-- if field is indexed, need to update the __index too
-			if field == primarykey then
-				local index_key = getIndexKey(self)
-				db:zremrangebyscore(index_key, self.id, self.id)
-				db:zadd(index_key, self.id, new_value)
-			end
-
-			db:hset(model_key, field, new_value)
-		end
-		-- update the lastmodified_time
-		self.lastmodified_time = socket.gettime()
-		db:hset(model_key, 'lastmodified_time', self.lastmodified_time)
-
-		-- apply to lua object
-		self[field] = new_value
-
+--[[
 		-- if fulltext index
 		if fld.fulltext_index and isUsingFulltextIndex(self) then
 			bamboo.internals.makeFulltextIndexes(self)
@@ -2010,9 +1993,8 @@ ${hgetallByIds}
 		if isUsingRuleIndex(self) then
 			updateIndexByRules(self, 'update')
 		end
+--]]
 
-
-		return self
 	end;
 
 
@@ -2069,33 +2051,98 @@ ${hgetallByIds}
 	-- return self
 	addForeign = function (self, field, obj)
 		I_AM_INSTANCE(self)
-		checkType(field, 'string')
-		assert(tonumber(getCounter(self)) >= tonumber(self.id), '[Error] before doing addForeign, you must save this instance.')
 		assert(type(obj) == 'table' or type(obj) == 'string', '[Error] "obj" should be table or string.')
-		if type(obj) == 'table' then checkType(tonumber(obj.id), 'number') end
+		-- if type(obj) == 'table' then checkType(tonumber(obj.id), 'number') end
 
-		local fld = self.__fields[field]
-		assert(fld, ("[Error] Field %s doesn't be defined!"):format(field))
-		assert( fld.foreign, ("[Error] This field %s is not a foreign field."):format(field))
-		assert( fld.st, ("[Error] No store type setting for this foreign field %s."):format(field))
-		assert( fld.foreign == 'ANYSTRING' or obj.id,
-			"[Error] This object doesn't contain id, it's not a valid object!")
-		assert( fld.foreign == 'ANYSTRING' or fld.foreign == 'UNFIXED' or fld.foreign == getClassName(obj),
-			("[Error] This foreign field '%s' can't accept the instance of model '%s'."):format(
-			field, getClassName(obj) or tostring(obj)))
+		local fdt = self.__fields[field]
+		assert(fdt, format('[Error] undefined field %s', field)
+		assert( fdt.foreign, ("[Error] This field %s is not a foreign field."):format(field))
+		assert( fdt.st, ("[Error] No store type setting for this foreign field %s."):format(field))
+		if fdt.foreign == 'ANYSTRING' then
+			assert(type(obj) == 'string', '[Error] "obj" should be string when foreign type is ANYSTRING.')
+		else
+			assert( fdt.foreign == 'UNFIXED' or fdt.foreign == getClassName(obj),
+					("[Error] This foreign field '%s' can't accept the instance of model '%s'."):format(
+						field, getClassName(obj) or tostring(obj)))
+			assert( obj.id,	"[Error] This object doesn't contain id, it's not a valid object!")
+		end
+
+local SNIPPET_addForeign = 
+---[[
+local model_name, id, field, new_id, fdt_str = unpack(ARGV)
+local fdt = cmsgpack.unpack(fdt_str)
+local foreign_type = fdt.foreign
+local store_type = fdt.st
+local key = string.format('%s:%s', model_name, id)
+
+if store_type == 'ONE' then
+	-- record in db
+	redis.call('HSET', key, field, new_id)
+--	self[field] = new_id
+
+elseif store_type == 'MANY' then
+	local key = string.format('%s:%s:%s', model_name, id, field)
+	-- for MANY,  
+	redis.call('ZADD', key, os.time(), new_id)
+
+elseif store_type == 'FIFO' then
+	local len = redis.call('LLEN', key)
+	local slen = fdt.fifolen or 100
+	if len >= slen then
+		-- if FIFO is full, push this element from right, pop one old from left
+		redis.call('LPOP', key)
+	end
+	redis.call('RPUSH', key, new_id)
+
+	-- for FIFO, ZFIFO
+	local store_module = getStoreModule(fdt.st)
+	store_module.add(key, new_id, fdt.fifolen or socket.gettime())
+elseif store_type == 'ZFIFO' then
+	-- in zset, the newest member has the higher score
+	-- but use getForeign, we retrieve them from high to low, so newest is at left of result
+	local n = db:zcard(key)
+	if n < length then
+		if n == 0 then
+			db:zadd(key, 1, val)
+		else
+			local _, scores = db:zrange(key, -1, -1, 'withscores')
+			local lastscore = scores[1]
+			db:zadd(key, lastscore + 1, val)
+		end
+	else
+		local _, scores = db:zrange(key, -1, -1, 'withscores')
+		local lastscore = scores[1]
+
+		-- remove the oldest one
+		db:zremrangebyrank(key, 0, 0)
+		-- add the new one
+		db:zadd(key, lastscore + 1, val)
+	end
+
+
+elseif store_type == 'LIST' then
+
+end
+
+
+
+---]]
+
+
+
+--		assert(tonumber(getCounter(self)) >= tonumber(self.id), '[Error] before doing addForeign, you must save this instance.')
 
 		local new_id
-		if fld.foreign == 'ANYSTRING' then
-			checkType(obj, 'string')
+		if fdt.foreign == 'ANYSTRING' then
 			new_id = obj
-		elseif fld.foreign == 'UNFIXED' then
+		elseif fdt.foreign == 'UNFIXED' then
 			new_id = getNameIdPattern(obj)
 		else
 			new_id = obj.id
 		end
 
 		local model_key = getNameIdPattern(self)
-		if fld.st == 'ONE' then
+		if fdt.st == 'ONE' then
 			-- record in db
 			db:hset(model_key, field, new_id)
 			-- ONE foreign value can be get by 'get' series functions
@@ -2103,8 +2150,8 @@ ${hgetallByIds}
 
 		else
 			local key = getFieldPattern(self, field)
-			local store_module = getStoreModule(fld.st)
-			store_module.add(key, new_id, fld.fifolen or socket.gettime())
+			local store_module = getStoreModule(fdt.st)
+			store_module.add(key, new_id, fdt.fifolen or socket.gettime())
 			-- in zset, the newest member has the higher score
 			-- but use getForeign, we retrieve them from high to low, so newest is at left of result
 		end
@@ -2125,25 +2172,25 @@ ${hgetallByIds}
 	getForeign = function (self, field, start, stop, is_rev)
 		I_AM_INSTANCE(self)
 		checkType(field, 'string')
-		local fld = self.__fields[field]
-		assert(fld, ("[Error] Field %s doesn't be defined!"):format(field))
-		assert(fld.foreign, ("[Error] This field %s is not a foreign field."):format(field))
-		assert(fld.st, ("[Error] No store type setting for this foreign field %s."):format(field))
+		local fdt = self.__fields[field]
+		assert(fdt, ("[Error] Field %s doesn't be defined!"):format(field))
+		assert(fdt.foreign, ("[Error] This field %s is not a foreign field."):format(field))
+		assert(fdt.st, ("[Error] No store type setting for this foreign field %s."):format(field))
 
-		if fld.st == 'ONE' then
+		if fdt.st == 'ONE' then
 			if isFalse(self[field]) then return nil end
 
 			local model_key = getNameIdPattern(self)
-			if fld.foreign == 'ANYSTRING' then
+			if fdt.foreign == 'ANYSTRING' then
 				-- return string directly
 				return self[field]
 			else
 				local link_model, linked_id
-				if fld.foreign == 'UNFIXED' then
+				if fdt.foreign == 'UNFIXED' then
 					link_model, linked_id = seperateModelAndId(self[field])
 				else
 					-- normal case
-					link_model = getModelByName(fld.foreign)
+					link_model = getModelByName(fdt.foreign)
 					linked_id = self[field]
 				end
 
@@ -2167,7 +2214,7 @@ ${hgetallByIds}
 
 			local key = getFieldPattern(self, field)
 
-			local store_module = getStoreModule(fld.st)
+			local store_module = getStoreModule(fdt.st)
 			-- scores may be nil
 			local list, scores = store_module.retrieve(key)
 
@@ -2176,7 +2223,7 @@ ${hgetallByIds}
 			if list:isEmpty() then return QuerySet() end
 			if not isFalse(scores) then scores = scores:slice(start, stop, is_rev) end
 
-			local objs, nils = retrieveObjectsByForeignType(fld.foreign, list)
+			local objs, nils = retrieveObjectsByForeignType(fdt.foreign, list)
 
 			if bamboo.config.auto_clear_index_when_get_failed then
 				-- clear the invalid foreign item value
@@ -2195,12 +2242,12 @@ ${hgetallByIds}
 	getForeignIds = function (self, field, start, stop, is_rev)
 		I_AM_INSTANCE(self)
 		checkType(field, 'string')
-		local fld = self.__fields[field]
-		assert(fld, ("[Error] Field %s doesn't be defined!"):format(field))
-		assert(fld.foreign, ("[Error] This field %s is not a foreign field."):format(field))
-		assert(fld.st, ("[Error] No store type setting for this foreign field %s."):format(field))
+		local fdt = self.__fields[field]
+		assert(fdt, ("[Error] Field %s doesn't be defined!"):format(field))
+		assert(fdt.foreign, ("[Error] This field %s is not a foreign field."):format(field))
+		assert(fdt.st, ("[Error] No store type setting for this foreign field %s."):format(field))
 
-		if fld.st == 'ONE' then
+		if fdt.st == 'ONE' then
 			if isFalse(self[field]) then return nil end
 
 			return self[field]
@@ -2208,7 +2255,7 @@ ${hgetallByIds}
 		else
 			if isFalse(self[field]) then return List() end
 			local key = getFieldPattern(self, field)
-			local store_module = getStoreModule(fld.st)
+			local store_module = getStoreModule(fdt.st)
 			local list, scores = store_module.retrieve(key)
 			if list:isEmpty() then return List() end
 			list = list:slice(start, stop, is_rev)
@@ -2224,10 +2271,10 @@ ${hgetallByIds}
 	rearrangeForeign = function (self, field, inlist)
 		I_AM_INSTANCE(self)
 		assert(type(field) == 'string' and type(inlist) == 'table', '[Error] @ rearrangeForeign - parameters type error.' )
-		local fld = self.__fields[field]
-		assert(fld, ("[Error] Field %s doesn't be defined!"):format(field))
-		assert(fld.foreign, ("[Error] This field %s is not a foreign field."):format(field))
-		assert(fld.st, ("[Error] No store type setting for this foreign field %s."):format(field))
+		local fdt = self.__fields[field]
+		assert(fdt, ("[Error] Field %s doesn't be defined!"):format(field))
+		assert(fdt.foreign, ("[Error] This field %s is not a foreign field."):format(field))
+		assert(fdt.st, ("[Error] No store type setting for this foreign field %s."):format(field))
 
 		local new_orders = {}
 		local orig_orders = self:getForeignIds(field)
@@ -2265,15 +2312,15 @@ ${hgetallByIds}
 	delForeign = function (self, field, obj)
 		I_AM_INSTANCE(self)
 		checkType(field, 'string')
-		local fld = self.__fields[field]
+		local fdt = self.__fields[field]
 		assert(not isFalse(obj), "[Error] @delForeign. param obj must not be nil.")
-		assert(fld, ("[Error] Field %s doesn't be defined!"):format(field))
-		assert(fld.foreign, ("[Error] This field %s is not a foreign field."):format(field))
-		assert(fld.st, ("[Error] No store type setting for this foreign field %s."):format(field))
-		--assert( fld.foreign == 'ANYSTRING' or obj.id, "[Error] This object doesn't contain id, it's not a valid object!")
-		assert(fld.foreign == 'ANYSTRING'
-			or fld.foreign == 'UNFIXED'
-			or (type(obj) == 'table' and fld.foreign == getClassName(obj)),
+		assert(fdt, ("[Error] Field %s doesn't be defined!"):format(field))
+		assert(fdt.foreign, ("[Error] This field %s is not a foreign field."):format(field))
+		assert(fdt.st, ("[Error] No store type setting for this foreign field %s."):format(field))
+		--assert( fdt.foreign == 'ANYSTRING' or obj.id, "[Error] This object doesn't contain id, it's not a valid object!")
+		assert(fdt.foreign == 'ANYSTRING'
+			or fdt.foreign == 'UNFIXED'
+			or (type(obj) == 'table' and fdt.foreign == getClassName(obj)),
 			("[Error] This foreign field '%s' can't accept the instance of model '%s'."):format(field, getClassName(obj) or tostring(obj)))
 
 		-- if self[field] is nil, it must be wrong somewhere
@@ -2285,7 +2332,7 @@ ${hgetallByIds}
 			new_id = tostring(obj)
 		else
 			checkType(obj, 'table')
-			if fld.foreign == 'UNFIXED' then
+			if fdt.foreign == 'UNFIXED' then
 				new_id = getNameIdPattern(obj)
 			else
 				new_id = tostring(obj.id)
@@ -2293,7 +2340,7 @@ ${hgetallByIds}
 		end
 
 		local model_key = getNameIdPattern(self)
-		if fld.st == 'ONE' then
+		if fdt.st == 'ONE' then
 			-- we must check the equality of self[filed] and new_id before perform delete action
 			if self[field] == new_id then
 				-- maybe here is rude
@@ -2302,7 +2349,7 @@ ${hgetallByIds}
 			end
 		else
 			local key = getFieldPattern(self, field)
-			local store_module = getStoreModule(fld.st)
+			local store_module = getStoreModule(fdt.st)
 			store_module.remove(key, new_id)
 		end
 
@@ -2319,14 +2366,14 @@ ${hgetallByIds}
 	clearForeign = function (self, field)
 		I_AM_INSTANCE(self)
 		checkType(field, 'string')
-		local fld = self.__fields[field]
-		assert(fld, ("[Error] Field %s doesn't be defined!"):format(field))
-		assert(fld.foreign, ("[Error] This field %s is not a foreign field."):format(field))
-		assert(fld.st, ("[Error] No store type setting for this foreign field %s."):format(field))
+		local fdt = self.__fields[field]
+		assert(fdt, ("[Error] Field %s doesn't be defined!"):format(field))
+		assert(fdt.foreign, ("[Error] This field %s is not a foreign field."):format(field))
+		assert(fdt.st, ("[Error] No store type setting for this foreign field %s."):format(field))
 
 
 		local model_key = getNameIdPattern(self)
-		if fld.st == 'ONE' then
+		if fdt.st == 'ONE' then
 			-- maybe here is rude
 			db:hdel(model_key, field)
 			self[field] = nil
@@ -2349,17 +2396,17 @@ ${hgetallByIds}
 	deepClearForeign = function (self, field)
 		I_AM_INSTANCE(self)
 		checkType(field, 'string')
-		local fld = self.__fields[field]
-		assert(fld, ("[Error] Field %s doesn't be defined!"):format(field))
-		assert(fld.foreign, ("[Error] This field %s is not a foreign field."):format(field))
-		assert(fld.st, ("[Error] No store type setting for this foreign field %s."):format(field))
+		local fdt = self.__fields[field]
+		assert(fdt, ("[Error] Field %s doesn't be defined!"):format(field))
+		assert(fdt.foreign, ("[Error] This field %s is not a foreign field."):format(field))
+		assert(fdt.st, ("[Error] No store type setting for this foreign field %s."):format(field))
 
 		-- delete the foreign objects first
 		local fobjs = self:getForeign(field)
 		if fobjs then fobjs:del() end
 
 		local model_key = getNameIdPattern(self)
-		if fld.st == 'ONE' then
+		if fdt.st == 'ONE' then
 			-- maybe here is rude
 			db:hdel(model_key, field)
 			self[field] = nil
@@ -2384,13 +2431,13 @@ ${hgetallByIds}
 	hasForeign = function (self, field, obj)
 		I_AM_INSTANCE(self)
 		checkType(field, 'string')
-		local fld = self.__fields[field]
-		assert(fld, ("[Error] Field %s doesn't be defined!"):format(field))
-		assert(fld.foreign, ("[Error] This field %s is not a foreign field."):format(field))
-		assert( fld.st, ("[Error] No store type setting for this foreign field %s."):format(field))
-		assert(fld.foreign == 'ANYSTRING' or obj.id, "[Error] This object doesn't contain id, it's not a valid object!")
-		assert(fld.foreign == 'ANYSTRING' or fld.foreign == 'UNFIXED' or fld.foreign == getClassName(obj),
-			   ("[Error] The foreign model (%s) of this field %s doesn't equal the object's model %s."):format(fld.foreign, field, getClassName(obj) or ''))
+		local fdt = self.__fields[field]
+		assert(fdt, ("[Error] Field %s doesn't be defined!"):format(field))
+		assert(fdt.foreign, ("[Error] This field %s is not a foreign field."):format(field))
+		assert( fdt.st, ("[Error] No store type setting for this foreign field %s."):format(field))
+		assert(fdt.foreign == 'ANYSTRING' or obj.id, "[Error] This object doesn't contain id, it's not a valid object!")
+		assert(fdt.foreign == 'ANYSTRING' or fdt.foreign == 'UNFIXED' or fdt.foreign == getClassName(obj),
+			   ("[Error] The foreign model (%s) of this field %s doesn't equal the object's model %s."):format(fdt.foreign, field, getClassName(obj) or ''))
 		if isFalse(self[field]) then return nil end
 
 		local new_id
@@ -2399,18 +2446,18 @@ ${hgetallByIds}
 			new_id = tostring(obj)
 		else
 			checkType(obj, 'table')
-			if fld.foreign == 'UNFIXED' then
+			if fdt.foreign == 'UNFIXED' then
 				new_id = getNameIdPattern(self)
 			else
 				new_id = tostring(obj.id)
 			end
 		end
 
-		if fld.st == "ONE" then
+		if fdt.st == "ONE" then
 			return self[field] == new_id
 		else
 			local key = getFieldPattern(self, field)
-			local store_module = getStoreModule(fld.st)
+			local store_module = getStoreModule(fdt.st)
 			return store_module.has(key, new_id)
 		end
 
@@ -2422,19 +2469,19 @@ ${hgetallByIds}
 	numForeign = function (self, field)
 		I_AM_INSTANCE(self)
 		checkType(field, 'string')
-		local fld = self.__fields[field]
-		assert(fld, ("[Error] Field %s doesn't be defined!"):format(field))
-		assert( fld.foreign, ("[Error] This field %s is not a foreign field."):format(field))
-		assert( fld.st, ("[Error] No store type setting for this foreign field %s."):format(field))
+		local fdt = self.__fields[field]
+		assert(fdt, ("[Error] Field %s doesn't be defined!"):format(field))
+		assert( fdt.foreign, ("[Error] This field %s is not a foreign field."):format(field))
+		assert( fdt.st, ("[Error] No store type setting for this foreign field %s."):format(field))
 		-- if foreign field link is now null
 		if isFalse(self[field]) then return 0 end
 
-		if fld.st == 'ONE' then
+		if fdt.st == 'ONE' then
 			-- the ONE foreign field has only 1 element
 			return 1
 		else
 			local key = getFieldPattern(self, field)
-			local store_module = getStoreModule(fld.st)
+			local store_module = getStoreModule(fdt.st)
 			return store_module.num(key)
 		end
 	end;
@@ -2444,8 +2491,8 @@ ${hgetallByIds}
 	hasForeignKey = function (self, field)
 		I_AM_CLASS_OR_INSTANCE(self)
 		checkType(field, 'string')
-		local fld = self.__fields[field]
-		if fld and fld.foreign then return true
+		local fdt = self.__fields[field]
+		if fdt and fdt.foreign then return true
 		else return false
 		end
 	end;
