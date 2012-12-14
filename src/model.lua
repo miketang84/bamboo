@@ -11,7 +11,6 @@ local tinsert, tremove = table.insert, table.remove
 local format = string.format
 
 local db = BAMBOO_DB
-local dbc = BAMBOO_DBC
 
 local List = require 'lglib.list'
 local rdstring = require 'bamboo.db.redis.string'
@@ -141,6 +140,8 @@ end
 -- misc functions
 -----------------------------------------------------------------
 local transEdgeFromLuaToRedis = function (start, stop)
+	local start = start or 1
+	local stop = stop or -1
 	local istart, istop
 	
 	if start > 0 then
@@ -2067,70 +2068,52 @@ redis.call('HSET', key, 'lastmodified_time', os.time())
 			assert( obj.id,	"[Error] This object doesn't contain id, it's not a valid object!")
 		end
 
+		assert(tonumber(getCounter(self)) >= tonumber(self.id), 
+			   '[Error] before doing addForeign, you must save this instance.')
+
+
 local SNIPPET_addForeign = 
----[[
+[[
 local model_name, id, field, new_id, fdt_str = unpack(ARGV)
 local fdt = cmsgpack.unpack(fdt_str)
+local slen = fdt.fifolen or 100
 local foreign_type = fdt.foreign
 local store_type = fdt.st
 local key = string.format('%s:%s', model_name, id)
+local fkey = string.format('%s:%s:%s', model_name, id, field)
 
 if store_type == 'ONE' then
 	-- record in db
 	redis.call('HSET', key, field, new_id)
---	self[field] = new_id
 
 elseif store_type == 'MANY' then
-	local key = string.format('%s:%s:%s', model_name, id, field)
 	-- for MANY,  
-	redis.call('ZADD', key, os.time(), new_id)
+	redis.call('ZADD', fkey, os.time(), new_id)
 
 elseif store_type == 'FIFO' then
-	local len = redis.call('LLEN', key)
+	local len = redis.call('LLEN', fkey)
 	local slen = fdt.fifolen or 100
 	if len >= slen then
 		-- if FIFO is full, push this element from right, pop one old from left
-		redis.call('LPOP', key)
+		redis.call('LPOP', fkey)
 	end
-	redis.call('RPUSH', key, new_id)
+	redis.call('RPUSH', fkey, new_id)
 
-	-- for FIFO, ZFIFO
-	local store_module = getStoreModule(fdt.st)
-	store_module.add(key, new_id, fdt.fifolen or socket.gettime())
 elseif store_type == 'ZFIFO' then
-	-- in zset, the newest member has the higher score
-	-- but use getForeign, we retrieve them from high to low, so newest is at left of result
-	local n = db:zcard(key)
-	if n < length then
-		if n == 0 then
-			db:zadd(key, 1, val)
-		else
-			local _, scores = db:zrange(key, -1, -1, 'withscores')
-			local lastscore = scores[1]
-			db:zadd(key, lastscore + 1, val)
-		end
-	else
-		local _, scores = db:zrange(key, -1, -1, 'withscores')
-		local lastscore = scores[1]
-
+	local n = redis.call('ZCARD', fkey)
+	redis.call('ZADD', fkey, n+1, new_id)
+	local nn = redis.call('ZCARD', fkey)
+	if nn > slen then
 		-- remove the oldest one
-		db:zremrangebyrank(key, 0, 0)
-		-- add the new one
-		db:zadd(key, lastscore + 1, val)
+		redis.call('ZREMRANGEBYRANK', fkey, 0, 0)
 	end
-
 
 elseif store_type == 'LIST' then
-
+	redis.call('RPUSH', fkey, new_id)
 end
 
-
-
----]]
-
-
-
---		assert(tonumber(getCounter(self)) >= tonumber(self.id), '[Error] before doing addForeign, you must save this instance.')
+redis.call('HSET', key, 'lastmodified_time', os.time())
+]]
 
 		local new_id
 		if fdt.foreign == 'ANYSTRING' then
@@ -2141,41 +2124,82 @@ end
 			new_id = obj.id
 		end
 
-		local model_key = getNameIdPattern(self)
-		if fdt.st == 'ONE' then
-			-- record in db
-			db:hset(model_key, field, new_id)
-			-- ONE foreign value can be get by 'get' series functions
-			self[field] = new_id
-
-		else
-			local key = getFieldPattern(self, field)
-			local store_module = getStoreModule(fdt.st)
-			store_module.add(key, new_id, fdt.fifolen or socket.gettime())
-			-- in zset, the newest member has the higher score
-			-- but use getForeign, we retrieve them from high to low, so newest is at left of result
-		end
-
-		if isUsingRuleIndex() then
-			updateIndexByRules(self, 'update')
-		end
+		db:eval(SNIPPET_addForeign, 0, model_name, id, field, new_id, cmsgpack.pack(fdt))
 
 		-- update the lastmodified_time
 		self.lastmodified_time = socket.gettime()
-		db:hset(model_key, 'lastmodified_time', self.lastmodified_time)
+
+--[[
+		if isUsingRuleIndex() then
+			updateIndexByRules(self, 'update')
+		end
+--]]
 		return self
 	end;
 
 	--
 	--
 	--
-	getForeign = function (self, field, start, stop, is_rev)
+	getForeign = function (self, field, start, stop, is_rev, onlyids)
 		I_AM_INSTANCE(self)
 		checkType(field, 'string')
 		local fdt = self.__fields[field]
 		assert(fdt, ("[Error] Field %s doesn't be defined!"):format(field))
 		assert(fdt.foreign, ("[Error] This field %s is not a foreign field."):format(field))
 		assert(fdt.st, ("[Error] No store type setting for this foreign field %s."):format(field))
+
+local SNIPPET_getForeign = 
+---[[
+-- here, start and stop is the transformed location index for redis, not lua
+local model_name, id, field, new_id, fdt_str, start, stop, is_rev, onlyids = unpack(ARGV)
+
+local fdt = cmsgpack.unpack(fdt_str)
+local slen = fdt.fifolen or 100
+local foreign_type = fdt.foreign
+local store_type = fdt.st
+local key = string.format('%s:%s', model_name, id)
+local fkey = string.format('%s:%s:%s', model_name, id, field)
+
+local id_set = {}
+if store_type == 'MANY' or store_type == 'ZFIFO' then
+	local data = redis.call('ZRANGE', fkey, start, stop, 'WITHSCORES')
+
+	local r_data, r_scores = {}, {}
+	if is_rev == 'rev' then
+		for i = #data, 1, -2 do
+			table.insert(r_data, data[i-1])
+			table.insert(r_scores, data[i])
+		end
+	else
+		for i = 1, #data, 2 do
+			table.insert(r_data, data[i])
+			table.insert(r_scores, data[i+1])
+		end
+	end
+	
+	id_set = { r_data, r_scores }
+
+elseif store_type == 'LIST' or store_type == 'FIFO' then
+	local data = redis.call('LRANGE', fkey, start, stop)
+
+	if is_rev == 'rev' then
+		local r_data = {}
+		for i = #data, 1, -1 do
+			table.insert(r_data, data[i])
+		end
+		data = r_data
+	end
+
+	id_set = {data}
+end
+
+local ids = id_set[1]
+local objs = {}
+for i, id in ipairs(ids) do
+	redis.call('HGETALL', )
+end
+
+---]]
 
 		if fdt.st == 'ONE' then
 			if isFalse(self[field]) then return nil end
@@ -2224,7 +2248,7 @@ end
 			if not isFalse(scores) then scores = scores:slice(start, stop, is_rev) end
 
 			local objs, nils = retrieveObjectsByForeignType(fdt.foreign, list)
-
+--[[
 			if bamboo.config.auto_clear_index_when_get_failed then
 				-- clear the invalid foreign item value
 				if not isFalse(nils) then
@@ -2234,41 +2258,14 @@ end
 					end
 				end
 			end
-
+--]]
 			return objs, scores
 		end
 	end;
 
-	getForeignIds = function (self, field, start, stop, is_rev)
-		I_AM_INSTANCE(self)
-		checkType(field, 'string')
-		local fdt = self.__fields[field]
-		assert(fdt, ("[Error] Field %s doesn't be defined!"):format(field))
-		assert(fdt.foreign, ("[Error] This field %s is not a foreign field."):format(field))
-		assert(fdt.st, ("[Error] No store type setting for this foreign field %s."):format(field))
-
-		if fdt.st == 'ONE' then
-			if isFalse(self[field]) then return nil end
-
-			return self[field]
-
-		else
-			if isFalse(self[field]) then return List() end
-			local key = getFieldPattern(self, field)
-			local store_module = getStoreModule(fdt.st)
-			local list, scores = store_module.retrieve(key)
-			if list:isEmpty() then return List() end
-			list = list:slice(start, stop, is_rev)
-			if list:isEmpty() then return List() end
-			if not isFalse(scores) then scores = scores:slice(start, stop, is_rev) end
-
-			return list, scores
-		end
-
-	end;
 
 	-- rearrange the foreign index by input list
-	rearrangeForeign = function (self, field, inlist)
+	reorderForeign = function (self, field, inlist)
 		I_AM_INSTANCE(self)
 		assert(type(field) == 'string' and type(inlist) == 'table', '[Error] @ rearrangeForeign - parameters type error.' )
 		local fdt = self.__fields[field]
