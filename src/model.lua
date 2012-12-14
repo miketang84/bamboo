@@ -355,9 +355,18 @@ local SNIPPET_hgetallByIds =
 local model_name, ids_string = unpack(ARGV);								 
 local ids = cmsgpack.unpack(ids_string)
 
-${hgetallByIds}
+local obj_list = {}
+for i, id in ipairs(ids) do
+	local key = ('%s:%s'):format(model_name, id)
+	local obj = redis.call('HGETALL', key)
+	table.insert(obj_list, obj)
+end
 
-]=] % { hgetallByIds = SNIPPET_BASIC_hgetallByIds }
+-- here, obj_list is the form of 
+-- {{key1, val1, key2, val2}, {key1, val1, key2, val2}, {...}}
+return obj_list
+
+]=]
 
 local getFromRedisPipeline = function (self, ids)
 
@@ -1470,10 +1479,21 @@ for i = 1, #r, 2 do
 	table.insert(ids, r[i+1])
 end
 
-${hgetallByIds}
-]=] % {hgetallByIds = SNIPPET_BASIC_hgetallByIds}
+local obj_list = {}
+for i, id in ipairs(ids) do
+	local key = ('%s:%s'):format(model_name, id)
+	local obj = redis.call('HGETALL', key)
+	table.insert(obj_list, obj)
+end
 
-		local data_list = dbc:command('EVAL', SNIPPET_all, 0, self.__name, is_rev)
+-- here, obj_list is the form of 
+-- {{key1, val1, key2, val2}, {key1, val1, key2, val2}, {...}}
+return obj_list
+
+]=]
+
+		local data_list = db:eval(SNIPPET_all, 0, self.__name, is_rev)
+
 		return makeObjects(data_list)
 	end;
 
@@ -2149,9 +2169,9 @@ redis.call('HSET', key, 'lastmodified_time', os.time())
 		assert(fdt.st, ("[Error] No store type setting for this foreign field %s."):format(field))
 
 local SNIPPET_getForeign = 
----[[
+[[
 -- here, start and stop is the transformed location index for redis, not lua
-local model_name, id, field, new_id, fdt_str, start, stop, is_rev, onlyids = unpack(ARGV)
+local model_name, id, field, fdt_str, start, stop, is_rev, onlyids = unpack(ARGV)
 
 local fdt = cmsgpack.unpack(fdt_str)
 local slen = fdt.fifolen or 100
@@ -2160,11 +2180,10 @@ local store_type = fdt.st
 local key = string.format('%s:%s', model_name, id)
 local fkey = string.format('%s:%s:%s', model_name, id, field)
 
-local id_set = {}
+local r_data, r_scores = {}, {}
 if store_type == 'MANY' or store_type == 'ZFIFO' then
 	local data = redis.call('ZRANGE', fkey, start, stop, 'WITHSCORES')
 
-	local r_data, r_scores = {}, {}
 	if is_rev == 'rev' then
 		for i = #data, 1, -2 do
 			table.insert(r_data, data[i-1])
@@ -2176,78 +2195,88 @@ if store_type == 'MANY' or store_type == 'ZFIFO' then
 			table.insert(r_scores, data[i+1])
 		end
 	end
-	
-	id_set = { r_data, r_scores }
 
 elseif store_type == 'LIST' or store_type == 'FIFO' then
 	local data = redis.call('LRANGE', fkey, start, stop)
 
 	if is_rev == 'rev' then
-		local r_data = {}
 		for i = #data, 1, -1 do
 			table.insert(r_data, data[i])
 		end
-		data = r_data
+	else
+		r_data = data
 	end
-
-	id_set = {data}
 end
 
-local ids = id_set[1]
+if onlyids == 'onlyids' then return id_set[1] end
+
 local objs = {}
-for i, id in ipairs(ids) do
-	redis.call('HGETALL', )
+if foreign_type == 'ANYSTRING' then	return { r_data, r_scores } end
+if foreign_type == 'UNFIXED' then 
+	for i, id in ipairs(ids) do
+		table.insert(objs, redis.call('HGETALL', id))
+	end
+	return { objs, r_scores }
 end
 
----]]
+-- the normal case
+for i, id in ipairs(ids) do
+	local okey = string.format('%s:%s', foreign_type, id)
+	table.insert(objs, redis.call('HGETALL', okey))
+end
 
-		if fdt.st == 'ONE' then
+return { objs, r_scores }
+]]
+
+		local store_type = fdt.st
+		local foreign_type = fdt.foreign
+
+		if store_type == 'ONE' then
 			if isFalse(self[field]) then return nil end
-
-			local model_key = getNameIdPattern(self)
-			if fdt.foreign == 'ANYSTRING' then
-				-- return string directly
-				return self[field]
-			else
-				local link_model, linked_id
-				if fdt.foreign == 'UNFIXED' then
-					link_model, linked_id = seperateModelAndId(self[field])
-				else
-					-- normal case
-					link_model = getModelByName(fdt.foreign)
-					linked_id = self[field]
-				end
-
-				local obj = link_model:getById (linked_id)
-				if not isValidInstance(obj) then
-					print('[Warning] invalid ONE foreign id or object for field: '..field)
-
-					if bamboo.config.auto_clear_index_when_get_failed then
-						-- clear invalid foreign value
-						db:hdel(model_key, field)
-						self[field] = nil
-					end
-
-					return nil
-				else
-					return obj
-				end
+			if foreign_type == 'ANYSTRING' then return self[field] end
+			if foreign_type == 'UNFIXED' then
+				local model_name, id = self[field]:match('(%w+):(%d+)')
+				local model = getModelByName(model_name)
+				return model:getById(id)
 			end
+			
+			-- normal case
+			local model = getModelByName(foreign_type)
+			return model:getById(self[filed])
+			-- 	if not isValidInstance(obj) then
+			-- 		print('[Warning] invalid ONE foreign id or object for field: '..field)
+
+			-- 		if bamboo.config.auto_clear_index_when_get_failed then
+			-- 			-- clear invalid foreign value
+			-- 			db:hdel(model_key, field)
+			-- 			self[field] = nil
+			-- 		end
+
+			-- 		return nil
+			-- 	else
+			-- 		return obj
+			-- 	end
+			-- end
 		else
 			if isFalse(self[field]) then return QuerySet() end
 
-			local key = getFieldPattern(self, field)
+			local istart, istop = transEdgeFromLuaToRedis(start, stop)
+			db:eval(SNIPPET_getForeign, 0, self.__name, self.id, field, cmsgpack.pack(fdt), istart, istop, is_rev, onlyids)
 
-			local store_module = getStoreModule(fdt.st)
-			-- scores may be nil
-			local list, scores = store_module.retrieve(key)
 
-			if list:isEmpty() then return QuerySet() end
-			list = list:slice(start, stop, is_rev)
-			if list:isEmpty() then return QuerySet() end
-			if not isFalse(scores) then scores = scores:slice(start, stop, is_rev) end
 
-			local objs, nils = retrieveObjectsByForeignType(fdt.foreign, list)
+			-- local key = getFieldPattern(self, field)
+
+			-- local store_module = getStoreModule(fdt.st)
+			-- -- scores may be nil
+			-- local list, scores = store_module.retrieve(key)
+
+			-- if list:isEmpty() then return QuerySet() end
+			-- list = list:slice(start, stop, is_rev)
+			-- if list:isEmpty() then return QuerySet() end
+			-- if not isFalse(scores) then scores = scores:slice(start, stop, is_rev) end
+
+			-- local objs, nils = retrieveObjectsByForeignType(fdt.foreign, list)
 --[[
 			if bamboo.config.auto_clear_index_when_get_failed then
 				-- clear the invalid foreign item value
@@ -2263,6 +2292,215 @@ end
 		end
 	end;
 
+local ASSERT_PROMPTS = {
+	['undefined_field'] = "Field %s wasn't be defined!"
+	['not_foreign_field'] = "%s is not a foreign field!"
+	['no_store_type'] = "No store type for this foreign field %s."
+	['not_matched_foreign_type'] = "obj %s can not fit this foreign type %s!"
+}
+
+
+local check = function (statement, atfunc, prompt_key, ...)
+	local prompt_str = ASSERT_PROMPTS[prompt_key] or prompt_key
+	local assert_msg = pcall(string.format, prompt_str, ...) or ''
+	assert(statement, string.format('[Error] @%s', atfunc) .. assert_msg)
+end
+
+	-- delelte a foreign member
+	-- obj can be instance object, also can be object's id, also can be anystring.
+	delForeign = function (self, field, obj)
+		I_AM_INSTANCE(self)
+
+		local fdt = self.__fields[field]
+		local store_type = fdt.st
+		local foreign_type = fdt.foreign
+
+		check(not isFalse(obj), 'delForeign', "obj %s is invalid!", tostring(obj))
+		check(fdt, 'delForeign', 'undefined_field', field)
+		check(foreign_type, 'delForeign', 'not_foreign_field', field)
+		check(store_type, 'delForeign', 'no_store_type', field)
+
+		--assert( fdt.foreign == 'ANYSTRING' or obj.id, "[Error] This object doesn't contain id, it's not a valid object!")
+		check(foreign_type == 'ANYSTRING'
+			or foreign_type == 'UNFIXED'
+			or (type(obj) == 'table' and foreign_type == getClassName(obj)),
+			'delForeign', 'not_matched_foreign_type', field, getClassName(obj) or tostring(obj))
+
+		if isFalse(self[field]) then return nil end
+
+		local new_id
+		if isNumOrStr(obj) then
+			-- obj is id or anystring
+			new_id = tostring(obj)
+		else
+			if foreign_type == 'UNFIXED' then
+				new_id = getNameIdPattern(obj)
+			else
+				new_id = tostring(obj.id)
+			end
+		end
+
+		local model_key = getNameIdPattern(self)
+		if store_type == 'ONE' then
+			-- we must check the equality of self[filed] and new_id before perform delete action
+			if self[field] == new_id then
+				-- maybe here is rude
+				db:hdel(model_key, field)
+				self[field] = nil
+			end
+		else
+			local key = getFieldPattern(self, field)
+			local store_module = getStoreModule(fdt.st)
+			store_module.remove(key, new_id)
+		end
+
+		-- if isUsingRuleIndex() then
+		-- 	updateIndexByRules(self, 'update')
+		-- end
+
+		-- update the lastmodified_time
+		local ct = socket.gettime()
+		self.lastmodified_time = ct
+		db:hset(model_key, 'lastmodified_time', ct)
+
+		return self
+	end;
+
+	clearForeign = function (self, field)
+		I_AM_INSTANCE(self)
+
+		local fdt = self.__fields[field]
+		local store_type = fdt.st
+		local foreign_type = fdt.foreign
+		assert(fdt, ("[Error] Field %s doesn't be defined!"):format(field))
+		assert(foreign_type, ("[Error] This field %s is not a foreign field."):format(field))
+		assert(store_type, ("[Error] No store type setting for this foreign field %s."):format(field))
+
+		local model_key = getNameIdPattern(self)
+		if store_type == 'ONE' then
+			db:hdel(model_key, field)
+			self[field] = nil
+		else
+			local key = getFieldPattern(self, field)
+			db:del(key)
+		end
+
+		-- if isUsingRuleIndex() then
+		-- 	updateIndexByRules(self, 'update')
+		-- end
+
+		-- update the lastmodified_time
+		local ct = socket.gettime()
+		self.lastmodified_time = ct
+		db:hset(model_key, 'lastmodified_time', ct)
+
+		return self
+	end;
+
+	deepClearForeign = function (self, field)
+		I_AM_INSTANCE(self)
+		local fdt = self.__fields[field]
+		local store_type = fdt.st
+		local foreign_type = fdt.foreign
+
+		assert(fdt, ("[Error] Field %s doesn't be defined!"):format(field))
+		assert(foreign_type, ("[Error] This field %s is not a foreign field."):format(field))
+		assert(store_type, ("[Error] No store type setting for this foreign field %s."):format(field))
+
+		-- delete the foreign objects first
+		local fobjs = self:getForeign(field)
+		if fobjs then fobjs:del() end
+
+		local model_key = getNameIdPattern(self)
+		if store_type == 'ONE' then
+			db:hdel(model_key, field)
+			self[field] = nil
+		else
+			local key = getFieldPattern(self, field)
+			-- delete the foreign key
+			db:del(key)
+		end
+
+		-- if isUsingRuleIndex() then
+		-- 	updateIndexByRules(self, 'update')
+		-- end
+
+		-- update the lastmodified_time
+		local ct = socket.gettime()
+		self.lastmodified_time = ct
+		db:hset(model_key, 'lastmodified_time', ct)
+
+		return self
+	end;
+
+	-- check whether some obj is already in foreign list
+	-- instance:inForeign('some_field', obj)
+	hasForeign = function (self, field, obj)
+		I_AM_INSTANCE(self)
+
+		local fdt = self.__fields[field]
+		local store_type = fdt.st
+		local foreign_type = fdt.foreign
+
+		assert(fdt, format('[Error] undefined field %s', field)
+		assert(foreign_type, ("[Error] This field %s is not a foreign field."):format(field))
+		assert(store_type, ("[Error] No store type setting for this foreign field %s."):format(field))
+		if foreign_type == 'ANYSTRING' then
+			assert(type(obj) == 'string', '[Error] "obj" should be string when foreign type is ANYSTRING.')
+		else
+			assert(foreign_type == 'UNFIXED' or foreign_type == getClassName(obj),
+					("[Error] This foreign field '%s' can't accept the instance of model '%s'."):format(
+						field, getClassName(obj) or tostring(obj)))
+			assert(obj.id,	"[Error] This object doesn't contain id, it's not a valid object!")
+		end
+
+		if isFalse(self[field]) then return nil end
+
+		local new_id
+		if isNumOrStr(obj) then
+			-- obj is id or anystring
+			new_id = tostring(obj)
+		else
+			if foreign_type == 'UNFIXED' then
+				new_id = getNameIdPattern(self)
+			else
+				new_id = tostring(obj.id)
+			end
+		end
+
+		if store_type == "ONE" then
+			return self[field] == new_id
+		else
+			local key = getFieldPattern(self, field)
+			local store_module = getStoreModule(fdt.st)
+			return store_module.has(key, new_id)
+		end
+
+		return false
+	end;
+
+	-- return the number of elements in the foreign list
+	-- @param field:  field of that foreign model
+	numForeign = function (self, field)
+		I_AM_INSTANCE(self)
+		local fdt = self.__fields[field]
+
+		assert(fdt, ("[Error] Field %s doesn't be defined!"):format(field))
+		assert(fdt.foreign, ("[Error] This field %s is not a foreign field."):format(field))
+		assert(fdt.st, ("[Error] No store type set for this foreign field %s."):format(field))
+
+		if fdt.st == 'ONE' then
+			if self[field] == '' or self[field] == nil then
+				return 0
+			else
+				return 1
+			end
+		else
+			local key = getFieldPattern(self, field)
+			local store_module = getStoreModule(fdt.st)
+			return store_module.num(key)
+		end
+	end;
 
 	-- rearrange the foreign index by input list
 	reorderForeign = function (self, field, inlist)
@@ -2304,195 +2542,17 @@ end
 		return self
 	end;
 
-	-- delelte a foreign member
-	-- obj can be instance object, also can be object's id, also can be anystring.
-	delForeign = function (self, field, obj)
-		I_AM_INSTANCE(self)
-		checkType(field, 'string')
-		local fdt = self.__fields[field]
-		assert(not isFalse(obj), "[Error] @delForeign. param obj must not be nil.")
-		assert(fdt, ("[Error] Field %s doesn't be defined!"):format(field))
-		assert(fdt.foreign, ("[Error] This field %s is not a foreign field."):format(field))
-		assert(fdt.st, ("[Error] No store type setting for this foreign field %s."):format(field))
-		--assert( fdt.foreign == 'ANYSTRING' or obj.id, "[Error] This object doesn't contain id, it's not a valid object!")
-		assert(fdt.foreign == 'ANYSTRING'
-			or fdt.foreign == 'UNFIXED'
-			or (type(obj) == 'table' and fdt.foreign == getClassName(obj)),
-			("[Error] This foreign field '%s' can't accept the instance of model '%s'."):format(field, getClassName(obj) or tostring(obj)))
-
-		-- if self[field] is nil, it must be wrong somewhere
-		if isFalse(self[field]) then return nil end
-
-		local new_id
-		if isNumOrStr(obj) then
-			-- obj is id or anystring
-			new_id = tostring(obj)
-		else
-			checkType(obj, 'table')
-			if fdt.foreign == 'UNFIXED' then
-				new_id = getNameIdPattern(obj)
-			else
-				new_id = tostring(obj.id)
-			end
-		end
-
-		local model_key = getNameIdPattern(self)
-		if fdt.st == 'ONE' then
-			-- we must check the equality of self[filed] and new_id before perform delete action
-			if self[field] == new_id then
-				-- maybe here is rude
-				db:hdel(model_key, field)
-				self[field] = nil
-			end
-		else
-			local key = getFieldPattern(self, field)
-			local store_module = getStoreModule(fdt.st)
-			store_module.remove(key, new_id)
-		end
-
-		if isUsingRuleIndex() then
-			updateIndexByRules(self, 'update')
-		end
-
-		-- update the lastmodified_time
-		self.lastmodified_time = socket.gettime()
-		db:hset(model_key, 'lastmodified_time', self.lastmodified_time)
-		return self
-	end;
-
-	clearForeign = function (self, field)
-		I_AM_INSTANCE(self)
-		checkType(field, 'string')
-		local fdt = self.__fields[field]
-		assert(fdt, ("[Error] Field %s doesn't be defined!"):format(field))
-		assert(fdt.foreign, ("[Error] This field %s is not a foreign field."):format(field))
-		assert(fdt.st, ("[Error] No store type setting for this foreign field %s."):format(field))
-
-
-		local model_key = getNameIdPattern(self)
-		if fdt.st == 'ONE' then
-			-- maybe here is rude
-			db:hdel(model_key, field)
-			self[field] = nil
-		else
-			local key = getFieldPattern(self, field)
-			-- delete the foreign key
-			db:del(key)
-		end
-
-		if isUsingRuleIndex() then
-			updateIndexByRules(self, 'update')
-		end
-
-		-- update the lastmodified_time
-		self.lastmodified_time = socket.gettime()
-		db:hset(model_key, 'lastmodified_time', self.lastmodified_time)
-		return self
-	end;
-
-	deepClearForeign = function (self, field)
-		I_AM_INSTANCE(self)
-		checkType(field, 'string')
-		local fdt = self.__fields[field]
-		assert(fdt, ("[Error] Field %s doesn't be defined!"):format(field))
-		assert(fdt.foreign, ("[Error] This field %s is not a foreign field."):format(field))
-		assert(fdt.st, ("[Error] No store type setting for this foreign field %s."):format(field))
-
-		-- delete the foreign objects first
-		local fobjs = self:getForeign(field)
-		if fobjs then fobjs:del() end
-
-		local model_key = getNameIdPattern(self)
-		if fdt.st == 'ONE' then
-			-- maybe here is rude
-			db:hdel(model_key, field)
-			self[field] = nil
-		else
-			local key = getFieldPattern(self, field)
-			-- delete the foreign key
-			db:del(key)
-		end
-
-		if isUsingRuleIndex() then
-			updateIndexByRules(self, 'update')
-		end
-
-		-- update the lastmodified_time
-		self.lastmodified_time = socket.gettime()
-		db:hset(model_key, 'lastmodified_time', self.lastmodified_time)
-		return self
-	end;
-
-	-- check whether some obj is already in foreign list
-	-- instance:inForeign('some_field', obj)
-	hasForeign = function (self, field, obj)
-		I_AM_INSTANCE(self)
-		checkType(field, 'string')
-		local fdt = self.__fields[field]
-		assert(fdt, ("[Error] Field %s doesn't be defined!"):format(field))
-		assert(fdt.foreign, ("[Error] This field %s is not a foreign field."):format(field))
-		assert( fdt.st, ("[Error] No store type setting for this foreign field %s."):format(field))
-		assert(fdt.foreign == 'ANYSTRING' or obj.id, "[Error] This object doesn't contain id, it's not a valid object!")
-		assert(fdt.foreign == 'ANYSTRING' or fdt.foreign == 'UNFIXED' or fdt.foreign == getClassName(obj),
-			   ("[Error] The foreign model (%s) of this field %s doesn't equal the object's model %s."):format(fdt.foreign, field, getClassName(obj) or ''))
-		if isFalse(self[field]) then return nil end
-
-		local new_id
-		if isNumOrStr(obj) then
-			-- obj is id or anystring
-			new_id = tostring(obj)
-		else
-			checkType(obj, 'table')
-			if fdt.foreign == 'UNFIXED' then
-				new_id = getNameIdPattern(self)
-			else
-				new_id = tostring(obj.id)
-			end
-		end
-
-		if fdt.st == "ONE" then
-			return self[field] == new_id
-		else
-			local key = getFieldPattern(self, field)
-			local store_module = getStoreModule(fdt.st)
-			return store_module.has(key, new_id)
-		end
-
-		return false
-	end;
-
-	-- return the number of elements in the foreign list
-	-- @param field:  field of that foreign model
-	numForeign = function (self, field)
-		I_AM_INSTANCE(self)
-		checkType(field, 'string')
-		local fdt = self.__fields[field]
-		assert(fdt, ("[Error] Field %s doesn't be defined!"):format(field))
-		assert( fdt.foreign, ("[Error] This field %s is not a foreign field."):format(field))
-		assert( fdt.st, ("[Error] No store type setting for this foreign field %s."):format(field))
-		-- if foreign field link is now null
-		if isFalse(self[field]) then return 0 end
-
-		if fdt.st == 'ONE' then
-			-- the ONE foreign field has only 1 element
-			return 1
-		else
-			local key = getFieldPattern(self, field)
-			local store_module = getStoreModule(fdt.st)
-			return store_module.num(key)
-		end
-	end;
-
 	-- check this class/object has a foreign key
 	-- @param field:  field of that foreign model
 	hasForeignKey = function (self, field)
 		I_AM_CLASS_OR_INSTANCE(self)
-		checkType(field, 'string')
+
 		local fdt = self.__fields[field]
 		if fdt and fdt.foreign then return true
 		else return false
 		end
 	end;
+
 
 	------------------------------------------------------------------------
 	-- misc APIs
@@ -2504,13 +2564,10 @@ end
 	
 	getClassName = getClassName;
 
-
 	getFDT = function (self, field)
 		I_AM_CLASS_OR_INSTANCE(self)
-		checkType(field, 'string')
 
 		return self.__fields[field]
-
 	end;
 
 	-- get the model's instance counter value
