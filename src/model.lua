@@ -12,7 +12,6 @@ local format = string.format
 
 local db = BAMBOO_DB
 
-local List = require 'lglib.list'
 local rdstring = require 'bamboo.db.redis.string'
 local rdlist = require 'bamboo.db.redis.list'
 local rdset = require 'bamboo.db.redis.set'
@@ -288,6 +287,21 @@ local makeObject = function (self, data)
 	return self(hash_data)
 end
 
+local makeObjects = function (self, data_list)
+	local objs = QuerySet()
+	local nils = {}
+	for i, v in ipairs(data_list) do
+		if #v == 0 then
+			tinsert(nils, ids[i])
+		else
+			tinsert(objs, makeObject(self, v))
+		end
+	end
+
+	return objs, nils
+end
+
+
 -------------------------------------------------------------------------------------
 -- Functions work with redis
 -------------------------------------------------------------------------------------
@@ -321,79 +335,21 @@ local function makeModelKeyList(self, ids)
 	return key_list
 end
 
-local makeObjects = function (self, data_list)
-	local objs = QuerySet()
-	local nils = {}
-	for i, v in ipairs(data_list) do
-		if #v == 0 then
-			tinsert(nils, ids[i])
-		else
-			tinsert(objs, makeObject(self, v))
-		end
-	end
-
-	return objs, nils
-end
-
-
-local SNIPPET_BASIC_hgetallByIds = 
-[=[
-local obj_list = {}
-for i, id in ipairs(ids) do
-	local key = ('%s:%s'):format(model_name, id)
-	local obj = redis.call('HGETALL', key)
-	table.insert(obj_list, obj)
-end
-
--- here, obj_list is the form of 
--- {{key1, val1, key2, val2}, {key1, val1, key2, val2}, {...}}
-return obj_list
-]=]
-
-local SNIPPET_hgetallByIds = 
-[=[
-local model_name, ids_string = unpack(ARGV);								 
-local ids = cmsgpack.unpack(ids_string)
-
-local obj_list = {}
-for i, id in ipairs(ids) do
-	local key = ('%s:%s'):format(model_name, id)
-	local obj = redis.call('HGETALL', key)
-	table.insert(obj_list, obj)
-end
-
--- here, obj_list is the form of 
--- {{key1, val1, key2, val2}, {key1, val1, key2, val2}, {...}}
-return obj_list
-
-]=]
-
-local getFromRedisPipeline = function (self, ids)
-
-	local model_name = self.__name
-	local ids_string = cmsgpack.pack(ids)
-	local data_list = dbc:command('EVAL', SNIPPET_hgetallByIds, 0, model_name, ids_string)
-
-	return makeObjects(data_list)
-end
-bamboo.internals['getFromRedisPipeline'] = getFromRedisPipeline
 
 
 
-local SNIPPET_hgetall_by_modelids = 
-[=[
-local modelids_string = unpack(ARGV);								 
-local modelids = cmsgpack.unpack(modelids_string)
-local obj_list = {}
-for i, key in ipairs(modelids) do
-	local obj = redis.call('HGETALL', key)
-	table.insert(obj_list, obj)
-end
+-- local getFromRedisPipeline = function (self, ids)
 
--- here, obj_list is the form of 
--- {{key1, val1, key2, val2}, {key1, val1, key2, val2}, {...}}
-return obj_list
-]=]
+-- 	local model_name = self.__name
+-- 	local ids_string = cmsgpack.pack(ids)
+-- 	local data_list = dbc:command('EVAL', SNIPPET_hgetallByIds, 0, model_name, ids_string)
+
+-- 	return makeObjects(data_list)
+-- end
+-- bamboo.internals['getFromRedisPipeline'] = getFromRedisPipeline
+
+
+
 
 ------------------------------------------------------------
 -- get objects from redis with pipeline
@@ -428,22 +384,6 @@ bamboo.internals['getFromRedisPipeline2'] = getFromRedisPipeline2
 
 
 
-local SNIPPET_hmget_by_ids_fields = 
-[=[
-local model_name, ids_string, fields_string = unpack(ARGV);								 
-local ids = cmsgpack.unpack(ids_string)
-local fields = cmsgpack.unpack(fields_string)
-local obj_list = {}
-for i, id in ipairs(ids) do
-	local key = ('%s:%s'):format(model_name, id)
-	local obj = redis.call('HMGET', key, unpack(fields))
-	table.insert(obj_list, obj)
-end
-
--- here, obj_list is the form of 
--- {{key1, val1, key2, val2}, {key1, val1, key2, val2}, {...}}
-return obj_list
-]=]
 
 ------------------------------------------------------------
 -- get partial objects from redis with pipeline
@@ -492,23 +432,6 @@ end
 local updateIndexByRules
 
 
-local SNIPPET_del_instance_and_foreigns = 
-[=[
-local model_name, id, fields_string = unpack(ARGV);								 
-local fields = cmsgpack.unpack(fields_string)
-local index_key = string.format('%s:%s', model_name, '__index')
-local instance_key = string.format('%s:%s', model_name, id)
-local foreign_key
-for k, fld in pairs(fields) do
-	if fld and fld.foreign then
-		foreign_key = string.format('%s:%s', instance_key, k)
-		redis.call('DEL', foreign_key)
-	end
-end
-
-redis.call('DEL', instance_key)
-redis.call('ZREMRANGEBYSCORE', index_key, id, id)
-]=]
 
 
 
@@ -558,30 +481,6 @@ local delFromRedis = function (self, id)
 end
 bamboo.internals['delFromRedis'] = delFromRedis
 
-
-local SNIPPET_fakedel_instance_and_foreigns = 
-[=[
-local model_name, id, fields_string, rubpot_key = unpack(ARGV);								 
-local fields = cmsgpack.unpack(fields_string)
-local index_key = string.format('%s:%s', model_name, '__index')
-local instance_key = string.format('%s:%s', model_name, id)
-local foreign_key
-for k, fld in pairs(fields) do
-	if fld and fld.foreign then
-		foreign_key = string.format('%s:%s', instance_key, k)
-		if redis.call('EXISTS', foreign_key) then
-			redis.call('RENAME', foreign_key, 'DELETED:' .. foreign_key)
-		end
-
-	end
-end
-
-redis.call('RENAME', instance_key, 'DELETED:' .. instance_key)
-redis.call('ZREMRANGEBYSCORE', index_key, id, id)
-local n = redis.call('ZCARD', rubpot_key)
-redis.call('ZADD', rubpot_key, n+1, instance_key)
-
-]=]
 
 --------------------------------------------------------------
 -- Fake Deletion
@@ -1355,7 +1254,7 @@ Model = Object:extend {
 		if type(tonumber(id)) ~= 'number' then return nil end
 
 		local index_key = getIndexKey(self)
-		local r = dbc:command('ZRANGEBYSCORE', index_key, id, id)
+		local r = db:zrangebyscore(index_key, id, id)
 		if #r == 0 then return nil end
 
 		-- return the first element, for r is a list
@@ -1382,26 +1281,18 @@ Model = Object:extend {
 		
 		local index_key = getIndexKey(self)
 		-- id is the score of that index value
-		local r = dbc:command('ZRANGE', index_key, rank_index, rank_index, 'withscores')
+		local r = db:zrange(index_key, rank_index, rank_index, 'withscores')
 		if #r == 0 then return nil end
 
 		local id = r[2]
-		--local _, ids = db:zrange(index_key, rank_index, rank_index, 'withscores')
 		return self:getById(id)
 	end;
 
 	getById = function (self, id)
 		I_AM_CLASS(self)
 		if type(tonumber(id)) ~= 'number' then return nil end
-		local SNIPPET_getById = 
-[[
-local model_name, id = unpack(ARGV)
-local key = string.format('%s:%s', model_name, id)
-if not redis.call('EXIST', key) then return nil end
-return redis.call('HGETALL', key)
-]]
 
-		local data = dbc:command('EVAL', SNIPPET_getById, 0, self.__name, id)
+		local data = db:eval(SNIPPET_getById, 0, self.__name, id)
 
 		return makeObject(self, data)
 	end;
@@ -1410,9 +1301,9 @@ return redis.call('HGETALL', key)
 		I_AM_CLASS(self)
 		assert(type(ids) == 'table')
 
-		return getFromRedisPipeline(self, ids)
+		local data = db:eval(SNIPPET_getByIds, 0, self.__name, cmsgpack.pack(ids))
+		return makeObjects(self, data)
 	end;
-
 	
 	-- return a list containing all ids of all instances of this Model
 	--
@@ -1421,9 +1312,9 @@ return redis.call('HGETALL', key)
 		local index_key = getIndexKey(self)
 		local r
 		if is_rev == 'rev' then
-			r = dbc:command('ZREVRANGE', index_key, 0, -1, 'withscores')
+			r = db:zrevrange(index_key, 0, -1, 'withscores')
 		else
-			r = dbc:command('ZRANGE', index_key, 0, -1, 'withscores')
+			r = db:zrange(index_key, 0, -1, 'withscores')
 		end
 		
 		local all_ids = {}
@@ -1439,11 +1330,10 @@ return redis.call('HGETALL', key)
 	--
 	sliceIds = function (self, start, stop, is_rev)
 		I_AM_CLASS(self)
-		-- checkType(start, stop, 'number', 'number')
 		local index_key = getIndexKey(self)
 		local istart, istop = transEdgeFromLuaToRedis(start, stop)
 		local r
-		r = dbc:command('ZRANGE', index_key, istart, istop, 'withscores')
+		r = db:zrange(index_key, istart, istop, 'withscores')
 
 		local ids = List()
 		if is_rev == 'rev' then
@@ -1462,38 +1352,8 @@ return redis.call('HGETALL', key)
 	--
 	all = function (self, is_rev)
 		I_AM_CLASS(self)
-		local all_ids = self:allIds(is_rev)
-local SNIPPET_all = 
-[=[
-local model_name, is_rev = unpack(ARGV)
-local index_key = string.format('%s:__index', model_name)
-local r
-if is_rev == 'rev' then
-	r = redis.call('ZREVRANGE', index_key, 0, -1, 'withscores')
-else
-	r = redis.call('ZRANGE', index_key, 0, -1, 'withscores')
-end
-	 
-local ids = {}
-for i = 1, #r, 2 do
-	table.insert(ids, r[i+1])
-end
-
-local obj_list = {}
-for i, id in ipairs(ids) do
-	local key = ('%s:%s'):format(model_name, id)
-	local obj = redis.call('HGETALL', key)
-	table.insert(obj_list, obj)
-end
-
--- here, obj_list is the form of 
--- {{key1, val1, key2, val2}, {key1, val1, key2, val2}, {...}}
-return obj_list
-
-]=]
 
 		local data_list = db:eval(SNIPPET_all, 0, self.__name, is_rev)
-
 		return makeObjects(data_list)
 	end;
 
@@ -1502,28 +1362,9 @@ return obj_list
 	slice = function (self, start, stop, is_rev)
 		-- !slice method won't be open to query set, because List has slice method too.
 		I_AM_CLASS(self)
-local SNIPPET_slice = 
-[=[
-local model_name, istart, istop, is_rev = unpack(ARGV)
-local index_key = string.format('%s:__index', model_name)
-local r
-r = redis.call('ZRANGE', index_key, istart, istop, 'withscores')
+		local istart, istop = transEdgeFromLuaToRedis(start, stop)
 
-local ids = {}
-if is_rev == 'rev' then
-	for i = #r, 1, -2 do
-		table.insert(ids, r[i])
-	end
-else
-	for i = 1, #r, 2 do
-		table.insert(ids, r[i+1])
-	end
-end
-
-${hgetallByIds}
-]=] % {hgetallByIds = SNIPPET_BASIC_hgetallByIds}
-
-		local data_list = dbc:command('EVAL', SNIPPET_slice, 0, self.__name, istart, istop, is_rev)
+		local data_list = db:eval(SNIPPET_slice, 0, self.__name, istart, istop, is_rev)
 		return makeObjects(data_list)
 	end;
 
@@ -1531,48 +1372,22 @@ ${hgetallByIds}
 	--
 	numbers = function (self)
 		I_AM_CLASS(self)
-		return dbc:command('ZCARD', getIndexKey(self))
+		return db:zcard(getIndexKey(self))
 	end;
 
 	-- return the first instance found by query set
 	--
 	get = function (self, query_args, find_rev)
 		I_AM_CLASS(self)
-
-		local PART_LEN = 100
-		local total = self:numbers()
-		local nparts = math.floor((total+PART_LEN-1)/PART_LEN)
-		local logic = type(query_args) == 'table' and query_args[1] == 'or' and 'or' or 'and'
-		local flag
-
-		local walkcheck = function (ids)
-			local objs = getFromRedisPipeline(self, ids)
-			for _, obj in ipairs(objs) do
-				-- logic check
-				flag = checkLogicRelation(obj, query_args, logic == 'and', self)
-				if flag then return obj end
-			end
-			
-			return nil
-		end
-			
+		, logic, query_string, is_rev
+		local logic = query_args[1] == 'or' and 'or' or 'and'
+		local fields_string = cmsgpack.pack(self.__fields)
+		-- XXX: here, we only consider table first
+		local query_string = cmsgpack.pack(query_args)
+		local data = db:eval(SNIPPET_get, 0, self.__name, fields_string, logic, query_string, is_rev) 
 		
-		if find_rev == 'rev' then
-			for i=nparts, 1, -1 do
-				local ids = self:sliceIds(PART_LEN*(i-1)+1, PART_LEN*i, 'rev')
-				local obj = walkcheck(ids)
-				if obj then return obj end
-			end
-		
-		else
-			for i=1, nparts do
-				local ids = self:sliceIds(PART_LEN*(i-1)+1, PART_LEN*i)
-				local obj = walkcheck(ids)
-				if obj then return obj end
-			end
-			
-		end
-	
+		if data then return makeObject(self, data) end
+
 		return nil
 	end;
 
@@ -1897,61 +1712,6 @@ ${hgetallByIds}
 
 		local r_params = processBeforeSave(self, params)
 
-local SNIPPET_save = 
-[[
-local model_name, id, primarykey, params_str = unpack(ARGV)
-local key = string.format('%s:%s', model_name, id)
-local index_key = string.format('%s:__index', model_name)
-local params = cmsgpack.unpack(params_str)
-local new_case = true
--- if self has id attribute, it is an instance saved before. use id to separate two cases
-if id then new_case = false end
-
-local countername = string.format("%s:__counter", model_name)
-local new_primary = params[primarykey]
-
-if new_case then
-	local new_id = redis.call('INCR', countername)
-	if new_primary then
-		local already_at = redis.call('ZSCORE', index_key, new_primary)
-		if already_at then return false end
-		-- if db:zscore(index_key, self[primarykey]) then print(format("[Warning] save duplicate to an unique limited field: %s.", primarykey)); return nil end
-		redis.call('ZADD', index_key, id, new_primary)
-	end
-
-	local store_kv = {
-		'id', new_id
-	}
-	for k, v in pairs(params) do
-		table.insert(store_kv, k, v)
-	end
-	
-	redis.call('HMSET', key, unpack(store_kv))
-
-else
-	local counter = redis.call('GET', countername)
-	if tonumber(id) > tonumber(counter) then return false end
-
-	if new_primary then
-		local score = redis.call('ZSCORE', index_key, new_primary)
-		if score and tostring(score) ~= id then return false end
-		redis.call('ZREMRANGEBYSCORE', index_key, id, id)
-		redis.call('ZADD', index_key, id, new_primary)
-	end
-
-	local store_kv = {}
-	for k, v in pairs(params) do
-		table.insert(store_kv, k, v)
-	end
-
-	redis.call('HMSET', key, unpack(store_kv))
-
-end
-
-redis.call('HSET', key, 'lastmodified_time', os.time())
-
-return true
-]]
 
 
 		db:eval(SNIPPET_save, 0, self.__name, self.id, self.__primarykey, cmsgpack.pack(r_params))
@@ -1979,27 +1739,6 @@ return true
 		assert( not fld.foreign, ("[Error] %s is a foreign field, shouldn't use update function!"):format(field))
 
 
-local SNIPPET_update = 
-[[
-local model_name, id, primarykey, field, new_value = unpack(ARGV)
-local key = string.format('%s:%s', model_name, id)
-local index_key = string.format('%s:__index', model_name)
-if not redis.call('EXISTS', key) then return false end
-if field == primarykey then
-	if not new_value then return false end
-	redis.call('ZREMRANGEBYSCORE', index_key, id, id)
-	redis.call('ZADD', index_key, id, new_value)
-end
-
-if new_value == nil and field ~= primarykey then
-	redis.call('HDEL', key, field)
-else
-	redis.call('HSET', key, field, new_value)
-end
-
-redis.call('HSET', key, 'lastmodified_time', os.time())
-
-]]
 
 		self.lastmodified_time = os.time()
 		self[field] = new_value
@@ -2092,48 +1831,6 @@ redis.call('HSET', key, 'lastmodified_time', os.time())
 			   '[Error] before doing addForeign, you must save this instance.')
 
 
-local SNIPPET_addForeign = 
-[[
-local model_name, id, field, new_id, fdt_str = unpack(ARGV)
-local fdt = cmsgpack.unpack(fdt_str)
-local slen = fdt.fifolen or 100
-local foreign_type = fdt.foreign
-local store_type = fdt.st
-local key = string.format('%s:%s', model_name, id)
-local fkey = string.format('%s:%s:%s', model_name, id, field)
-
-if store_type == 'ONE' then
-	-- record in db
-	redis.call('HSET', key, field, new_id)
-
-elseif store_type == 'MANY' then
-	-- for MANY,  
-	redis.call('ZADD', fkey, os.time(), new_id)
-
-elseif store_type == 'FIFO' then
-	local len = redis.call('LLEN', fkey)
-	local slen = fdt.fifolen or 100
-	if len >= slen then
-		-- if FIFO is full, push this element from right, pop one old from left
-		redis.call('LPOP', fkey)
-	end
-	redis.call('RPUSH', fkey, new_id)
-
-elseif store_type == 'ZFIFO' then
-	local n = redis.call('ZCARD', fkey)
-	redis.call('ZADD', fkey, n+1, new_id)
-	local nn = redis.call('ZCARD', fkey)
-	if nn > slen then
-		-- remove the oldest one
-		redis.call('ZREMRANGEBYRANK', fkey, 0, 0)
-	end
-
-elseif store_type == 'LIST' then
-	redis.call('RPUSH', fkey, new_id)
-end
-
-redis.call('HSET', key, 'lastmodified_time', os.time())
-]]
 
 		local new_id
 		if fdt.foreign == 'ANYSTRING' then
@@ -2162,74 +1859,12 @@ redis.call('HSET', key, 'lastmodified_time', os.time())
 	--
 	getForeign = function (self, field, start, stop, is_rev, onlyids)
 		I_AM_INSTANCE(self)
-		checkType(field, 'string')
 		local fdt = self.__fields[field]
+		local store_type = fdt.st
+		local foreign_type = fdt.foreign
 		assert(fdt, ("[Error] Field %s doesn't be defined!"):format(field))
 		assert(fdt.foreign, ("[Error] This field %s is not a foreign field."):format(field))
 		assert(fdt.st, ("[Error] No store type setting for this foreign field %s."):format(field))
-
-local SNIPPET_getForeign = 
-[[
--- here, start and stop is the transformed location index for redis, not lua
-local model_name, id, field, fdt_str, start, stop, is_rev, onlyids = unpack(ARGV)
-
-local fdt = cmsgpack.unpack(fdt_str)
-local slen = fdt.fifolen or 100
-local foreign_type = fdt.foreign
-local store_type = fdt.st
-local key = string.format('%s:%s', model_name, id)
-local fkey = string.format('%s:%s:%s', model_name, id, field)
-
-local r_data, r_scores = {}, {}
-if store_type == 'MANY' or store_type == 'ZFIFO' then
-	local data = redis.call('ZRANGE', fkey, start, stop, 'WITHSCORES')
-
-	if is_rev == 'rev' then
-		for i = #data, 1, -2 do
-			table.insert(r_data, data[i-1])
-			table.insert(r_scores, data[i])
-		end
-	else
-		for i = 1, #data, 2 do
-			table.insert(r_data, data[i])
-			table.insert(r_scores, data[i+1])
-		end
-	end
-
-elseif store_type == 'LIST' or store_type == 'FIFO' then
-	local data = redis.call('LRANGE', fkey, start, stop)
-
-	if is_rev == 'rev' then
-		for i = #data, 1, -1 do
-			table.insert(r_data, data[i])
-		end
-	else
-		r_data = data
-	end
-end
-
-if onlyids == 'onlyids' then return id_set[1] end
-
-local objs = {}
-if foreign_type == 'ANYSTRING' then	return { r_data, r_scores } end
-if foreign_type == 'UNFIXED' then 
-	for i, id in ipairs(ids) do
-		table.insert(objs, redis.call('HGETALL', id))
-	end
-	return { objs, r_scores }
-end
-
--- the normal case
-for i, id in ipairs(ids) do
-	local okey = string.format('%s:%s', foreign_type, id)
-	table.insert(objs, redis.call('HGETALL', okey))
-end
-
-return { objs, r_scores }
-]]
-
-		local store_type = fdt.st
-		local foreign_type = fdt.foreign
 
 		if store_type == 'ONE' then
 			if isFalse(self[field]) then return nil end
@@ -2315,10 +1950,14 @@ end
 		local store_type = fdt.st
 		local foreign_type = fdt.foreign
 
-		check(not isFalse(obj), 'delForeign', "obj %s is invalid!", tostring(obj))
-		check(fdt, 'delForeign', 'undefined_field', field)
-		check(foreign_type, 'delForeign', 'not_foreign_field', field)
-		check(store_type, 'delForeign', 'no_store_type', field)
+		check(not isFalse(obj), 
+			  'delForeign', "obj %s is invalid!", tostring(obj))
+		check(fdt, 
+			  'delForeign', 'undefined_field', field)
+		check(foreign_type, 
+			  'delForeign', 'not_foreign_field', field)
+		check(store_type, 
+			  'delForeign', 'no_store_type', field)
 
 		--assert( fdt.foreign == 'ANYSTRING' or obj.id, "[Error] This object doesn't contain id, it's not a valid object!")
 		check(foreign_type == 'ANYSTRING'
@@ -2433,8 +2072,7 @@ end
 		return self
 	end;
 
-	-- check whether some obj is already in foreign list
-	-- instance:inForeign('some_field', obj)
+	-- check whether obj is already in foreign list
 	hasForeign = function (self, field, obj)
 		I_AM_INSTANCE(self)
 
@@ -2588,61 +2226,4 @@ Model.getByIndex = Model.getByPrimaryKey
 return Model
 
 
-
-
-local SNIPPET_get = 
---[=[
-local model_name, fields_string, logic, query_string, is_rev = unpack(ARGV)
-local fields = cmsgpack.unpack(query_string)
-local query_args = cmsgpack.unpack(query_string)
-
-local logic_choice = logic == 'and'
-local flag = logic_choice
-
-local index_key = string.format('%s:__index', model_name)
-local r
--- TODO: only for small project now
-if is_rev == 'rev' then
-	r = redis.call('ZREVRANGE', index_key, 0, -1, 'withscores')
-else
-	r = redis.call('ZRANGE', index_key, 0, -1, 'withscores')
-end
-
-for i = 1, #r, 2 do
-	local id = r[i+1]
-	local key = ('%s:%s'):format(model_name, id)
-	local obj = redis.call('HGETALL', key)
-
-	local hash_data = {}
-	for i = 1, #obj, 2 do
-		hash_data[obj[i]] = obj[i+1]
-	end
-
-	for k, v in pairs(query_args) do
-		-- to redundant query condition, once meet, jump immediately
-		if not fields[k] then flag=false; break end
-
-		-- it uses a logic function
-		if type(v) == 'table' then
-			local method = table.remove(v, 1)
-			flag = LOGIC_METHODS[method](unpack(v))(hash_data[k])
-		else
-			flag = (hash_data[k] == v)
-		end
-
-		---------------------------------------------------------------
-		-- logic_choice,       flag,      action,          append?
-		---------------------------------------------------------------
-		-- true (and)          true       next field       --
-		-- true (and)          false      break            no
-		-- false (or)          true       break            yes
-		-- false (or)          false      next field       --
-		---------------------------------------------------------------
-		if logic_choice ~= flag then break end
-	end
-
-	if flag then return obj end
-end
-
---]=] --% { hgetallByIds = SNIPPET_BASIC_hgetallByIds }
 
