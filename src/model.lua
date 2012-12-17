@@ -20,7 +20,8 @@ local rdfifo = require 'bamboo.db.redis.fifo'
 local rdzfifo = require 'bamboo.db.redis.zfifo'
 local rdhash = require 'bamboo.db.redis.hash'
 
-
+require 'bamboo.db.redis.luascript'
+local snippets = bamboo.dbsnippets.set
 
 -----------------------------------------------------------------
 local rdactions = {
@@ -113,24 +114,24 @@ local rule_index_query_sortby_divider = ' |^|^| '
 local rule_index_divider = ' ^_^ '
 local Model
 
--- switches
--- can be called by instance and class
-local isUsingFulltextIndex = function (self)
-	local model = self
-	if isInstance(self) then model = getModelByName(self:getClassName()) end
-	if bamboo.config.fulltext_index_support and rawget(model, '__use_fulltext_index') then
-		return true
-	else
-		return false
-	end
-end
+-- -- switches
+-- -- can be called by instance and class
+-- local isUsingFulltextIndex = function (self)
+-- 	local model = self
+-- 	if isInstance(self) then model = getModelByName(self:getClassName()) end
+-- 	if bamboo.config.fulltext_index_support and rawget(model, '__use_fulltext_index') then
+-- 		return true
+-- 	else
+-- 		return false
+-- 	end
+-- end
 
-local isUsingRuleIndex = function ()
-	if bamboo.config.rule_index_support == false then
-		return false
-	end
-	return true
-end
+-- local isUsingRuleIndex = function ()
+-- 	if bamboo.config.rule_index_support == false then
+-- 		return false
+-- 	end
+-- 	return true
+-- end
 
 
 
@@ -138,6 +139,21 @@ end
 -----------------------------------------------------------------
 -- misc functions
 -----------------------------------------------------------------
+local ASSERT_PROMPTS = {
+	['undefined_field'] = "Field %s wasn't be defined!"
+	['not_foreign_field'] = "%s is not a foreign field!"
+	['no_store_type'] = "No store type for this foreign field %s."
+	['not_matched_foreign_type'] = "obj %s can not fit this foreign type %s!"
+}
+
+
+local check = function (statement, atfunc, prompt_key, ...)
+	local prompt_str = ASSERT_PROMPTS[prompt_key] or prompt_key
+	local assert_msg = pcall(string.format, prompt_str, ...) or ''
+	assert(statement, string.format('[Error] @%s', atfunc) .. assert_msg)
+end
+
+
 local transEdgeFromLuaToRedis = function (start, stop)
 	local start = start or 1
 	local stop = stop or -1
@@ -199,47 +215,6 @@ local function getIndexKey(self)
 end
 
 
---- make a list, 
--- each element is 'Model_name:id'
-local function makeModelKeyList(self, ids)
-	local key_list = List()
-	for _, v in ipairs(ids) do
-		key_list:append(getNameIdPattern2(self, v))
-	end
-	return key_list
-end
-
-
---- divide the model_name:id to two part
--- item: 		'Model_name:id'
--- link_model: 	model object
--- lined_id:		instance id
-local function seperateModelAndId(item)
-	local link_model, linked_id
-	local link_model_str
-	link_model_str, linked_id = item:match('^(%w+):(%d+)$')
-	assert(link_model_str)
-	assert(linked_id)
-	link_model = getModelByName(link_model_str)
-	assert(link_model)
-
-	return link_model, linked_id
-end
-
-
--- in model global index cache (backend is zset),
--- check the existance of some member by its id (score)
---
-local function checkExistanceById(self, id)
-	local index_key = getIndexKey(self)
-	local r = db:zrangebyscore(index_key, id, id)
-	if #r == 0 then
-		return false, ''
-	else
-		-- return the first element, for r is a list
-		return true, r[1]
-	end
-end
 
 --- make lua object from redis' raw data table
 local makeObject = function (self, data)
@@ -260,6 +235,7 @@ local makeObject = function (self, data)
 
 	local fields = self.__fields
 	for k, fld in pairs(fields) do
+--[[
 		if fld.foreign then
 			local st = fld.st
 			-- in redis, we don't save MANY foreign key in db, but we want to fill them when
@@ -274,12 +250,14 @@ local makeObject = function (self, data)
 				hash_data[k] = 'FOREIGN LIST ' .. fld.foreign
 			end
 		else
+--]]
+
 			if fld.type == 'number' then
 				hash_data[k] = tonumber(hash_data[k])
 			elseif fld.type == 'boolean' then
 				hash_data[k] = hash_data[k] == 'true' and true or false
 			end
-		end
+--		end
 
 	end
 
@@ -301,288 +279,27 @@ local makeObjects = function (self, data_list)
 	return objs, nils
 end
 
-
--------------------------------------------------------------------------------------
--- Functions work with redis
--------------------------------------------------------------------------------------
-
-------------------------------------------------------------
--- get one object from redis
--- @param self:	Model
--- @param model_key:	'Model_name:id'
---
-local getFromRedis = function (self, model_key)
-	-- here, the data table contain ordinary field, ONE foreign key, but not MANY foreign key
-	-- all fields are strings
-	local data = db:hgetall(model_key)
-	return makeObject(self, data)
-end
-bamboo.internals['getFromRedis'] = getFromRedis
-
-------------------------------------------------------------
--- get objects from redis with pipeline
--- @param self:	Model
--- @param ids:	id list
---
-
---- make a list, 
--- each element is 'Model_name:id'
-local function makeModelKeyList(self, ids)
-	local key_list = List()
-	for _, v in ipairs(ids) do
-		key_list:append(getNameIdPattern2(self, v))
-	end
-	return key_list
-end
-
-
-
-
--- local getFromRedisPipeline = function (self, ids)
-
--- 	local model_name = self.__name
--- 	local ids_string = cmsgpack.pack(ids)
--- 	local data_list = dbc:command('EVAL', SNIPPET_hgetallByIds, 0, model_name, ids_string)
-
--- 	return makeObjects(data_list)
--- end
--- bamboo.internals['getFromRedisPipeline'] = getFromRedisPipeline
-
-
-
-
-------------------------------------------------------------
--- get objects from redis with pipeline
--- @param pattern_list:	list of 'Model_name:id' string
---
-local getFromRedisPipeline2 = function (pattern_list)
-	-- 'list' store model and id info
-	local model_list = {}
-	for _, v in ipairs(pattern_list) do
-		local model, id = v:match('^(%w+):(%d+)$')
-		tinsert(model_list, model)
-	end
-
-	local modelids_string = cmsgpack.pack(pattern_list)
-	local data_list = dbc:command('EVAL', SNIPPET_hgetall_by_modelids, 0, modelids_string)
-	
-	local objs = QuerySet()
-	local nils = {}
-	local obj
-	for i, model in ipairs(model_list) do
-		if #data_list[i] == 0 then
-			tinsert(nils, pattern_list[i])
-		else
-			local model_obj = getModelByName(model)
-			tinsert(objs, makeObject(model_obj, data_list[i]))
-		end
-	end
-
-	return objs, nils
-end
-bamboo.internals['getFromRedisPipeline2'] = getFromRedisPipeline2
-
-
-
-
-------------------------------------------------------------
--- get partial objects from redis with pipeline
--- @param self:	Model
--- @param ids:	id list
--- @param fields:	field string list
--- @note: 'fields' must not be empty
-local getPartialFromRedisPipeline = function (self, ids, fields)
-	-- default retrieve 'id'
-	tinsert(fields, 'id')
-
-	local model_name = self.__name
-	local ids_string = cmsgpack.pack(ids)
-	local fields_string = cmsgpack.pack(fields)
-	local data_list = dbc:command('EVAL', SNIPPET_hmget_by_ids_fields, 0, model_name, ids_string, fields_string)
-
-	local proto_fields = self.__fields
-	-- all fields are strings
-	-- every item is data_list now is the values according to 'fields'
-	local objs = QuerySet()
-	-- here, data_list is fields' order values
-	for _, v in ipairs(data_list) do
-		if #v > 0 then
-			local item = {}
-			for i, key in ipairs(fields) do
-				-- v[i] is the value of ith key
-				item[key] = v[i]
-
-				local fdt = proto_fields[key]
-				if fdt and fdt.type then
-					if fdt.type == 'number' then
-						item[key] = tonumber(item[key])
-					elseif fdt.type == 'boolean' then
-						item[key] = item[key] == 'true' and true or false
-					end
-				end
-			end
-			tinsert(objs, item)
-		end
-	end
-
-	return objs
-end
-
-
-local updateIndexByRules
-
-
-
-
-
---------------------------------------------------------------
--- del object and its single relation in redis
--- @param self:	Model
--- @param id:		instance id
---
 local delFromRedis = function (self, id)
 	local id = id or self.id
 	local model_name = self.__name
 	local index_key = getIndexKey(self)
 
 	local fields_string = cmsgpack.pack(self.__fields)
-	local data_list = dbc:command('EVAL', SNIPPET_del_instance_and_foreigns, 0, model_name, id, fields_string)
+	local data_list = db:eval(snippets.SNIPPET_delInstanceAndForeigns, 0, model_name, id, fields_string)
 
-
---[[
-	--del hash index
-	if bamboo.config.index_hash then
-		mih.indexDel(self);
-	end
-
-	local fields = self.__fields
-	-- in redis, delete the associated foreign key-value store
-	for k, v in pairs(self) do
-		local fld = fields[k]
-		if fld and fld.foreign then
-			local key = model_key + ':' + k
-			db:del(key)
-		end
-	end
-
-	-- delete the key self
-	db:del(model_key)
-	-- delete the index in the global model index zset
-	db:zremrangebyscore(index_key, self.id or id, self.id or id)
-
-	-- clear fulltext index, only when it is instance
-	if isUsingFulltextIndex(self) and self.id then
-		bamboo.internals.clearFtIndexesOnDeletion(self)
-	end
-	if isUsingRuleIndex(self) and self.id then
-		updateIndexByRules(self, 'del')
-	end
---]]
 end
 bamboo.internals['delFromRedis'] = delFromRedis
 
-
---------------------------------------------------------------
--- Fake Deletion
---
-local fakedelFromRedis = function (self, id)
+local fakeDelFromRedis = function (self, id)
 	local id = id or self.id
 	local model_name = self.__name
 	local index_key = getIndexKey(self)
 
 	local fields_string = cmsgpack.pack(self.__fields)
-	local data_list = dbc:command('EVAL', SNIPPET_fakedel_instance_and_foreigns, 0, model_name, id, fields_string, dcollector)
-
---[[
-	--del hash index
-	if bamboo.config.index_hash then
-		mih.indexDel(self);
-	end
-
-	local fields = self.__fields
-	-- in redis, delete the associated foreign key-value store
-	for k, v in pairs(self) do
-		local fld = fields[k]
-		if fld and fld.foreign then
-			local key = model_key + ':' + k
-			if db:exists(key) then
-				db:rename(key, 'DELETED:' + key)
-			end
-		end
-	end
-
-	-- rename the key self
-	db:rename(model_key, 'DELETED:' + model_key)
-	-- delete the index in the global model index zset
-	-- when deleted, the instance's index cache was cleaned.
-	db:zremrangebyscore(index_key, self.id or id, self.id or id)
-	-- add to deleted collector
-	rdzset.add(dcollector, model_key)
-
-	-- clear fulltext index
-	if isUsingFulltextIndex(self) and self.id then
-		bamboo.internals.clearFtIndexesOnDeletion(self)
-	end
-	if isUsingRuleIndex(self) and self.id then
-		updateIndexByRules(self, 'del')
-	end
---]]
+	local data_list = db:eval(snippets.SNIPPET_fakeDelInstanceAndForeigns, 0, model_name, id, fields_string)
 
 end
-bamboo.internals['fakedelFromRedis'] = fakedelFromRedis
-
-
---------------------------------------------------------------
--- Restore Fake Deletion
--- called by Model: self, not instance
-local restoreFakeDeletedInstance = function (self, id)
-	checkType(tonumber(id),  'number')
-	local model_key = getNameIdPattern2(self, id)
-	local index_key = getIndexKey(self)
-
-	local instance = getFromRedis(self, 'DELETED:' + model_key)
-	if not instance then return nil end
-	-- rename the key self
-	db:rename('DELETED:' + model_key, model_key)
-	local fields = self.__fields
-	-- in redis, restore the associated foreign key-value
-	for k, v in pairs(instance) do
-		local fld = fields[k]
-		if fld and fld.foreign then
-			local key = model_key + ':' + k
-			if db:exists('DELETED:' + key) then
-				db:rename('DELETED:' + key, key)
-			end
-		end
-	end
-
-	-- when restore, the instance's index cache was restored.
-	db:zadd(index_key, instance.id, instance.id)
-	-- remove from deleted collector
-	db:zrem(dcollector, model_key)
-
-    if bamboo.config.index_hash then
-        mih.index(instance,true);--create hash index
-    end
-
-	return instance
-end
-
-
-
-local retrieveObjectsByForeignType = function (foreign, list)
-	if foreign == 'ANYSTRING' then
-		-- return string list directly
-		return QuerySet(list)
-	elseif foreign == 'UNFIXED' then
-		return getFromRedisPipeline2(list)
-	else
-		-- foreign field stores "id, id, id" list
-		local model = getModelByName(foreign)
-		return getFromRedisPipeline(model, list)
-	end
-
-end
+bamboo.internals['fakeDelFromRedis'] = fakeDelFromRedis
 
 
 
@@ -622,12 +339,6 @@ local checkLogicRelation = function (obj, query_args, logic_choice, model)
 end
 bamboo.internals.checkLogicRelation = checkLogicRelation
 
----------------------------------------------------------------------------------
--- RULE INDEX CODE
----------------------------------------------------------------------------------
-local specifiedRulePrefix = function ()
-	return rule_manager_prefix, rule_query_result_pattern
-end
 
 function luasplit(str, pat)
    local t = {}
@@ -649,12 +360,10 @@ function luasplit(str, pat)
 end
 
 
-local upvalue_collector = {}
-
-local collectRuleFunctionUpvalues = function (query_args)
-	local upvalues = upvalue_collector
+local collectQueryFunctionUpvalues = function (func)
+	local upvalues = {}
 	for i=1, math.huge do
-		local name, v = debug.getupvalue(query_args, i)
+		local name, v = debug.getupvalue(func, i)
 		if not name then break end
 		local ctype = type(v)
 		local table_has_metatable = false
@@ -663,12 +372,11 @@ local collectRuleFunctionUpvalues = function (query_args)
 		end
 		-- because we could not collect the upvalues whose type is 'table', print warning here
 		if type(v) == 'function' or table_has_metatable then
-			print"[Warning] @collectRuleFunctionUpvalues of filter - bamboo has no ability to collect the function upvalue whose type is 'function' or 'table' with metatable."
 			return false
 		end
 
 		if ctype == 'table' then
-			upvalues[#upvalues + 1] = { name, serialize(v), type(v) }
+			upvalues[#upvalues + 1] = { name, cmsgpack.pack(v), type(v) }
 		else
 			upvalues[#upvalues + 1] = { name, tostring(v), type(v) }
 		end
@@ -678,466 +386,27 @@ local collectRuleFunctionUpvalues = function (query_args)
 end
 
 
-local compressQueryArgs = function (query_args)
+local serializeQueryFunction = function (query_args)
+	local flag, upvalues = collectQueryFunctionUpvalues(query_args)
+	
+	if not flag then return nil end
+
+	-- query_args now is function
 	local out = {}
-	local qtype = type(query_args)
-	if qtype == 'table' then
-		if table.isEmpty(query_args) then return '' end
-
-		if query_args[1] == 'or' then tinsert(out, 'or')
-		else tinsert(out, 'and')
-		end
-		query_args[1] = nil
-		tinsert(out, '|')
-
-		local queryfs = {}
-		for kf in pairs(query_args) do
-			tinsert(queryfs, kf)
-		end
-		table.sort(queryfs)
-
-		for _, k in ipairs(queryfs) do
-			v = query_args[k]
-			tinsert(out, k)
-			if type(v) ~= 'function' then
-				tinsert(out, tostring(v))
-				tinsert(out, type(v))
-			else
-				local _, func_name, cmp_obj = v(uglystr)
-				local queryt_iden
-				local _args = {}
-				if type(cmp_obj) == 'table' then
-					for _, v in ipairs(cmp_obj) do
-						tinsert(_args, tostring(v), type(v))
-					end
-					queryt_iden = {func_name, unpack(_args)}
-				else
-					queryt_iden = {func_name, tostring(cmp_obj), type(cmp_obj)}
-				end
-				-- XXX: here, queryt_iden[2] may be nil, this will not be stored now
-              for _, item in ipairs(queryt_iden) do
-					tinsert(out, item)
-				end
-			end
-			tinsert(out, '|')
-		end
-
-		-- restore the first element, avoiding side effect
-		query_args[1] = out[1]
-
-	elseif qtype == 'function' then
-		tinsert(out, 'function')
-		tinsert(out, '|')
-		tinsert(out, string.dump(query_args))
-		tinsert(out, '|')
-		for _, pair in ipairs(upvalue_collector) do
+	if qtype == 'function' then
+		table.insert(out, 'function')
+		table.insert(out, string.dump(query_args))
+		for _, pair in ipairs(upvalues) do
 			tinsert(out, pair[1])	-- key
 			tinsert(out, pair[2])	-- value
 			tinsert(out, pair[3])	-- value type
 		end
-
-		-- clear the upvalue_collector
-		upvalue_collector = {}
 	end
 
 	-- use a delemeter to seperate obviously
-	return table.concat(out, rule_index_divider)
+	return table.concat(out, ' ^_^ ')
 end
 
-local extractQueryArgs = function (qstr)
-	local query_args
-
-	--DEBUG(string.len(qstr))
-	if qstr:startsWith('function') then
-		local startpoint = qstr:find('|') or 1
-		local endpoint = qstr:rfind('|') or -1
-		fpart = qstr:sub(startpoint + 6, endpoint - 6) -- :trim()
-		apart = qstr:sub(endpoint + 6, -1) -- :trim()
-		-- now fpart is the function binary string
-		query_args = loadstring(fpart)
-		-- now query_args is query function
-		if not isFalse(apart) then
-			-- item 1 is key, item 2 is value, item 3 is value type, item 4 is key ....
-			local flat_upvalues = apart:split(rule_index_divider)
-			for i=1, #flat_upvalues / 3 do
-				local vtype = flat_upvalues[3*i]
-				local key = flat_upvalues[3*i - 2]
-				local value = flat_upvalues[3*i - 1]
-				if vtype == 'table' then
-					value = deserialize(value)
-				elseif vtype == 'number' then
-					value = tonumber(value)
-				elseif vtype == 'boolean' then
-					value = loadstring('return ' .. value)()
-				elseif vtype == 'nil' then
-					value = nil
-				end
-				-- set upvalues
-				debug.setupvalue(query_args, i, value)
-			end
-		end
-	else
-
-		local endpoint = -1
-		qstr = qstr:sub(1, endpoint - 1)
-		local _qqstr = qstr:split('|')
-		local logic = _qqstr[1]:sub(1, -6)
-		query_args = {logic}
-		for i=2, #_qqstr do
-			local str = _qqstr[i]
-			local kt = str:splittrim(rule_index_divider):slice(2, -2)
-			-- kt[1] is 'key', [2] is 'closure', [3] .. are closure's parameters
-			local key = kt[1]
-			local closure = kt[2]
-			if #kt > 3 then
-				-- here, all args are string type
-				local flat_args = {}
-				for j=3, #kt do
-					tinsert(flat_args, kt[j])
-				end
-				local _args = {}
-				for i=1, #flat_args, 2 do
-					local ctype = flat_args[i+1]
-					if ctype == 'number' then
-						tinsert(_args, tonumber(flat_args[i]))
-					elseif ctype == 'boolean' then
-						tinsert(_args, flat_args[i] == 'true')
-					elseif ctype == 'nil' then
-						-- XXX: won't workable
-						tinsert(_args, nil)
-						
-					end
-
-				end
-				-- compute closure now
-				query_args[key] = _G[closure]( #_args > 0 and unpack(_args) or nil)
-			else
-					local ctype = kt[3]
-					local val = closure
-					if ctype == 'number' then
-						val = tonumber(val)
-					elseif ctype == 'boolean' then
-						val = val == 'true'
-					end
-				
-				-- no args, means this 'closure' is a string, here, we only store string type?
-				query_args[key] = val
-			end
-		end
-	end
-
-	return query_args
-end
-
--- query_str_iden is at least ''
-local compressSortByArgs = function (sortby_args)
-	local strs = {}
-	for i = 1, #sortby_args do
-       		local v = sortby_args[i]
-		local ctype = type(v)
-		if ctype == 'string' then
-            		tinsert(strs, v)
-        	-- may don't appear
-        	elseif ctype == 'nil' then
-            		tinsert(strs, 'nil')
-        	elseif ctype == 'function' then
-			tinsert(strs, string.dump(v))
-		end
-	end
-
-	return table.concat(strs, rule_index_divider)
-end
-
-local compressTwoPartArgs = function (query_str_iden, sortby_str_iden)
-	return query_str_iden .. rule_index_query_sortby_divider .. sortby_str_iden	
-end
-
-
-local extractSortByArgs = function (sortby_str_iden)
-	assert(sortby_str_iden ~= '', "[Error] @extractSortByArgs - sortby_str_iden should not be emply!")
-	local sortby_args = luasplit(sortby_str_iden, rule_index_divider)
-	--local sortby_args = sortby_str_iden:split(rule_index_divider)
-	-- [1] is string or function, [2] is nil or string, 
-	local first_arg = sortby_args[1]
-	local first_arg_compile = loadstring(first_arg)
-	if type(first_arg_compile) == 'function' then
-		return first_arg_compile
-	elseif not first_arg_compile then
-		-- if type(first_arg_compile) ~= 'function', first_arg_compile is a nil
-		if #first_arg > 0 then
-			local key = first_arg
-			local dir = (sortby_args[2] == 'desc' and 'desc' or 'asc')
-			return function (a, b)
-				local af = a[key]
-				local bf = b[key]
-				if af and bf then
-					if dir == 'asc' then
-						return af < bf
-					elseif dir == 'desc' then
-						return af > bf
-					end
-				else
-					return nil
-				end
-			end
-		end
-	else
-		return nil
-	end
-end
-
-local function divideQueryPartAndSortbyPart (combine_str_iden)
-	local query_str_iden, sortby_str_iden
-	local divider_start, divider_stop = combine_str_iden:find(rule_index_query_sortby_divider)
-	if divider_start then
-		query_str_iden = combine_str_iden:sub(1, divider_start - 1)
-		sortby_str_iden = combine_str_iden:sub(divider_stop + 1, -1)
-	else
-		query_str_iden = combine_str_iden
-		sortby_str_iden = nil
-	end
-	
-	return query_str_iden, sortby_str_iden	
-end
-
-local canInstanceFitQueryRule = function (self, qstr)
-	local query_args = extractQueryArgs(qstr)
-	--DEBUG(query_args)
-	local logic_choice = true
-	if type(query_args) == 'table' then logic_choice = (query_args[1] == 'and'); query_args[1]=nil end
-	return checkLogicRelation(self, query_args, logic_choice)
-end
-
-local canInstanceFitQueryRuleAndFindProperPosition = function (self, combine_str_iden)
-	local p = 0
---[[	local divider_start, divider_stop = combine_str_iden:find(rule_index_query_sortby_divider)
-	if divider_start then
-		query_str_iden = combine_str_iden:sub(1, divider_start - 1)
-		sortby_str_iden = combine_str_iden:sub(divider_stop + 1, -1)
-	else
-		query_str_iden = combine_str_iden
-		sortby_str_iden = nil
-	end
---]]
-
-	local query_str_iden, sortby_str_iden = divideQueryPartAndSortbyPart(combine_str_iden)
-	local flag = true
-
-	if query_str_iden ~= '' then
-		flag = canInstanceFitQueryRule (self, query_str_iden)
-		-- if no sortby part, return directly
-		if isFalse(sortby_str_iden) then
-			return flag, self.id, -1
-		end
-	end
-
-	local id_list = {}
-	if flag then
-		local manager_key = rule_manager_prefix .. self.__name
-		local score = db:zscore(manager_key, combine_str_iden)
-		local item_key = rule_query_result_pattern:format(self.__name, math.floor(score))
-		id_list = db:lrange(item_key, 0, -1)
-		local length = #id_list
-		local model = self:getClass()
-		local func = extractSortByArgs(sortby_str_iden)
-
-		local l, r = 1, #id_list
-		local left_obj
-		local right_obj
-		local bflag, left_flag, right_flag, pflag
-
-		left_obj = model:getById(id_list[l])
-		right_obj = model:getById(id_list[r])
-		if left_obj == nil or right_obj == nil then
-			return nil, id_list[#id_list], #id_list
-		end
-		bflag = func(left_obj, right_obj)
-
-		p = l
-		while (r ~= l) do
-
-			left_flag = func(left_obj, self)
-			right_flag = func(self, right_obj)
-			if bflag == left_flag and bflag == right_flag then
-			-- between
-				p = math.floor((l + r)/2)
-			elseif bflag == left_flag then
-			-- and unequal to right_flag
-			-- on the right hand
-				p = r
-				break
-			elseif bflag == right_flag then
-			-- and unequal to left_flag
-			-- on the left hand
-				p = l - 1
-				break
-			end
-
-			local mobj = model:getById(id_list[p])
-			if mobj == nil then
-				return nil, id_list[#id_list], #id_list
-			end
-
-			pflag = func(mobj, self)
-			if pflag == bflag then
-				l = p + 1
-			else
-				r = p - 1
-			end
-
-			left_obj = model:getById(id_list[l])
-			right_obj = model:getById(id_list[r])
-			if left_obj == nil or right_obj == nil then
-				return nil, id_list[#id_list], #id_list
-			end
-		end
-	end
-
-	return flag, id_list[p], p
-end
-
--------------------------------------------------------------------------
---  
---
-local updateInstanceToIndexOnRule = function (self, qstr)
-	local rule_manager_prefix, rule_result_pattern = specifiedRulePrefix()
-
-	local manager_key = rule_manager_prefix .. self.__name
-	local score = db:zscore(manager_key, qstr)
-	local item_key = rule_result_pattern:format(self.__name, score)
-
-	local flag, cmpid, p = canInstanceFitQueryRuleAndFindProperPosition(self, qstr)
-	local success
-	local options = { watch = item_key, retry = 2 }
-	db:transaction(function(db)
-		if flag then
-			-- consider the left end case
-			if cmpid == nil and p < 1 then
-				db:lrem(item_key, 1, self.id)
-				db:lpush(item_key, self.id)
-			else			
-				if cmpid ~= self.id then
-					-- delete old self first, insert self to proper position
-					db:lrem(item_key, 1, self.id)
-					success = db:linsert(item_key, 'AFTER', cmpid, self.id)
-				else
-					-- cmpid == self.id, means use query rule only, keep the old position
-					success = db:linsert(item_key, 'AFTER', cmpid, self.id)
-					db:lrem(item_key, 1, self.id)
-				end
-
-				db:multi()
-				-- no this id in index before
-				if success == -1 then
-					db:rpush(item_key, self.id)
-				end
-				db:exec()
-			end
---[[		else
-			if db:exists(item_key) then
-				-- delete the old one id
-				db:lrem(item_key, 1, self.id)
-			end
---]]
-		end
-
-		-- db:expire(item_key, bamboo.config.rule_expiration or bamboo.RULE_LIFE)
-	end, options)
-	return self
-end
-
-local delInstanceToIndexOnRule = function (self, qstr)
-	local rule_manager_prefix, rule_result_pattern = specifiedRulePrefix()
-
-	local manager_key = rule_manager_prefix .. self.__name
-	local score = db:zscore(manager_key, qstr)
-	local item_key = rule_result_pattern:format(self.__name, score)
-
-	local options = { watch = item_key, retry = 2 }
-	db:transaction(function(db)
-		if db:exists(item_key) then
-			db:lrem(item_key, 0, self.id)
-		end
-		-- db:expire(item_key, bamboo.config.rule_expiration or bamboo.RULE_LIFE)
-	end, options)
-
-	return self
-end
-
-local INDEX_ACTIONS = {
-	['update'] = updateInstanceToIndexOnRule,
-	['del'] = delInstanceToIndexOnRule
-}
-
-updateIndexByRules = function (self, action)
-	local rule_manager_prefix, rule_result_pattern = specifiedRulePrefix()
-
-	local manager_key = rule_manager_prefix .. self.__name
-	local qstr_list = db:zrange(manager_key, 0, -1)
-	local action_func = INDEX_ACTIONS[action]
-	for _, qstr in ipairs(qstr_list) do
-		action_func(self, qstr)
-	end
-end
-
--- can be reentry
-local addIndexToManager = function (self, str_iden, obj_list)
-	local rule_manager_prefix, rule_result_pattern = specifiedRulePrefix()
-	local manager_key = rule_manager_prefix .. self.__name
-	-- add to index manager
-	local score = db:zscore(manager_key, str_iden)
-	-- if score then return end
-	local new_score
-	if not score then
-		-- when it is a new rule
-		new_score = db:zcard(manager_key) + 1
-		db:zadd(manager_key, new_score, str_iden)
-	else
-		-- when rule result is expired, re enter this function
-		new_score = score
-	end
-	if #obj_list == 0 then return end
-
-	local item_key = rule_result_pattern:format(self.__name, new_score)
-	local options = { watch = item_key, retry = 2 }
-	db:transaction(function(db)
-		if not db:exists(item_key) then
-			-- generate the index item, use list
-			db:rpush(item_key, unpack(obj_list))
-		end
-		-- set expiration to each index item
-		-- db:expire(item_key, bamboo.config.rule_expiration or bamboo.RULE_LIFE)
-	end, options)
-end
-
-local getIndexFromManager = function (self, str_iden, getnum)
-	local rule_manager_prefix, rule_result_pattern = specifiedRulePrefix()
-
-	local manager_key = rule_manager_prefix .. self.__name
-	-- get this rule's score
-	local score = db:zscore(manager_key, str_iden)
-	-- if has no score, means it is not rule indexed,
-	-- return nil directly
-	if not score then
-		return nil
-	end
-
-	local item_key = rule_result_pattern:format(self.__name, score)
-	if not db:exists(item_key) then
-		return List()
-	end
-
-	-- update expiration
-	-- db:expire(item_key, bamboo.config.rule_expiration or bamboo.RULE_LIFE)
-	-- rule result is not empty, and not expired, retrieve them
-	if getnum then
-		-- return the number of this list
-		return db:llen(item_key)
-	else
-		-- return a list
-		return List(db:lrange(item_key, 0, -1))
-	end
-end
 
 
 ----------------------------------------------------------------------
@@ -1292,7 +561,7 @@ Model = Object:extend {
 		I_AM_CLASS(self)
 		if type(tonumber(id)) ~= 'number' then return nil end
 
-		local data = db:eval(SNIPPET_getById, 0, self.__name, id)
+		local data = db:eval(snippets.SNIPPET_getById, 0, self.__name, id)
 
 		return makeObject(self, data)
 	end;
@@ -1301,7 +570,7 @@ Model = Object:extend {
 		I_AM_CLASS(self)
 		assert(type(ids) == 'table')
 
-		local data = db:eval(SNIPPET_getByIds, 0, self.__name, cmsgpack.pack(ids))
+		local data = db:eval(snippets.SNIPPET_getByIds, 0, self.__name, cmsgpack.pack(ids))
 		return makeObjects(self, data)
 	end;
 	
@@ -1353,7 +622,7 @@ Model = Object:extend {
 	all = function (self, is_rev)
 		I_AM_CLASS(self)
 
-		local data_list = db:eval(SNIPPET_all, 0, self.__name, is_rev)
+		local data_list = db:eval(snippets.SNIPPET_all, 0, self.__name, is_rev)
 		return makeObjects(data_list)
 	end;
 
@@ -1364,7 +633,7 @@ Model = Object:extend {
 		I_AM_CLASS(self)
 		local istart, istop = transEdgeFromLuaToRedis(start, stop)
 
-		local data_list = db:eval(SNIPPET_slice, 0, self.__name, istart, istop, is_rev)
+		local data_list = db:eval(snippets.SNIPPET_slice, 0, self.__name, istart, istop, is_rev)
 		return makeObjects(data_list)
 	end;
 
@@ -1377,14 +646,25 @@ Model = Object:extend {
 
 	-- return the first instance found by query set
 	--
-	get = function (self, query_args, find_rev)
+	get = function (self, query_args, limit_params)
 		I_AM_CLASS(self)
-		, logic, query_string, is_rev
+
 		local logic = query_args[1] == 'or' and 'or' or 'and'
 		local fields_string = cmsgpack.pack(self.__fields)
 		-- XXX: here, we only consider table first
-		local query_string = cmsgpack.pack(query_args)
-		local data = db:eval(SNIPPET_get, 0, self.__name, fields_string, logic, query_string, is_rev) 
+		local query_string
+		local ctype = type(query_args)
+		if ctype == 'string' then
+			query_string = query_args
+		elseif ctype == 'function' then
+			query_string = serializeQueryFunction(query_args)
+		elseif ctype == 'table' then
+			query_string = cmsgpack.pack(query_args)
+		else
+			error("[Error] no valid query args type @filter 'query_args'.")
+		end
+		
+		local data = db:eval(snippets.SNIPPET_get, 0, self.__name, fields_string, ctype, query_string, logic) 
 		
 		if data then return makeObject(self, data) end
 
@@ -1397,10 +677,33 @@ Model = Object:extend {
 	-- @param 
 	-- @param 
 	-- @return
-	filter = function (self, query_args, ...)
-		I_AM_CLASS_OR_QUERY_SET(self)
+	filter = function (self, query_args, limit_params)
+		I_AM_CLASS(self)
 		assert(type(query_args) == 'table' or type(query_args) == 'function', 
 			'[Error] the query_args passed to filter must be table or function.')
+
+		local logic = query_args[1] == 'or' and 'or' or 'and'
+		local fields_string = cmsgpack.pack(self.__fields)
+		-- XXX: here, we only consider table first
+		local query_string
+		local ctype = type(query_args)
+		if ctype == 'string' then
+			query_string = query_args
+		elseif ctype == 'function' then
+			query_string = serializeQueryFunction(query_args)
+		else
+			query_string = cmsgpack.pack(query_args)
+		else
+			error("[Error] no valid query args type @filter 'query_args'.")
+		end
+
+		local data_list = db:eval(snippets.SNIPPET_filter, 0, self.__name, fields_string, ctype, query_string, logic) 
+		
+		if data_list then return makeObjects(self, data_list) end
+
+		return QuerySet()
+
+--[[
 		local no_sort_rule = true
 		-- regular the args
 		local sort_field, sort_dir, sort_func, start, stop, is_rev, no_cache
@@ -1630,8 +933,10 @@ Model = Object:extend {
 
 		-- return results
 		return query_set, total_length
+--]]
 	end;
 
+--[[
    	-- deprecated
 	-- count the number of instance fit to some rule
 	count = function (self, query_args)
@@ -1639,7 +944,7 @@ Model = Object:extend {
 		local _, length = self:filter(query_args)
 		return length
 	end;
-
+--]]
 
 	
 	
@@ -1659,10 +964,10 @@ Model = Object:extend {
 		if idtype == 'table' then
 			for _, v in ipairs(ids) do
 				v = tostring(v)
-				fakedelFromRedis(self, v)
+				fakeDelFromRedis(self, v)
 			end
 		else
-			fakedelFromRedis(self, tostring(ids))
+			fakeDelFromRedis(self, tostring(ids))
 		end
 	end;
 
@@ -1684,7 +989,7 @@ Model = Object:extend {
 	-- TODO: should perfect 
 	validate = function (self, params)
 		I_AM_CLASS(self)
-		checkType(params, 'table')
+
 		local fields = self.__fields
 		local err_msgs = {}
 		local is_valid = true
@@ -1712,9 +1017,7 @@ Model = Object:extend {
 
 		local r_params = processBeforeSave(self, params)
 
-
-
-		db:eval(SNIPPET_save, 0, self.__name, self.id, self.__primarykey, cmsgpack.pack(r_params))
+		db:eval(snippets.SNIPPET_save, 0, self.__name, self.id, self.__primarykey, cmsgpack.pack(r_params))
 		-- update the lastmodified_time
 		self.lastmodified_time = os.time()
 --[[
@@ -1738,11 +1041,9 @@ Model = Object:extend {
 		if not fld then print(("[Warning] Field %s doesn't be defined!"):format(field)); return nil end
 		assert( not fld.foreign, ("[Error] %s is a foreign field, shouldn't use update function!"):format(field))
 
-
-
 		self.lastmodified_time = os.time()
 		self[field] = new_value
-		db:eval(SNIPPET_update, 0, self.__name, self.id, self.__primarykey, field, new_value)
+		db:eval(snippets.SNIPPET_update, 0, self.__name, self.id, self.__primarykey, field, new_value)
 		return self
 
 --[[
@@ -1762,7 +1063,7 @@ Model = Object:extend {
 	-- self can be instance or query set
 	fakeDel = function (self)
 		-- if self is query set
-		fakedelFromRedis(self)
+		fakeDelFromRedis(self)
 
 		self = nil
 	end;
@@ -1787,6 +1088,7 @@ Model = Object:extend {
 		end
 	end;
 
+--[[
 	-- use style: Model_name:restoreDeleted(id)
 	restoreDeleted = function (self, id)
 		I_AM_CLASS(self)
@@ -1802,7 +1104,7 @@ Model = Object:extend {
 		end
 		db:del(dcollector)
 	end;
-
+--]]
 	-----------------------------------------------------------------------------------
 	-- Foreign API
 	-----------------------------------------------------------------------------------
@@ -1812,16 +1114,22 @@ Model = Object:extend {
 	addForeign = function (self, field, obj)
 		I_AM_INSTANCE(self)
 		assert(type(obj) == 'table' or type(obj) == 'string', '[Error] "obj" should be table or string.')
-		-- if type(obj) == 'table' then checkType(tonumber(obj.id), 'number') end
 
 		local fdt = self.__fields[field]
-		assert(fdt, format('[Error] undefined field %s', field)
-		assert( fdt.foreign, ("[Error] This field %s is not a foreign field."):format(field))
-		assert( fdt.st, ("[Error] No store type setting for this foreign field %s."):format(field))
-		if fdt.foreign == 'ANYSTRING' then
+		local store_type = fdt.st
+		local foreign_type = fdt.foreign
+
+		check(fdt, 
+			  'addForeign', 'undefined_field', field)
+		check(foreign_type, 
+			  'addForeign', 'not_foreign_field', field)
+		check(store_type, 
+			  'addForeign', 'no_store_type', field)
+
+		if foreign_type == 'ANYSTRING' then
 			assert(type(obj) == 'string', '[Error] "obj" should be string when foreign type is ANYSTRING.')
 		else
-			assert( fdt.foreign == 'UNFIXED' or fdt.foreign == getClassName(obj),
+			assert( foreign_type == 'UNFIXED' or foreign_type == getClassName(obj),
 					("[Error] This foreign field '%s' can't accept the instance of model '%s'."):format(
 						field, getClassName(obj) or tostring(obj)))
 			assert( obj.id,	"[Error] This object doesn't contain id, it's not a valid object!")
@@ -1829,8 +1137,6 @@ Model = Object:extend {
 
 		assert(tonumber(getCounter(self)) >= tonumber(self.id), 
 			   '[Error] before doing addForeign, you must save this instance.')
-
-
 
 		local new_id
 		if fdt.foreign == 'ANYSTRING' then
@@ -1841,7 +1147,7 @@ Model = Object:extend {
 			new_id = obj.id
 		end
 
-		db:eval(SNIPPET_addForeign, 0, model_name, id, field, new_id, cmsgpack.pack(fdt))
+		db:eval(snippets.SNIPPET_addForeign, 0, model_name, id, field, new_id, cmsgpack.pack(fdt))
 
 		-- update the lastmodified_time
 		self.lastmodified_time = socket.gettime()
@@ -1896,7 +1202,7 @@ Model = Object:extend {
 			if isFalse(self[field]) then return QuerySet() end
 
 			local istart, istop = transEdgeFromLuaToRedis(start, stop)
-			db:eval(SNIPPET_getForeign, 0, self.__name, self.id, field, cmsgpack.pack(fdt), istart, istop, is_rev, onlyids)
+			db:eval(snippets.SNIPPET_getForeign, 0, self.__name, self.id, field, cmsgpack.pack(fdt), istart, istop, is_rev, onlyids)
 
 
 
@@ -1923,23 +1229,10 @@ Model = Object:extend {
 				end
 			end
 --]]
-			return objs, scores
+			return objs
 		end
 	end;
 
-local ASSERT_PROMPTS = {
-	['undefined_field'] = "Field %s wasn't be defined!"
-	['not_foreign_field'] = "%s is not a foreign field!"
-	['no_store_type'] = "No store type for this foreign field %s."
-	['not_matched_foreign_type'] = "obj %s can not fit this foreign type %s!"
-}
-
-
-local check = function (statement, atfunc, prompt_key, ...)
-	local prompt_str = ASSERT_PROMPTS[prompt_key] or prompt_key
-	local assert_msg = pcall(string.format, prompt_str, ...) or ''
-	assert(statement, string.format('[Error] @%s', atfunc) .. assert_msg)
-end
 
 	-- delelte a foreign member
 	-- obj can be instance object, also can be object's id, also can be anystring.
@@ -2140,6 +1433,7 @@ end
 		end
 	end;
 
+--[[
 	-- rearrange the foreign index by input list
 	reorderForeign = function (self, field, inlist)
 		I_AM_INSTANCE(self)
@@ -2179,7 +1473,7 @@ end
 
 		return self
 	end;
-
+--]]
 	-- check this class/object has a foreign key
 	-- @param field:  field of that foreign model
 	hasForeignKey = function (self, field)
@@ -2195,11 +1489,12 @@ end
 	------------------------------------------------------------------------
 	-- misc APIs
 	------------------------------------------------------------------------
+--[[
 	--- deprecated
 	classname = function (self)
 		return getClassName(self)
 	end;
-	
+--]]
 	getClassName = getClassName;
 
 	getFDT = function (self, field)
@@ -2221,7 +1516,7 @@ Model.getRankByIndex = Model.getRankByPrimaryKey
 Model.getIdByIndex = Model.getIdByPrimaryKey
 Model.getIndexById = Model.getPrimaryKeyById
 Model.getByIndex = Model.getByPrimaryKey
-
+Model.classname = Model.getClassName
 
 return Model
 

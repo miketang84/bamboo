@@ -1,7 +1,70 @@
+local SNIPPET_stringSplit = 
+[[
+local function string.split(str, pat)
+   local t = {}
+   local fpat = "(.-)" .. pat
+   local last_end = 1
+   local s, e, cap = str:find(fpat, 1)
+   while s do
+      if s ~= 1 or cap ~= "" then
+      		table.insert(t,cap)
+      end
+      last_end = e+1
+      s, e, cap = str:find(fpat, last_end)
+   end
+   if last_end <= #str then
+      cap = str:sub(last_end)
+      table.insert(t, cap)
+   end
+   return t
+end
+	 
+]]
+
+local SNIPPET_deserializeQueryFunction = 
+[[
+
+
+local deserializeQueryFunction = function (qstr)
+	local query_func
+
+	if qstr:match('^function') then
+		local parts = qstr:split(' ^_^ ')
+		local func_part = parts[2]
+		-- now fpart is the function binary string
+		query_func = loadstring(func_part)
+		if #parts > 2 then
+			-- item 1 is key, item 2 is value, item 3 is value type, item 4 is key ....
+			local flat_upvalues = apart:split(rule_index_divider)
+			local j = 0
+			for i=3, #parts, 3 do
+				local key = parts[i]
+				local value = parts[i+1]
+				local vtype = parts[i+2]
+				if vtype == 'table' then
+					value = (value)
+				elseif vtype == 'number' then
+					value = tonumber(value)
+				elseif vtype == 'boolean' then
+					value = loadstring('return ' .. value)()
+				elseif vtype == 'nil' then
+					value = nil
+				end
+
+				j = j + 1
+				-- set upvalues
+				debug.setupvalue(query_func, j, value)
+			end
+		end
+	end
+
+	return query_func
+end
+]]
 
 
 
-local SNIPPET_hgetallByModelIds = 
+dbsnippets.set.SNIPPET_hgetallByModelIds = 
 [=[
 local modelids_string = unpack(ARGV);								 
 local modelids = cmsgpack.unpack(modelids_string)
@@ -16,7 +79,7 @@ end
 return obj_list
 ]=]
 
-local SNIPPET_hmgetByIdsFields = 
+dbsnippets.set.SNIPPET_hmgetByIdsFields = 
 [=[
 local model_name, ids_string, fields_string = unpack(ARGV);								 
 local ids = cmsgpack.unpack(ids_string)
@@ -33,7 +96,7 @@ end
 return obj_list
 ]=]
 
-local SNIPPET_delInstanceAndForeigns = 
+dbsnippets.set.SNIPPET_delInstanceAndForeigns = 
 [=[
 local model_name, id, fields_string = unpack(ARGV);								 
 local fields = cmsgpack.unpack(fields_string)
@@ -51,7 +114,7 @@ redis.call('DEL', instance_key)
 redis.call('ZREMRANGEBYSCORE', index_key, id, id)
 ]=]
 
-local SNIPPET_fakeDelInstanceAndForeigns = 
+dbsnippets.set.SNIPPET_fakeDelInstanceAndForeigns = 
 [=[
 local model_name, id, fields_string, rubpot_key = unpack(ARGV);								 
 local fields = cmsgpack.unpack(fields_string)
@@ -75,7 +138,7 @@ redis.call('ZADD', rubpot_key, n+1, instance_key)
 
 ]=]
 
-local SNIPPET_getById = 
+dbsnippets.set.SNIPPET_getById = 
 [[
 local model_name, id = unpack(ARGV)
 local key = string.format('%s:%s', model_name, id)
@@ -83,7 +146,7 @@ if not redis.call('EXIST', key) then return false end
 return redis.call('HGETALL', key)
 ]]
 
-local SNIPPET_getByIds = 
+dbsnippets.set.SNIPPET_getByIds = 
 [=[
 local model_name, ids_string = unpack(ARGV);								 
 local ids = cmsgpack.unpack(ids_string)
@@ -102,7 +165,7 @@ return obj_list
 ]=]
 
 
-local SNIPPET_getByIdWithForeigns = 
+dbsnippets.set.SNIPPET_getByIdWithForeigns = 
 [=[
 local model_name, id, ffields_str, ffdts_str = unpack(ARGV)
 local key = string.format('%s:%s', model_name, id)
@@ -149,7 +212,7 @@ end
 return r_data
 ]=]
 
-local SNIPPET_getByIdsWithForeigns = 
+dbsnippets.set.SNIPPET_getByIdsWithForeigns = 
 [=[
 local model_name, ids_str, ffields_str, ffdts_str = unpack(ARGV)
 local ids = cmsgpack.unpack(ids_str)
@@ -204,7 +267,7 @@ return r_data
 ]=]
 
 
-local SNIPPET_all = 
+dbsnippets.set.SNIPPET_all = 
 [=[
 local model_name, is_rev = unpack(ARGV)
 local index_key = string.format('%s:__index', model_name)
@@ -233,7 +296,7 @@ return obj_list
 
 ]=]
 
-local SNIPPET_slice = 
+dbsnippets.set.SNIPPET_slice = 
 [=[
 local model_name, istart, istop, is_rev = unpack(ARGV)
 local index_key = string.format('%s:__index', model_name)
@@ -264,7 +327,7 @@ return obj_list
 
 ]=]
 
-local SNIPPET_save = 
+dbsnippets.set.SNIPPET_save = 
 [[
 local model_name, id, primarykey, params_str = unpack(ARGV)
 local key = string.format('%s:%s', model_name, id)
@@ -320,7 +383,7 @@ redis.call('HSET', key, 'lastmodified_time', os.time())
 return true
 ]]
 
-local SNIPPET_update = 
+dbsnippets.set.SNIPPET_update = 
 [[
 local model_name, id, primarykey, field, new_value = unpack(ARGV)
 local key = string.format('%s:%s', model_name, id)
@@ -343,7 +406,7 @@ redis.call('HSET', key, 'lastmodified_time', os.time())
 return true
 ]]
 
-local SNIPPET_addForeign = 
+dbsnippets.set.SNIPPET_addForeign = 
 [[
 local model_name, id, field, new_id, fdt_str = unpack(ARGV)
 local fdt = cmsgpack.unpack(fdt_str)
@@ -386,7 +449,8 @@ end
 redis.call('HSET', key, 'lastmodified_time', os.time())
 ]]
 
-local SNIPPET_getForeign = 
+
+dbsnippets.set.SNIPPET_getForeign = 
 [[
 -- here, start and stop is the transformed location index for redis, not lua
 local model_name, id, field, fdt_str, start, stop, is_rev, onlyids = unpack(ARGV)
@@ -447,9 +511,14 @@ return objs
 
 
 
-local SNIPPET_get = 
+dbsnippets.set.SNIPPET_get = 
 [=[
-local model_name, fields_string, logic, query_string, is_rev = unpack(ARGV)
+
+${stringSplit}
+${deserializeQueryFunction}
+
+
+local model_name, fields_string, query_type, query_string, logic = unpack(ARGV)
 local fields = cmsgpack.unpack(fields_string)
 local query_args = cmsgpack.unpack(query_string)
 
@@ -468,50 +537,86 @@ for j = 1, length, PARTLEN do
 		r = redis.call('ZRANGE', index_key, j, j+PARTLEN-1, 'WITHSCORES')
 	end
 
-	for i = 1, #r, 2 do
-		local id = r[i+1]
-		local key = ('%s:%s'):format(model_name, id)
-		local obj = redis.call('HGETALL', key)
+	if query_type == 'table' then
+		for i = 1, #r, 2 do
+			local id = r[i+1]
+			local key = ('%s:%s'):format(model_name, id)
+			local obj = redis.call('HGETALL', key)
 
-		local hash_data = {}
-		for i = 1, #obj, 2 do
-			hash_data[obj[i]] = obj[i+1]
-		end
-
-		for k, v in pairs(query_args) do
-			-- to redundant query condition, once meet, jump immediately
-			if not fields[k] then flag=false; break end
-
-			-- it uses a logic function
-			if type(v) == 'table' then
-				local method = table.remove(v, 1)
-				flag = LOGIC_METHODS[method](unpack(v))(hash_data[k])
-			else
-				flag = (hash_data[k] == v)
+			local hash_data = {}
+			for i = 1, #obj, 2 do
+				hash_data[obj[i]] = obj[i+1]
 			end
 
-			---------------------------------------------------------------
-			-- logic_choice,       flag,      action,          append?
-			---------------------------------------------------------------
-			-- true (and)          true       next field       --
-			-- true (and)          false      break            no
-			-- false (or)          true       break            yes
-			-- false (or)          false      next field       --
-			---------------------------------------------------------------
-			if logic_choice ~= flag then break end
+			for k, v in pairs(query_args) do
+				-- to redundant query condition, once meet, jump immediately
+				if not fields[k] then flag=false; break end
+
+				-- it uses a logic function
+				if type(v) == 'table' then
+					local method = table.remove(v, 1)
+					flag = LOGIC_METHODS[method](unpack(v))(hash_data[k])
+				else
+					flag = (hash_data[k] == v)
+				end
+
+				---------------------------------------------------------------
+				-- logic_choice,       flag,      action,          append?
+				---------------------------------------------------------------
+				-- true (and)          true       next field       --
+				-- true (and)          false      break            no
+				-- false (or)          true       break            yes
+				-- false (or)          false      next field       --
+				---------------------------------------------------------------
+				if logic_choice ~= flag then break end
+			end
+
+			if flag then return obj end
 		end
 
-		if flag then return obj end
+	elseif query_type == 'function' then
+		for i = 1, #r, 2 do
+			local id = r[i+1]
+			local key = ('%s:%s'):format(model_name, id)
+			local obj = redis.call('HGETALL', key)
+
+			local hash_data = {}
+			for i = 1, #obj, 2 do
+				hash_data[obj[i]] = obj[i+1]
+			end
+			
+			local flag = query_args(hash_data)
+			if flag then return obj end
+		end
+
+	elseif query_type == 'string' then
+		-- TODO
 	end
 end
-]=]
+]=] % {
+	stringSplit = SNIPPET_stringSplit, 
+	deserializeQueryFunction = SNIPPET_deserializeQueryFunction
+}
 
 
-local SNIPPET_filter = 
+
+dbsnippets.set.SNIPPET_filter = 
 [=[
-local model_name, fields_string, logic, query_string, is_rev = unpack(ARGV)
+
+${stringSplit}
+${deserializeQueryFunction}
+
+
+local model_name, fields_string, query_type, query_string, logic = unpack(ARGV)
 local fields = cmsgpack.unpack(query_string)
-local query_args = cmsgpack.unpack(query_string)
+local query_args
+if query_type == 'table' then
+	query_args = cmsgpack.unpack(query_string)
+elseif query_type == 'function' then
+	query_args = deserializeQueryFunction(query_string)
+else 
+	query_args = query_string
+end
 
 local logic_choice = logic == 'and'
 local flag = logic_choice
@@ -529,46 +634,67 @@ for j = 1, length, PARTLEN do
 		r = redis.call('ZRANGE', index_key, j, j+PARTLEN-1, 'WITHSCORES')
 	end
 
-	for i = 1, #r, 2 do
-		local id = r[i+1]
-		local key = ('%s:%s'):format(model_name, id)
-		local obj = redis.call('HGETALL', key)
+	if query_type == 'table' then
+		for i = 1, #r, 2 do
+			local id = r[i+1]
+			local key = ('%s:%s'):format(model_name, id)
+			local obj = redis.call('HGETALL', key)
 
-		local hash_data = {}
-		for i = 1, #obj, 2 do
-			hash_data[obj[i]] = obj[i+1]
-		end
-
-		for k, v in pairs(query_args) do
-			-- to redundant query condition, once meet, jump immediately
-			if not fields[k] then flag=false; break end
-
-			-- it uses a logic function
-			if type(v) == 'table' then
-				local method = table.remove(v, 1)
-				flag = LOGIC_METHODS[method](unpack(v))(hash_data[k])
-			else
-				flag = (hash_data[k] == v)
+			local hash_data = {}
+			for i = 1, #obj, 2 do
+				hash_data[obj[i]] = obj[i+1]
 			end
 
-			---------------------------------------------------------------
-			-- logic_choice,       flag,      action,          append?
-			---------------------------------------------------------------
-			-- true (and)          true       next field       --
-			-- true (and)          false      break            no
-			-- false (or)          true       break            yes
-			-- false (or)          false      next field       --
-			---------------------------------------------------------------
-			if logic_choice ~= flag then break end
-		end
+			for k, v in pairs(query_args) do
+				-- to redundant query condition, once meet, jump immediately
+				if not fields[k] then flag=false; break end
 
-		if flag then table.insert(objs, obj) end
+				-- it uses a logic function
+				if type(v) == 'table' then
+					local method = table.remove(v, 1)
+					flag = LOGIC_METHODS[method](unpack(v))(hash_data[k])
+				else
+					flag = (hash_data[k] == v)
+				end
+
+				---------------------------------------------------------------
+				-- logic_choice,       flag,      action,          append?
+				---------------------------------------------------------------
+				-- true (and)          true       next field       --
+				-- true (and)          false      break            no
+				-- false (or)          true       break            yes
+				-- false (or)          false      next field       --
+				---------------------------------------------------------------
+				if logic_choice ~= flag then break end
+			end
+
+			if flag then table.insert(objs, obj) end
+		end
+	elseif query_type == 'function' then
+		for i = 1, #r, 2 do
+			local id = r[i+1]
+			local key = ('%s:%s'):format(model_name, id)
+			local obj = redis.call('HGETALL', key)
+
+			local hash_data = {}
+			for i = 1, #obj, 2 do
+				hash_data[obj[i]] = obj[i+1]
+			end
+		
+			local flag = query_args(hash_data)
+			if flag then table.insert(objs, obj) end
+		end
+	elseif query_type == 'string' then
+		-- TODO
 	end
 end
 
 return objs
 
-]=]
+]=] % {
+	stringSplit = SNIPPET_stringSplit, 
+	deserializeQueryFunction = SNIPPET_deserializeQueryFunction
+}
 
 
 
@@ -587,3 +713,6 @@ return obj_list
 
 
 --]]
+
+
+

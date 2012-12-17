@@ -21,6 +21,8 @@ context = {}
 userdata = {}
 plugindata = {}
 internals = {}
+dbsnippets = {set={}, sha2key={}, key2sha={}}
+
 compiled_views_tmpls = {}
 compiled_views = {}
 compiled_views_locals = {}
