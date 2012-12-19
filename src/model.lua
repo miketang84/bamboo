@@ -2,7 +2,7 @@ module(..., package.seeall)
 
 local cjson = require 'cjson'
 local cmsgpack = require 'cmsgpack'
-
+local socket = require 'socket'
 
 local mih = require 'bamboo.model-indexhash'
 require 'bamboo.queryset'
@@ -140,10 +140,10 @@ local Model
 -- misc functions
 -----------------------------------------------------------------
 local ASSERT_PROMPTS = {
-	['undefined_field'] = "Field %s wasn't be defined!"
-	['not_foreign_field'] = "%s is not a foreign field!"
-	['no_store_type'] = "No store type for this foreign field %s."
-	['not_matched_foreign_type'] = "obj %s can not fit this foreign type %s!"
+	['undefined_field'] = "Field %s wasn't be defined!",
+	['not_foreign_field'] = "%s is not a foreign field!",
+	['no_store_type'] = "No store type for this foreign field %s.",
+	['not_matched_foreign_type'] = "obj %s can not fit this foreign type %s!",
 }
 
 
@@ -234,33 +234,26 @@ local makeObject = function (self, data)
 	end
 
 	local fields = self.__fields
-	for k, fld in pairs(fields) do
---[[
-		if fld.foreign then
-			local st = fld.st
-			-- in redis, we don't save MANY foreign key in db, but we want to fill them when
-			-- make lua object
-			if st == 'MANY' then
-				hash_data[k] = 'FOREIGN MANY ' .. fld.foreign
-			elseif st == 'FIFO' then
-				hash_data[k] = 'FOREIGN FIFO ' .. fld.foreign
-			elseif st == 'ZFIFO' then
-				hash_data[k] = 'FOREIGN ZFIFO ' .. fld.foreign
-			elseif st == 'LIST' then
-				hash_data[k] = 'FOREIGN LIST ' .. fld.foreign
+	for k, fdt in pairs(fields) do
+
+		local value = hash_data[k]
+		-- for ONE foreign object
+		if fdt.foreign and fdt.foreign ~= 'ANYSTRING' and fdt.st == 'ONE' and type(value) == 'table' then
+			local ihdata = {}
+			for i = 1, #value, 2 do
+				ihdata[value[i]] = value[i+1]
 			end
+			hash_data[k] = ihdata
 		else
---]]
-
-			if fld.type == 'number' then
-				hash_data[k] = tonumber(hash_data[k])
-			elseif fld.type == 'boolean' then
-				hash_data[k] = hash_data[k] == 'true' and true or false
+			if fdt.type == 'number' then
+				hash_data[k] = tonumber(value)
+			elseif fdt.type == 'boolean' then
+				hash_data[k] = (value == 'true')
 			end
---		end
-
+		end
 	end
-
+-- print('---- in hash_data')
+-- ptable(hash_data)
 	-- generate an object
 	return self(hash_data)
 end
@@ -270,7 +263,7 @@ local makeObjects = function (self, data_list)
 	local nils = {}
 	for i, v in ipairs(data_list) do
 		if #v == 0 then
-			tinsert(nils, ids[i])
+			tinsert(nils, i)
 		else
 			tinsert(objs, makeObject(self, v))
 		end
@@ -388,19 +381,16 @@ end
 
 local serializeQueryFunction = function (query_args)
 	local flag, upvalues = collectQueryFunctionUpvalues(query_args)
-	
 	if not flag then return nil end
 
 	-- query_args now is function
 	local out = {}
-	if qtype == 'function' then
-		table.insert(out, 'function')
-		table.insert(out, string.dump(query_args))
-		for _, pair in ipairs(upvalues) do
-			tinsert(out, pair[1])	-- key
-			tinsert(out, pair[2])	-- value
-			tinsert(out, pair[3])	-- value type
-		end
+	table.insert(out, 'function')
+	table.insert(out, string.dump(query_args))
+	for _, pair in ipairs(upvalues) do
+		tinsert(out, pair[1])	-- key
+		tinsert(out, pair[2])	-- value
+		tinsert(out, pair[3])	-- value type
 	end
 
 	-- use a delemeter to seperate obviously
@@ -428,7 +418,7 @@ local processBeforeSave = function (self, params)
 		end
 	end
 
-	assert(not isFalse(self[primarykey]) ,
+	assert( primarykey == 'id' or isTrue(self[primarykey]) ,
 		format("[Error] instance's primary field %s's value must not be nil. Please check your model definition.", 
 			   primarykey))
 
@@ -447,12 +437,14 @@ local processBeforeSave = function (self, params)
 		-- 2. don't save the functional member, and _parent
 		-- 3. don't save those fields not defined in model defination
 		-- 4. don't save those except ONE foreign fields, which are defined in model defination
-		local fdt = fields[k]
-		-- if v is nil, pairs will not iterate it, key will and should not be 'id'
-		if fdt then
-			if not fdt['foreign'] or ( fdt['foreign'] and fdt['st'] == 'ONE') then
-				-- save
-				r_params[k] = tostring(v)
+		if k ~= 'id' and k ~= 'lastmodified_time' then
+			local fdt = fields[k]
+			-- if v is nil, pairs will not iterate it, key will and should not be 'id'
+			if fdt then
+				if not fdt['foreign'] or ( fdt['foreign'] and fdt['st'] == 'ONE') then
+					-- save
+					r_params[k] = tostring(v)
+				end
 			end
 		end
 	end
@@ -467,8 +459,8 @@ end
 Model = Object:extend {
 	__name = 'Model';
 	__fields = {
-	    -- here, we don't put 'id' as a field
-	    ['created_time'] = { type="number" },
+	    ['id'] = {},
+		['created_time'] = { type="number" },
 	    ['lastmodified_time'] = { type="number" },
 
 	};
@@ -482,16 +474,17 @@ Model = Object:extend {
 
 		for field, fdt in pairs(fields) do
 			-- assign to default value if exsits
-			local tmp = t[field] or fdt.default
-			if type(tmp) == 'function' then
-				self[field] = tmp()
+			local value = t[field] or fdt.default
+			if type(value) == 'function' then
+				self[field] = value()
 			else
-				self[field] = tmp
+				self[field] = value
 			end
 		end
 
-		self.created_time = socket.gettime()
-		self.lastmodified_time = self.created_time
+		self.id = self.id or t.id
+		self.created_time = self.created_time or t.created_time or socket.gettime()
+		self.lastmodified_time = self.lastmodified_time or t.lastmodified_time or socket.gettime()
 
 		return self
 	end;
@@ -550,10 +543,10 @@ Model = Object:extend {
 		
 		local index_key = getIndexKey(self)
 		-- id is the score of that index value
-		local r = db:zrange(index_key, rank_index, rank_index, 'withscores')
+		local _, r = db:zrange(index_key, rank_index, rank_index, 'withscores')
 		if #r == 0 then return nil end
 
-		local id = r[2]
+		local id = r[1]
 		return self:getById(id)
 	end;
 
@@ -562,7 +555,6 @@ Model = Object:extend {
 		if type(tonumber(id)) ~= 'number' then return nil end
 
 		local data = db:eval(snippets.SNIPPET_getById, 0, self.__name, id)
-
 		return makeObject(self, data)
 	end;
 
@@ -574,23 +566,47 @@ Model = Object:extend {
 		return makeObjects(self, data)
 	end;
 	
+	getByIdWithForeigns = function (self, id, ...)
+		I_AM_CLASS(self)
+		if type(tonumber(id)) ~= 'number' then return nil end
+		local ffields_args = {...}
+		local fields = self.__fields
+		local ffields = {}
+		for _, field in ipairs(ffields_args) do
+			ffields[field] = fields[field]
+		end
+
+		local data = db:eval(snippets.SNIPPET_getByIdWithForeigns, 0, self.__name, id, cmsgpack.pack(ffields))
+		return makeObject(self, data)
+	end;
+
+	getByIdsWithForeigns = function (self, ids, ...)
+		I_AM_CLASS(self)
+		assert(type(ids) == 'table')
+		local ffields_args = {...}
+		local fields = self.__fields
+		local ffields = {}
+		for _, field in ipairs(ffields_args) do
+			ffields[field] = fields[field]
+		end
+
+		local data = db:eval(snippets.SNIPPET_getByIdsWithForeigns, 0, self.__name, cmsgpack.pack(ids), cmsgpack.pack(ffields))
+		return makeObjects(self, data)
+	end;
+	
 	-- return a list containing all ids of all instances of this Model
 	--
 	allIds = function (self, is_rev)
 		I_AM_CLASS(self)
 		local index_key = getIndexKey(self)
-		local r
+		local _, r
 		if is_rev == 'rev' then
-			r = db:zrevrange(index_key, 0, -1, 'withscores')
+			_, r = db:zrevrange(index_key, 0, -1, 'withscores')
 		else
-			r = db:zrange(index_key, 0, -1, 'withscores')
+			_, r = db:zrange(index_key, 0, -1, 'withscores')
 		end
 		
-		local all_ids = {}
-		for i = 1, #r, 2 do
-			tinsert(all_ids, r[i+1])
-		end
-		
+		local all_ids = r
 		return List(all_ids)
 	end;
 
@@ -601,19 +617,13 @@ Model = Object:extend {
 		I_AM_CLASS(self)
 		local index_key = getIndexKey(self)
 		local istart, istop = transEdgeFromLuaToRedis(start, stop)
-		local r
-		r = db:zrange(index_key, istart, istop, 'withscores')
+		local _, r = db:zrange(index_key, istart, istop, 'withscores')
 
-		local ids = List()
+		local ids = List(r)
 		if is_rev == 'rev' then
-			for i = #r, 1, -2 do
-				tinsert(ids, r[i])
-			end
-		else
-			for i = 1, #r, 2 do
-				tinsert(ids, r[i+1])
-			end
+			ids = ids:reverse()
 		end
+
 		return ids
 	end;
 
@@ -621,9 +631,10 @@ Model = Object:extend {
 	--
 	all = function (self, is_rev)
 		I_AM_CLASS(self)
+		local is_rev = is_rev or ''
 
 		local data_list = db:eval(snippets.SNIPPET_all, 0, self.__name, is_rev)
-		return makeObjects(data_list)
+		return makeObjects(self, data_list)
 	end;
 
 	-- slice instance object list, support negative index (-1)
@@ -632,9 +643,10 @@ Model = Object:extend {
 		-- !slice method won't be open to query set, because List has slice method too.
 		I_AM_CLASS(self)
 		local istart, istop = transEdgeFromLuaToRedis(start, stop)
+		local is_rev = is_rev or ''
 
 		local data_list = db:eval(snippets.SNIPPET_slice, 0, self.__name, istart, istop, is_rev)
-		return makeObjects(data_list)
+		return makeObjects(self, data_list)
 	end;
 
 	-- return the actual number of the instances
@@ -649,7 +661,7 @@ Model = Object:extend {
 	get = function (self, query_args, limit_params)
 		I_AM_CLASS(self)
 
-		local logic = query_args[1] == 'or' and 'or' or 'and'
+		local logic = ''
 		local fields_string = cmsgpack.pack(self.__fields)
 		-- XXX: here, we only consider table first
 		local query_string
@@ -659,6 +671,7 @@ Model = Object:extend {
 		elseif ctype == 'function' then
 			query_string = serializeQueryFunction(query_args)
 		elseif ctype == 'table' then
+			logic = query_args[1] == 'or' and 'or' or 'and'
 			query_string = cmsgpack.pack(query_args)
 		else
 			error("[Error] no valid query args type @filter 'query_args'.")
@@ -691,7 +704,7 @@ Model = Object:extend {
 			query_string = query_args
 		elseif ctype == 'function' then
 			query_string = serializeQueryFunction(query_args)
-		else
+		elseif ctype == 'table' then
 			query_string = cmsgpack.pack(query_args)
 		else
 			error("[Error] no valid query args type @filter 'query_args'.")
@@ -703,250 +716,7 @@ Model = Object:extend {
 
 		return QuerySet()
 
---[[
-		local no_sort_rule = true
-		-- regular the args
-		local sort_field, sort_dir, sort_func, start, stop, is_rev, no_cache
-		local first_arg = select(1, ...)
-		if type(first_arg) == 'function' then
-			sort_func = first_arg
-			start = select(2, ...)
-			stop = select(3, ...)
-			is_rev = select(4, ...)
-			no_cache = select(5, ...)
-			no_sort_rule = false
-		elseif type(first_arg) == 'string' then
-			sort_field = first_arg
-			sort_dir = select(2, ...)
-			start = select(3, ...)
-			stop = select(4, ...)
-			is_rev = select(5, ...)
-			no_cache = select(6, ...)
-			no_sort_rule = false
-		elseif type(first_arg) == 'number' then
-			start = first_arg
-			stop = select(2, ...)
-			is_rev = select(3, ...)
-			no_cache = select(4, ...)
-			no_sort_rule = true
-		end
-        
-		if start then assert(type(start) == 'number', '[Error] @filter - start must be number.') end
-		if stop then assert(type(stop) == 'number', '[Error] @filter - stop must be number.') end
-		if is_rev then assert(type(is_rev) == 'string', '[Error] @filter - is_rev must be string.') end
-
-		local is_args_table = (type(query_args) == 'table')
-		local logic = 'and'
-
-		------------------------------------------------------------------------------
-		-- do rule index lookup
-		local query_str_iden, is_capable_press_rule = '', true
-		local do_rule_index_cache = isUsingRuleIndex() and (no_cache ~= 'nocache')
-		if do_rule_index_cache then
-			if type(query_args) == 'function' then
-				is_capable_press_rule = collectRuleFunctionUpvalues(query_args)
-			end
-
-			if is_capable_press_rule then
-				-- make query identification string
-				query_str_iden = compressQueryArgs(query_args)
-				if not no_sort_rule then
-					local sortby_str_iden = compressSortByArgs({sort_field or sort_func, sort_dir})
-					query_str_iden = compressTwoPartArgs(query_str_iden, sortby_str_iden)
-				end
-				if #query_str_iden > 0 then
-					-- check index
-					-- XXX: Only support class now, don't support query set, maybe query set doesn't need this feature
-					local id_list = getIndexFromManager(self, query_str_iden)
-					if type(id_list) == 'table' then
-						if #id_list == 0 then
-							return QuerySet(), 0
-						else
-							if start or stop then
-								-- now id_list is a list containing all id of instances fit to this query_args rule, so need to slice
-								id_list = id_list:slice(start, stop, is_rev)
-							end
-
-							-- if have this list, return objects directly
-							if #id_list > 0 then
-								return getFromRedisPipeline(self, id_list), #id_list
-							end
-						end
-					end
-				end
-				-- else go ahead
-			end
-		end
-
-		------------------------------------------------------------------------------
-		-- start do real filter
-		local all_ids = {}
-		local query_set = QuerySet()
-
-		if is_args_table then
-			assert( not query_args['id'], 
-				"[Error] get and filter don't support search by id, please use getById.")
-
-			-- if query table is empty, treate it as all action, or slice action
-			if isFalse(query_args) then
-				-- need to participate sort, if has
-				if no_sort_rule then
-					return self:slice(start, stop, is_rev), self:numbers()
-				else
-					query_set = self:all()
-				end
-			end
-			
-			if query_args[1] then
-				-- normalize the 'and' and 'or' logic
-				assert(query_args[1] == 'or' or query_args[1] == 'and',
-					"[Error] The logic should be 'and' or 'or', rather than: " .. tostring(query_args[1]))
-				if query_args[1] == 'or' then
-					logic = 'or'
-				end
-				query_args[1] = nil
-			end
-		end
-
-		local logic_choice = (logic == 'and')
-		local partially_got = false
-		local fields = self.__fields
-		
-		-- walkcheck can process full object and partial object
-		local walkcheck = function (objs, model)
-			for i, obj in ipairs(objs) do
-				-- check the object's legalery, only act on valid object
-				local flag = checkLogicRelation(obj, query_args, logic_choice, model)
-
-				-- if walk to this line, means find one
-				if flag then
-					tinsert(query_set, obj)
-				end
-			end
-		end
-
-		local hash_index_query_args = {};
-		local hash_index_flag = false;
-		local raw_filter_flag = false;
-
-		if type(query_args) == 'function' then
-			hash_index_flag = false;
-			raw_filter_flag = true;
-		elseif bamboo.config.index_hash then
-			for field, value in pairs(query_args) do
-				-- very odd, flags are assinged many times
-				if fields[field].hash_index then
-					hash_index_query_args[field] = value;
-					query_args[field] = nil;
-					hash_index_flag = true;
-				else
-					raw_filter_flag = true;
-				end
-			end
-                end
-
-
-		if hash_index_flag then
-			all_ids = mih.filter(self,hash_index_query_args,logic);
-		else
-    			all_ids = self:allIds()
-		end
-
-		-- if not nessesary to use raw filter, retrieve objects immediately
-		if not raw_filter_flag then
-			query_set = getFromRedisPipeline(self, all_ids)
-		else
-			if #query_set == 0 then
-				local qfs = {}
-				if is_args_table then
-					for k, _ in pairs(query_args) do
-						tinsert(qfs, k)
-					end
-					table.sort(qfs)
-				end
-
-				local objs, nils
-				if #qfs == 0 then
-					-- collect nothing, use 'hgetall' to retrieve, partially_got is false
-					-- when query_args is function, do this
-					objs, nils = getFromRedisPipeline(self, all_ids)
-				else
-					-- use hmget to retrieve, now the objs are partial objects
-					-- qfs here must have key-value pair
-					-- here, objs are not real objects, only ordinary table
-					objs = getPartialFromRedisPipeline(self, all_ids, qfs)
-					partially_got = true
-				end
-				walkcheck(objs, self)
-
-				if bamboo.config.auto_clear_index_when_get_failed then
-					-- clear model main index
-					if not isFalse(nils) then
-						local index_key = getIndexKey(self)
-						-- each element in nils is the id pattern string, when clear, remove them directly
-						for _, v in ipairs(nils) do
-							db:zremrangebyscore(index_key, v, v)
-						end
-					end
-				end
-			end
-		end
-
-		------------------------------------------------------------------------------
-		-- do later process
-		local total_length = #query_set
-		-- here, _t_query_set is the all instance fit to query_args now
-		local _t_query_set = query_set
-		-- check if it is empty
-		if #query_set == 0 and do_rule_index_cache and is_capable_press_rule and #query_str_iden > 0 then
-			addIndexToManager(self, query_str_iden, {})
-			return QuerySet(), 0
-		end
-		-- do sort
-		if not no_sort_rule then
-			query_set = query_set:sortBy(sort_field or sort_func, sort_dir)
-			_t_query_set = query_set
-		end
-		-- slice
-		if start or stop then
-			-- now id_list is a list containing all id of instances fit to this query_args rule, so need to slice
-			query_set = _t_query_set:slice(start, stop, is_rev)
-		end
-
-		-- add to index, here, we index all instances fit to query_args, rather than results applied extra limitation conditions
-		if do_rule_index_cache and is_capable_press_rule and #query_str_iden > 0 then
-			local id_list = {}
-			for _, v in ipairs(_t_query_set) do
-				tinsert(id_list, v.id)
-			end
-			addIndexToManager(self, query_str_iden, id_list)
-		end
-
-		if partially_got then
-			local id_list = {}
-			-- retrieve needed objects' id
-			for _, v in ipairs(query_set) do
-				tinsert(id_list, v.id)
-			end
-			query_set = getFromRedisPipeline(self, id_list)
-		end
-
-		-- return results
-		return query_set, total_length
---]]
 	end;
-
---[[
-   	-- deprecated
-	-- count the number of instance fit to some rule
-	count = function (self, query_args)
-		I_AM_CLASS(self)
-		local _, length = self:filter(query_args)
-		return length
-	end;
---]]
-
-	
 	
 	-- delete self instance object
 	-- self can be instance or query set
@@ -1015,11 +785,16 @@ Model = Object:extend {
 	save = function (self, params)
 		I_AM_INSTANCE(self)
 
+		local id = self.id or ''
 		local r_params = processBeforeSave(self, params)
+		r_params.lastmodified_time = socket.gettime()
 
-		db:eval(snippets.SNIPPET_save, 0, self.__name, self.id, self.__primarykey, cmsgpack.pack(r_params))
-		-- update the lastmodified_time
-		self.lastmodified_time = os.time()
+		local ret_id = db:eval(snippets.SNIPPET_save, 0, self.__name, id, self.__primarykey, cmsgpack.pack(r_params))
+
+		if ret_id then 
+			self.lastmodified_time = r_params.lastmodified_time
+			if id == '' then self.id = ret_id end
+		end
 --[[
 		-- make fulltext indexes
 		if isUsingFulltextIndex(self) then
@@ -1029,7 +804,7 @@ Model = Object:extend {
 			updateIndexByRules(self, 'update')
 		end
 --]]
-		return self
+		return self, ret_id ~= nil
 	end;
 
 	-- partially update function, once one field
@@ -1041,9 +816,15 @@ Model = Object:extend {
 		if not fld then print(("[Warning] Field %s doesn't be defined!"):format(field)); return nil end
 		assert( not fld.foreign, ("[Error] %s is a foreign field, shouldn't use update function!"):format(field))
 
-		self.lastmodified_time = os.time()
-		self[field] = new_value
-		db:eval(snippets.SNIPPET_update, 0, self.__name, self.id, self.__primarykey, field, new_value)
+		local new_value = new_value or ''
+		local lmtime = socket.gettime()
+		local ret = db:eval(snippets.SNIPPET_update, 0, self.__name, self.id, self.__primarykey, field, new_value, self.lastmodified_time)
+
+		if ret then
+			self.lastmodified_time = lmtime
+			self[field] = new_value
+		end
+
 		return self
 
 --[[
@@ -1236,7 +1017,7 @@ Model = Object:extend {
 
 	-- delelte a foreign member
 	-- obj can be instance object, also can be object's id, also can be anystring.
-	delForeign = function (self, field, obj)
+	removeForeignMember = function (self, field, obj)
 		I_AM_INSTANCE(self)
 
 		local fdt = self.__fields[field]
@@ -1298,7 +1079,7 @@ Model = Object:extend {
 		return self
 	end;
 
-	clearForeign = function (self, field)
+	delForeign = function (self, field)
 		I_AM_INSTANCE(self)
 
 		local fdt = self.__fields[field]
@@ -1329,7 +1110,7 @@ Model = Object:extend {
 		return self
 	end;
 
-	deepClearForeign = function (self, field)
+	deepDelForeign = function (self, field)
 		I_AM_INSTANCE(self)
 		local fdt = self.__fields[field]
 		local store_type = fdt.st
@@ -1373,7 +1154,7 @@ Model = Object:extend {
 		local store_type = fdt.st
 		local foreign_type = fdt.foreign
 
-		assert(fdt, format('[Error] undefined field %s', field)
+		assert(fdt, format('[Error] undefined field %s', field))
 		assert(foreign_type, ("[Error] This field %s is not a foreign field."):format(field))
 		assert(store_type, ("[Error] No store type setting for this foreign field %s."):format(field))
 		if foreign_type == 'ANYSTRING' then
@@ -1489,12 +1270,6 @@ Model = Object:extend {
 	------------------------------------------------------------------------
 	-- misc APIs
 	------------------------------------------------------------------------
---[[
-	--- deprecated
-	classname = function (self)
-		return getClassName(self)
-	end;
---]]
 	getClassName = getClassName;
 
 	getFDT = function (self, field)
@@ -1517,6 +1292,9 @@ Model.getIdByIndex = Model.getIdByPrimaryKey
 Model.getIndexById = Model.getPrimaryKeyById
 Model.getByIndex = Model.getByPrimaryKey
 Model.classname = Model.getClassName
+Model.clearForeign = Model.delForeign
+Model.deepClearForeign = Model.deepDelForeign
+
 
 return Model
 

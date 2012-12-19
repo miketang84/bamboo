@@ -98,204 +98,73 @@ end
 -- Query Function Set
 -- for convienent, import them into _G directly
 ------------------------------------------------------------------------
-local uglystr = '___hashindex^*_#@[]-+~~!$$$$'
-
 _G.eq = function (cmp_obj)
 	return {'eq', cmp_obj}
 end
 
-
-SNIPPET_logic_methods = 
-[=[
-local LOGIC_METHODS = {}
-LOGIC_METHODS.eq = function ( cmp_obj )
-	return function (v)
-		if v == cmp_obj then
-			return true
-		else
-			return false
-		end
-	end
+_G.uneq = function ( cmp_obj )
+	return {'uneq', cmp_obj}
 end
 
-local uneq = function ( cmp_obj )
-	return function (v)
-		if v ~= cmp_obj then
-			return true
-		else
-			return false
-		end
-	end
+_G.lt = function (limitation)
+	return {'lt', limitation}
 end
 
-local lt = function (limitation)
-	return function (v)
-		if v and v < limitation then
-			return true
-		else
-			return false
-		end
-	end
+_G.gt = function (limitation)
+	return {'gt', limitation}
 end
 
-local gt = function (limitation)
-	return function (v)
-		if v and v > limitation then
-			return true
-		else
-			return false
-		end
-	end
+_G.le = function (limitation)
+	return {'le', limitation}
 end
 
-local le = function (limitation)
-	return function (v)
-		if v and v <= limitation then
-			return true
-		else
-			return false
-		end
-	end
+_G.ge = function (limitation)
+	return {'ge', limitation}
 end
 
-local ge = function (limitation)
-	return function (v)
-		if v and v >= limitation then
-			return true
-		else
-			return false
-		end
-	end
+_G.bt = function (small, big)
+	return {'bt', small, big}
 end
 
-local bt = function (small, big)
-	return function (v)
-		if v and v > small and v < big then
-			return true
-		else
-			return false
-		end
-	end
+_G.be = function (small, big)
+	return {'be', small, big}
 end
 
-local be = function (small, big)
-	return function (v)
-		if v and v >= small and v <= big then
-			return true
-		else
-			return false
-		end
-	end
+_G.outside = function (small, big)
+	return {'outside', small, big}
 end
 
-local outside = function (small, big)
-	return function (v)
-		if v and (v < small or v > big) then
-			return true
-		else
-			return false
-		end
-	end
+_G.contains = function (substr)
+	return {'contains', substr}
 end
 
-local contains = function (substr)
-	return function (v)
-		v = tostring(v)
-		if v:contains(substr) then
-			return true
-		else
-			return false
-		end
-	end
+_G.uncontains = function (substr)
+	return {'uncontains', substr}
 end
 
-local uncontains = function (substr)
-	return function (v)
-		v = tostring(v)
-		if not v:contains(substr) then
-			return true
-		else
-			return false
-		end
-	end
+_G.startsWith = function (substr)
+	return {'startsWith', substr}
 end
 
-local startsWith = function (substr)
-	return function (v)
-		v = tostring(v)
-		if v:startsWith(substr) then
-			return true
-		else
-			return false
-		end
-	end
+_G.unstartsWith = function (substr)
+	return {'unstartsWith', substr}
 end
 
-local unstartsWith = function (substr)
-	return function (v)
-		v = tostring(v)
-		if not v:startsWith(substr) then
-			return true
-		else
-			return false
-		end
-	end
+_G.endsWith = function (substr)
+	return {'endsWith', substr}
 end
 
-
-local endsWith = function (substr)
-	return function (v)
-		v = tostring(v)
-		if v:endsWith(substr) then
-			return true
-		else
-			return false
-		end
-	end
+_G.unendsWith = function (substr)
+	return {'unendsWith', substr}
 end
 
-local unendsWith = function (substr)
-	return function (v)
-		v = tostring(v)
-		if not v:endsWith(substr) then
-			return true
-		else
-			return false
-		end
-	end
+_G.inset = function (args)
+	return {'inset', args}
 end
 
-local inset = function (...)
-	local args = {...}
-	return function (v)
-		v = tostring(v)
-		for _, val in ipairs(args) do
-			-- once meet one, ok
-			if tostring(val) == v then
-				return true
-			end
-		end
-
-		return false
-	end
+_G.uninset = function (args)
+	return {'uninset', args}
 end
 
-local uninset = function (...)
-	local args = {...}
-	local t = function (v)
-		v = tostring(v)
-		for _, val in ipairs(args) do
-			-- once meet one, false
-			if tostring(val) == v then
-				return false
-			end
-		end
-
-		return true
-	end
-	return t
-end
-
-]=]
 
 
