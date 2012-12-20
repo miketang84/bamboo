@@ -149,7 +149,8 @@ local ASSERT_PROMPTS = {
 
 local check = function (statement, atfunc, prompt_key, ...)
 	local prompt_str = ASSERT_PROMPTS[prompt_key] or prompt_key
-	local assert_msg = pcall(string.format, prompt_str, ...) or ''
+	local s, assert_msg = pcall(string.format, prompt_str, ...)
+	if not assert_msg then assert_msg = '' end
 	assert(statement, string.format('[Error] @%s', atfunc) .. assert_msg)
 end
 
@@ -278,7 +279,7 @@ local delFromRedis = function (self, id)
 	local index_key = getIndexKey(self)
 
 	local fields_string = cmsgpack.pack(self.__fields)
-	local data_list = db:eval(snippets.SNIPPET_delInstanceAndForeigns, 0, model_name, id, fields_string)
+	local data_list = db:eval(snippets.SNIPPET_delInstanceAndForeignKeys, 0, model_name, id, fields_string)
 
 end
 bamboo.internals['delFromRedis'] = delFromRedis
@@ -289,7 +290,7 @@ local fakeDelFromRedis = function (self, id)
 	local index_key = getIndexKey(self)
 
 	local fields_string = cmsgpack.pack(self.__fields)
-	local data_list = db:eval(snippets.SNIPPET_fakeDelInstanceAndForeigns, 0, model_name, id, fields_string)
+	local data_list = db:eval(snippets.SNIPPET_fakeDelInstanceAndForeignKeys, 0, model_name, id, fields_string, dcollector)
 
 end
 bamboo.internals['fakeDelFromRedis'] = fakeDelFromRedis
@@ -720,36 +721,47 @@ Model = Object:extend {
 	
 	-- delete self instance object
 	-- self can be instance or query set
-	delById = function (self, ids)
+	delById = function (self, id)
 		I_AM_CLASS(self)
 		if bamboo.config.use_fake_deletion == true then
-			return self:fakeDelById(ids)
+			return self:fakeDelById(id)
 		else
-			return self:trueDelById(ids)
+			return self:trueDelById(id)
 		end
 	end;
 
-	fakeDelById = function (self, ids)
-		local idtype = type(ids)
-		if idtype == 'table' then
-			for _, v in ipairs(ids) do
-				v = tostring(v)
-				fakeDelFromRedis(self, v)
-			end
+	fakeDelById = function (self, id)
+		fakeDelFromRedis(self, tostring(id))
+	end;
+
+	trueDelById = function (self, id)
+		delFromRedis(self, tostring(id))
+	end;
+
+	-- delete self instance object
+	-- self can be instance or query set
+	delByIds = function (self, ids)
+		I_AM_CLASS(self)
+		if bamboo.config.use_fake_deletion == true then
+			return self:fakeDelByIds(ids)
 		else
-			fakeDelFromRedis(self, tostring(ids))
+			return self:trueDelByIds(ids)
 		end
 	end;
 
-	trueDelById = function (self, ids)
-		local idtype = type(ids)
-		if idtype == 'table' then
-			for _, v in ipairs(ids) do
-				v = tostring(v)
-				delFromRedis(self, v)
-			end
-		else
-			delFromRedis(self, tostring(ids))
+	fakeDelByIds = function (self, ids)
+		assert(type(ids) == 'table', '[Error] @fakeDelByIds: ids should be table.')
+		for _, v in ipairs(ids) do
+			v = tostring(v)
+			fakeDelFromRedis(self, v)
+		end
+	end;
+
+	trueDelByIds = function (self, ids)
+		assert(type(ids) == 'table', '[Error] @trueDelByIds: ids should be table.')
+		for _, v in ipairs(ids) do
+			v = tostring(v)
+			delFromRedis(self, v)
 		end
 	end;
 
@@ -845,16 +857,12 @@ Model = Object:extend {
 	fakeDel = function (self)
 		-- if self is query set
 		fakeDelFromRedis(self)
-
-		self = nil
 	end;
 
 	-- delete self instance object
 	-- self can be instance or query set
 	trueDel = function (self)
 		delFromRedis(self)
-
-		self = nil
 	end;
 
 
@@ -894,7 +902,8 @@ Model = Object:extend {
 	-- return self
 	addForeign = function (self, field, obj)
 		I_AM_INSTANCE(self)
-		assert(type(obj) == 'table' or type(obj) == 'string', '[Error] "obj" should be table or string.')
+		assert(type(field), '[Error] @addForeign: "field" is nessesary.')
+		assert(type(obj) == 'table' or type(obj) == 'string', '[Error] @addForeign: "obj" should be table or string.')
 
 		local fdt = self.__fields[field]
 		local store_type = fdt.st
@@ -928,10 +937,13 @@ Model = Object:extend {
 			new_id = obj.id
 		end
 
-		db:eval(snippets.SNIPPET_addForeign, 0, model_name, id, field, new_id, cmsgpack.pack(fdt))
+		local timestamp = tostring(socket.gettime())
+		local ret = db:eval(snippets.SNIPPET_addForeign, 0, self.__name, self.id, field, new_id, cmsgpack.pack(fdt), timestamp)
 
-		-- update the lastmodified_time
-		self.lastmodified_time = socket.gettime()
+		if ret then
+			-- update the lastmodified_time
+			self.lastmodified_time = timestamp
+		end
 
 --[[
 		if isUsingRuleIndex() then
@@ -944,8 +956,10 @@ Model = Object:extend {
 	--
 	--
 	--
-	getForeign = function (self, field, start, stop, is_rev, onlyids)
+	getForeign = function (self, field, start, stop, is_rev, extra_params)
 		I_AM_INSTANCE(self)
+		assert(type(field) == 'string', '[Error] @getForeign: param "field" is missing.')
+		
 		local fdt = self.__fields[field]
 		local store_type = fdt.st
 		local foreign_type = fdt.foreign
@@ -964,7 +978,7 @@ Model = Object:extend {
 			
 			-- normal case
 			local model = getModelByName(foreign_type)
-			return model:getById(self[filed])
+			return model:getById(self[field])
 			-- 	if not isValidInstance(obj) then
 			-- 		print('[Warning] invalid ONE foreign id or object for field: '..field)
 
@@ -979,13 +993,35 @@ Model = Object:extend {
 			-- 		return obj
 			-- 	end
 			-- end
+
 		else
-			if isFalse(self[field]) then return QuerySet() end
-
+			local is_rev = is_rev or ''
 			local istart, istop = transEdgeFromLuaToRedis(start, stop)
-			db:eval(snippets.SNIPPET_getForeign, 0, self.__name, self.id, field, cmsgpack.pack(fdt), istart, istop, is_rev, onlyids)
+			local data = db:eval(snippets.SNIPPET_getForeign, 0, 
+								 self.__name, 
+								 self.id, 
+								 field, 
+								 cmsgpack.pack(fdt), 
+								 istart, 
+								 istop, 
+								 is_rev)
 
+			if foreign_type == 'ANYSTRING' then
+				return data
+			elseif foreign_type == 'UNFIXED' then
+				local modelids = data[1]
+				local data_list = data[2]
+				local objs = QuerySet()
+				for i, modelid in ipairs(modelids) do
+					local model_name, id = modelid:match('(%w+):(%d+)')
+					local model = getModelByName(model_name)
+					table.insert(objs, makeObject(model, data_list[i]))
+				end
 
+				return objs
+			else
+				return makeObjects(getModelByName(foreign_type), data)
+			end
 
 			-- local key = getFieldPattern(self, field)
 
@@ -1010,7 +1046,6 @@ Model = Object:extend {
 				end
 			end
 --]]
-			return objs
 		end
 	end;
 
@@ -1147,7 +1182,7 @@ Model = Object:extend {
 	end;
 
 	-- check whether obj is already in foreign list
-	hasForeign = function (self, field, obj)
+	hasForeignMember = function (self, field, obj)
 		I_AM_INSTANCE(self)
 
 		local fdt = self.__fields[field]
@@ -1266,6 +1301,18 @@ Model = Object:extend {
 		end
 	end;
 
+	getForeignKey = function (self, field)
+		I_AM_CLASS_OR_INSTANCE(self)
+		assert(type(field) == 'string')
+
+		local fdt = self.__fields[field]
+		if fdt and fdt.foreign then 
+			return string.format('%s:%s:%s', self.__name, self.id, field)
+		else 
+			return nil
+		end
+	end;
+
 
 	------------------------------------------------------------------------
 	-- misc APIs
@@ -1294,6 +1341,7 @@ Model.getByIndex = Model.getByPrimaryKey
 Model.classname = Model.getClassName
 Model.clearForeign = Model.delForeign
 Model.deepClearForeign = Model.deepDelForeign
+Model.hasForeign = Model.hasForeignMember
 
 
 return Model

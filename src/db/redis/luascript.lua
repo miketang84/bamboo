@@ -291,15 +291,15 @@ end
 return obj_list
 ]=]
 
-dbsnippets.set.SNIPPET_delInstanceAndForeigns = 
+dbsnippets.set.SNIPPET_delInstanceAndForeignKeys = 
 [=[
 local model_name, id, fields_string = unpack(ARGV);								 
 local fields = cmsgpack.unpack(fields_string)
 local index_key = string.format('%s:%s', model_name, '__index')
 local instance_key = string.format('%s:%s', model_name, id)
 local foreign_key
-for k, fld in pairs(fields) do
-	if fld and fld.foreign then
+for k, fdt in pairs(fields) do
+	if fdt and fdt.foreign then
 		foreign_key = string.format('%s:%s', instance_key, k)
 		redis.call('DEL', foreign_key)
 	end
@@ -309,15 +309,15 @@ redis.call('DEL', instance_key)
 redis.call('ZREMRANGEBYSCORE', index_key, id, id)
 ]=]
 
-dbsnippets.set.SNIPPET_fakeDelInstanceAndForeigns = 
+dbsnippets.set.SNIPPET_fakeDelInstanceAndForeignKeys = 
 [=[
 local model_name, id, fields_string, rubpot_key = unpack(ARGV);								 
 local fields = cmsgpack.unpack(fields_string)
 local index_key = string.format('%s:%s', model_name, '__index')
 local instance_key = string.format('%s:%s', model_name, id)
 local foreign_key
-for k, fld in pairs(fields) do
-	if fld and fld.foreign then
+for k, fdt in pairs(fields) do
+	if fdt and fdt.foreign then
 		foreign_key = string.format('%s:%s', instance_key, k)
 		if redis.call('EXISTS', foreign_key) then
 			redis.call('RENAME', foreign_key, 'DELETED:' .. foreign_key)
@@ -609,7 +609,7 @@ return true
 
 dbsnippets.set.SNIPPET_addForeign = 
 [[
-local model_name, id, field, new_id, fdt_str = unpack(ARGV)
+local model_name, id, field, new_id, fdt_str, timestamp = unpack(ARGV)
 local fdt = cmsgpack.unpack(fdt_str)
 local slen = fdt.fifolen or 100
 local foreign_type = fdt.foreign
@@ -623,22 +623,21 @@ if store_type == 'ONE' then
 
 elseif store_type == 'MANY' then
 	-- for MANY,  
-	redis.call('ZADD', fkey, os.time(), new_id)
+	redis.call('ZADD', fkey, timestamp, new_id)
 
 elseif store_type == 'FIFO' then
+	-- if FIFO is full, push this element from right, pop one old from left
+
 	local len = redis.call('LLEN', fkey)
-	local slen = fdt.fifolen or 100
 	if len >= slen then
-		-- if FIFO is full, push this element from right, pop one old from left
 		redis.call('LPOP', fkey)
 	end
 	redis.call('RPUSH', fkey, new_id)
 
 elseif store_type == 'ZFIFO' then
+	redis.call('ZADD', fkey, timestamp, new_id)
 	local n = redis.call('ZCARD', fkey)
-	redis.call('ZADD', fkey, n+1, new_id)
-	local nn = redis.call('ZCARD', fkey)
-	if nn > slen then
+	if n > slen then
 		-- remove the oldest one
 		redis.call('ZREMRANGEBYRANK', fkey, 0, 0)
 	end
@@ -647,14 +646,19 @@ elseif store_type == 'LIST' then
 	redis.call('RPUSH', fkey, new_id)
 end
 
-redis.call('HSET', key, 'lastmodified_time', os.time())
+redis.call('HSET', key, 'lastmodified_time', timestamp)
+
+return true
 ]]
 
 
 dbsnippets.set.SNIPPET_getForeign = 
 [[
+
+redis.log(redis.LOG_WARNING, 'entern getForeign')
+
 -- here, start and stop is the transformed location index for redis, not lua
-local model_name, id, field, fdt_str, start, stop, is_rev, onlyids = unpack(ARGV)
+local model_name, id, field, fdt_str, start, stop, is_rev = unpack(ARGV)
 
 local fdt = cmsgpack.unpack(fdt_str)
 local slen = fdt.fifolen or 100
@@ -663,50 +667,45 @@ local store_type = fdt.st
 local key = string.format('%s:%s', model_name, id)
 local fkey = string.format('%s:%s:%s', model_name, id, field)
 
+redis.log(redis.LOG_WARNING, 'ready to start getForeign')
+
+
 local r_data = {}
+local data
 if store_type == 'MANY' or store_type == 'ZFIFO' then
-	local data = redis.call('ZRANGE', fkey, start, stop)
-
-	if is_rev == 'rev' then
-		for i = #data, 1, -1 do
-			table.insert(r_data, data[i])
-		end
-	else
-		for i = 1, #data do
-			table.insert(r_data, data[i])
-		end
-	end
-
+	data = redis.call('ZRANGE', fkey, start, stop)
 elseif store_type == 'LIST' or store_type == 'FIFO' then
-	local data = redis.call('LRANGE', fkey, start, stop)
-
-	if is_rev == 'rev' then
-		for i = #data, 1, -1 do
-			table.insert(r_data, data[i])
-		end
-	else
-		r_data = data
-	end
+	data = redis.call('LRANGE', fkey, start, stop)
 end
 
-if onlyids == 'onlyids' then return r_data end
+if is_rev == 'rev' then
+	for i = #data, 1, -1 do
+		table.insert(r_data, data[i])
+	end
+else
+	r_data = data
+end
+
+redis.log(redis.LOG_WARNING, #r_data)
+
 
 local objs = {}
 if foreign_type == 'ANYSTRING' then	return r_data end
 if foreign_type == 'UNFIXED' then 
-	for i, id in ipairs(ids) do
+	for i, id in ipairs(r_data) do
 		table.insert(objs, redis.call('HGETALL', id))
 	end
-	return objs
+	return {r_data, objs}
 end
 
 -- the normal case
-for i, id in ipairs(ids) do
-	local okey = string.format('%s:%s', foreign_type, id)
-	table.insert(objs, redis.call('HGETALL', okey))
+for i, id in ipairs(r_data) do
+	local ikey = string.format('%s:%s', foreign_type, id)
+	table.insert(objs, redis.call('HGETALL', ikey))
 end
 
 return objs
+
 ]]
 
 

@@ -13,6 +13,7 @@ local Set = require 'lglib.set'
 local List = require 'lglib.list'
 local FieldType = require 'bamboo.mvm.prototype'
 require 'bamboo.globals'
+-- require 'bamboo.model'
 local cmsgpack = require 'cmsgpack'
 
 config = {}
