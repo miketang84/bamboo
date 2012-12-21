@@ -99,9 +99,10 @@ function del( key )
 end
 
 function has(key, obj)
+	-- Need To Optimaze
 	local len = db:llen(key)
 	for i = 0, len-1 do
-		local elem = db:lindex(i)
+		local elem = db:lindex(key, i)
 		if obj == elem then
 			return true
 		end

@@ -229,6 +229,7 @@ local makeObject = function (self, data)
 
 	-- data is the form of {key1, val1, key2, val2, key3, val3}
 	-- change form
+	if #data == 0 then return nil end
 	local hash_data = {}
 	for i = 1, #data, 2 do
 		hash_data[data[i]] = data[i+1]
@@ -577,6 +578,7 @@ Model = Object:extend {
 			ffields[field] = fields[field]
 		end
 
+		print(self.__name, id, cmsgpack.pack(ffields))
 		local data = db:eval(snippets.SNIPPET_getByIdWithForeigns, 0, self.__name, id, cmsgpack.pack(ffields))
 		return makeObject(self, data)
 	end;
@@ -941,6 +943,9 @@ Model = Object:extend {
 		local ret = db:eval(snippets.SNIPPET_addForeign, 0, self.__name, self.id, field, new_id, cmsgpack.pack(fdt), timestamp)
 
 		if ret then
+			if store_type == 'ONE' then
+				self[field] = new_id
+			end
 			-- update the lastmodified_time
 			self.lastmodified_time = timestamp
 		end
@@ -1059,7 +1064,7 @@ Model = Object:extend {
 		local store_type = fdt.st
 		local foreign_type = fdt.foreign
 
-		check(not isFalse(obj), 
+		check(isTrue(obj), 
 			  'delForeign', "obj %s is invalid!", tostring(obj))
 		check(fdt, 
 			  'delForeign', 'undefined_field', field)
@@ -1073,8 +1078,6 @@ Model = Object:extend {
 			or foreign_type == 'UNFIXED'
 			or (type(obj) == 'table' and foreign_type == getClassName(obj)),
 			'delForeign', 'not_matched_foreign_type', field, getClassName(obj) or tostring(obj))
-
-		if isFalse(self[field]) then return nil end
 
 		local new_id
 		if isNumOrStr(obj) then
@@ -1201,15 +1204,13 @@ Model = Object:extend {
 			assert(obj.id,	"[Error] This object doesn't contain id, it's not a valid object!")
 		end
 
-		if isFalse(self[field]) then return nil end
-
 		local new_id
 		if isNumOrStr(obj) then
 			-- obj is id or anystring
 			new_id = tostring(obj)
 		else
 			if foreign_type == 'UNFIXED' then
-				new_id = getNameIdPattern(self)
+				new_id = getNameIdPattern(obj)
 			else
 				new_id = tostring(obj.id)
 			end

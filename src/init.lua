@@ -360,10 +360,10 @@ registerModel = function (model)
 		MODEL_LIST[model_name] = model
 
 		-- set metatable for each field
-		for field, fdt in pairs(model.__fields) do
-			setmetatable(fdt, {__index = FieldType[fdt.widget_type or 'text']})
-			fdt:init()
-		end
+		-- for field, fdt in pairs(model.__fields) do
+		-- 	setmetatable(fdt, {__index = FieldType[fdt.widget_type or 'text']})
+		-- 	fdt:init()
+		-- end
 		
 		-- check if ask fulltext index
 		model['__fulltext_index_fields'] = {}

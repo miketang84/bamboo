@@ -362,14 +362,15 @@ return obj_list
 
 dbsnippets.set.SNIPPET_getByIdWithForeigns = 
 [=[
+
 local model_name, id, ffields_str = unpack(ARGV)
 local key = string.format('%s:%s', model_name, id)
 local ffields = cmsgpack.unpack(ffields_str)
 
-if not redis.call('EXIST', key) then return false end
+if not redis.call('EXISTS', key) then return false end
 local data = redis.call('HGETALL', key)
 local hash_data = {}
-for i=1, #data do
+for i=1, #data, 2 do
 	hash_data[data[i]] = data[i+1]
 end
 
@@ -381,20 +382,24 @@ for field, fdt in pairs(ffields) do
 
 	-- for ONE case
 	if value then
-		if store_type == 'UNFIXED' then
+		if foreign_type == 'UNFIXED' then
+
 			hash_data[field] = redis.call('HGETALL', value)
-		elseif store_type ~= 'ANYSTRING' then
+
+		elseif foreign_type ~= 'ANYSTRING' then
 			local target_key = string.format('%s:%s', foreign_type, value)
 			hash_data[field] = redis.call('HGETALL', target_key)
 		end
 	else
-		if sotre_type == 'MANY' or store_type = 'ZFIFO' then
+		if store_type == 'MANY' or store_type == 'ZFIFO' then
 			hash_data[field] = redis.call('ZRANGE', fkey, 0, -1)
-		elseif sotre_type == 'LIST' or store_type = 'FIFO' then
+		elseif store_type == 'LIST' or store_type == 'FIFO' then
 			hash_data[field] = redis.call('LRANGE', fkey, 0, -1)
 		end
 	end
+
 end
+
 
 local r_data = {}
 for k, v in pairs(hash_data) do
@@ -414,10 +419,11 @@ local ffields = cmsgpack.unpack(ffields_str)
 local r_data = {}
 for _, id in ipairs(ids) do
 	local key = string.format('%s:%s', model_name, id)
+
 	if redis.call('EXISTS', key) then
 		local data = redis.call('HGETALL', key)
 		local hash_data = {}
-		for i=1, #data do
+		for i=1, #data, 2 do
 			hash_data[data[i]] = data[i+1]
 		end
 
@@ -430,29 +436,29 @@ for _, id in ipairs(ids) do
 			-- for ONE case
 			if value then
 				
-				if store_type == 'UNFIXED' then
+				if foreign_type == 'UNFIXED' then
 					hash_data[field] = redis.call('HGETALL', value)
-				elseif store_type ~= 'ANYSTRING' then
+				elseif foreign_type ~= 'ANYSTRING' then
 					local target_key = string.format('%s:%s', foreign_type, value)
 					hash_data[field] = redis.call('HGETALL', target_key)
 				end
 			else
-				if sotre_type == 'MANY' or store_type = 'ZFIFO' then
+				if store_type == 'MANY' or store_type == 'ZFIFO' then
 					hash_data[field] = redis.call('ZRANGE', fkey, 0, -1)
-				elseif sotre_type == 'LIST' or store_type = 'FIFO' then
+				elseif store_type == 'LIST' or store_type == 'FIFO' then
 					hash_data[field] = redis.call('LRANGE', fkey, 0, -1)
 				end
 			end
 		end
-	end
 
-	local r_obj = {}
-	for k, v in pairs(hash_data) do
-		table.insert(r_obj, k)
-		table.insert(r_obj, v)
-	end
+		local r_obj = {}
+		for k, v in pairs(hash_data) do
+			table.insert(r_obj, k)
+			table.insert(r_obj, v)
+		end
 
-	table.insert(r_data, r_obj)
+		table.insert(r_data, r_obj)
+	end
 end
 
 return r_data

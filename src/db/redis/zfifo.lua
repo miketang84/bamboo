@@ -93,5 +93,5 @@ end
 
 function has(key, obj)
 
-	return rdzset.have(key, obj)
+	return rdzset.has(key, obj)
 end

@@ -240,10 +240,10 @@ end;
 	
 QuerySetMeta.fakeDel = function (self)
 	I_AM_QUERY_SET(self)
-	local fakedelFromRedis = bamboo.internals.fakedelFromRedis
+	local fakeDelFromRedis = bamboo.internals.fakeDelFromRedis
 	
 	for _, v in ipairs(self) do
-		fakedelFromRedis(v)
+		fakeDelFromRedis(v)
 		v = nil
 	end
 

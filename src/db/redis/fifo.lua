@@ -24,11 +24,11 @@ function push (key, val, length)
 	local len = db:llen(key)
 	
 	if len < length then
-		db:lpush(key, val)
+		db:rpush(key, val)
 	else
 		-- if FIFO is full, push this element from left, pop one old from right
-		db:rpop(key)
-		db:lpush(key, val)
+		db:lpop(key)
+		db:rpush(key, val)
 	end
 		
 end
@@ -63,6 +63,6 @@ function fakedel(key)
 end
 
 function has(key, obj)
-	return rdlist.have(key, obj)
+	return rdlist.has(key, obj)
 end
 
