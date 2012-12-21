@@ -485,8 +485,8 @@ Model = Object:extend {
 		end
 
 		self.id = self.id or t.id
-		self.created_time = self.created_time or t.created_time or socket.gettime()
-		self.lastmodified_time = self.lastmodified_time or t.lastmodified_time or socket.gettime()
+		self.created_time = self.created_time or t.created_time
+		self.lastmodified_time = self.lastmodified_time or t.lastmodified_time
 
 		return self
 	end;
@@ -568,6 +568,24 @@ Model = Object:extend {
 		return makeObjects(self, data)
 	end;
 	
+	getByIdFields = function (self, id, ...)
+		I_AM_CLASS(self)
+		if type(tonumber(id)) ~= 'number' then return nil end
+		local fields_args = {...}
+
+		local data = db:eval(snippets.SNIPPET_getByIdFields, 0, self.__name, id, cmsgpack.pack(fields_args))
+		return makeObject(self, data)
+	end;
+
+	getByIdsFields = function (self, ids, ...)
+		I_AM_CLASS(self)
+		assert(type(ids) == 'table')
+		local fields_args = {...}
+
+		local data = db:eval(snippets.SNIPPET_getByIdsFields, 0, self.__name, cmsgpack.pack(ids), cmsgpack.pack(fields_args))
+		return makeObjects(self, data)
+	end;
+	
 	getByIdWithForeigns = function (self, id, ...)
 		I_AM_CLASS(self)
 		if type(tonumber(id)) ~= 'number' then return nil end
@@ -578,7 +596,6 @@ Model = Object:extend {
 			ffields[field] = fields[field]
 		end
 
-		print(self.__name, id, cmsgpack.pack(ffields))
 		local data = db:eval(snippets.SNIPPET_getByIdWithForeigns, 0, self.__name, id, cmsgpack.pack(ffields))
 		return makeObject(self, data)
 	end;
@@ -801,11 +818,14 @@ Model = Object:extend {
 
 		local id = self.id or ''
 		local r_params = processBeforeSave(self, params)
-		r_params.lastmodified_time = socket.gettime()
+		local timestamp = socket.gettime()
+		r_params.created_time = timestamp
+		r_params.lastmodified_time = timestamp
 
 		local ret_id = db:eval(snippets.SNIPPET_save, 0, self.__name, id, self.__primarykey, cmsgpack.pack(r_params))
 
 		if ret_id then 
+			self.created_time = r_params.created_time
 			self.lastmodified_time = r_params.lastmodified_time
 			if id == '' then self.id = ret_id end
 		end

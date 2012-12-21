@@ -274,22 +274,6 @@ end
 return obj_list
 ]=]
 
-dbsnippets.set.SNIPPET_hmgetByIdsFields = 
-[=[
-local model_name, ids_string, fields_string = unpack(ARGV);								 
-local ids = cmsgpack.unpack(ids_string)
-local fields = cmsgpack.unpack(fields_string)
-local obj_list = {}
-for i, id in ipairs(ids) do
-	local key = ('%s:%s'):format(model_name, id)
-	local obj = redis.call('HMGET', key, unpack(fields))
-	table.insert(obj_list, obj)
-end
-
--- here, obj_list is the form of 
--- {{key1, val1, key2, val2}, {key1, val1, key2, val2}, {...}}
-return obj_list
-]=]
 
 dbsnippets.set.SNIPPET_delInstanceAndForeignKeys = 
 [=[
@@ -333,6 +317,45 @@ redis.call('ZADD', rubpot_key, n+1, instance_key)
 
 ]=]
 
+
+dbsnippets.set.SNIPPET_getSession = 
+[[
+local SPREFIX = 'Session:'
+local session_id, expiration = unpack(ARGV)
+local session_key = SPREFIX..session_id
+
+if not redis.call('HEXISTS', session_key, 'session_id') then
+	redis.call('HSET', session_key, 'session_id', session_id)
+end
+
+local session = redis.call('HGETALL', session_key)
+local r_data = {}
+for i = 1, #session, 2 do
+	local k = session[i]
+	local v = session[i+1]
+	local ext_key
+
+	if v == "__list__" then
+		ext_key = string.format("%s:%s:list", session_key, k)
+		v = redis.call('LRANGE', ext_key, 0, -1)
+	elseif v == "__set__" then
+		ext_key = string.format("%s:%s:set", session_key, k)
+		v = redis.call('SMEMBERS', ext_key)
+	elseif v == "__zset__" then
+		ext_key = string.format("%s:%s:zset", session_key, k)
+		v = redis.call('ZRANGE', ext_key, 0, -1)
+	end
+
+	table.insert(r_data, k)
+	table.insert(r_data, v)
+end
+
+redis.call('EXPIRE', session_key, expiration)
+
+return r_data
+]]
+
+
 dbsnippets.set.SNIPPET_getById = 
 [[
 local model_name, id = unpack(ARGV)
@@ -359,6 +382,45 @@ return obj_list
 
 ]=]
 
+dbsnippets.set.SNIPPET_getByIdFields = 
+[=[
+local model_name, id, fields_string = unpack(ARGV)								 
+local fields = cmsgpack.unpack(fields_string)
+local key = string.format('%s:%s', model_name, id)
+redis.log(redis.LOG_WARNING, fields[1])
+local data = redis.call('HMGET', key, unpack(fields))
+
+local obj = {}
+for i, field in ipairs(fields) do
+	table.insert(obj, field)
+	table.insert(obj, data[i])
+end
+
+return obj
+]=]
+
+
+dbsnippets.set.SNIPPET_getByIdsFields = 
+[=[
+local model_name, ids_string, fields_string = unpack(ARGV);								 
+local ids = cmsgpack.unpack(ids_string)
+local fields = cmsgpack.unpack(fields_string)
+local obj_list = {}
+for _, id in ipairs(ids) do
+	local key = ('%s:%s'):format(model_name, id)
+	local data = redis.call('HMGET', key, unpack(fields))
+
+	local obj = {}
+	for i, field in ipairs(fields) do
+		table.insert(obj, field)
+		table.insert(obj, data[i])
+	end
+
+	table.insert(obj_list, obj)
+end
+
+return obj_list
+]=]
 
 dbsnippets.set.SNIPPET_getByIdWithForeigns = 
 [=[
