@@ -5,7 +5,6 @@ local cmsgpack = require 'cmsgpack'
 local socket = require 'socket'
 
 local mih = require 'bamboo.model-indexhash'
-require 'bamboo.queryset'
 
 local tinsert, tremove = table.insert, table.remove
 local format = string.format
@@ -113,6 +112,49 @@ local rule_query_result_pattern = '_RULE:%s:%s'   -- _RULE:Model:num
 local rule_index_query_sortby_divider = ' |^|^| '
 local rule_index_divider = ' ^_^ '
 local Model
+
+
+local checkLogicRelation = function (obj, query_args, logic)
+	-- NOTE: query_args can't contain [1]
+	-- here, obj may be object or string
+	-- when obj is string, query_args must be function;
+	-- when query_args is table, obj must be table, and must be real object.
+	local logic_choice = logic == 'and'
+	local flag = logic_choice
+	if type(query_args) == 'table' then
+--		local fields = model and model.__fields or obj.__fields
+		local fields = obj.__fields
+		for k, v in pairs(query_args) do
+			-- to redundant query condition, once meet, jump immediately
+			if not fields[k] then flag=false; break end
+
+			if type(v) == 'function' then
+				flag = v(obj[k])
+			else
+				flag = (obj[k] == v)
+			end
+			---------------------------------------------------------------
+			-- logic_choice,       flag,      action,          append?
+			---------------------------------------------------------------
+			-- true (and)          true       next field       --
+			-- true (and)          false      break            no
+			-- false (or)          true       break            yes
+			-- false (or)          false      next field       --
+			---------------------------------------------------------------
+			if logic_choice ~= flag then break end
+		end
+	else
+		-- call this query args function
+		flag = query_args(obj)
+	end
+
+	return flag
+end
+bamboo.internals.checkLogicRelation = checkLogicRelation
+
+
+require 'bamboo.queryset'
+
 
 -- -- switches
 -- -- can be called by instance and class
@@ -298,42 +340,6 @@ bamboo.internals['fakeDelFromRedis'] = fakeDelFromRedis
 
 
 
-local checkLogicRelation = function (obj, query_args, logic_choice, model)
-	-- NOTE: query_args can't contain [1]
-	-- here, obj may be object or string
-	-- when obj is string, query_args must be function;
-	-- when query_args is table, obj must be table, and must be real object.
-	local flag = logic_choice
-	if type(query_args) == 'table' then
-		local fields = model and model.__fields or obj.__fields
-		for k, v in pairs(query_args) do
-			-- to redundant query condition, once meet, jump immediately
-			if not fields[k] then flag=false; break end
-
-			if type(v) == 'function' then
-				flag = v(obj[k])
-			else
-				flag = (obj[k] == v)
-			end
-			---------------------------------------------------------------
-			-- logic_choice,       flag,      action,          append?
-			---------------------------------------------------------------
-			-- true (and)          true       next field       --
-			-- true (and)          false      break            no
-			-- false (or)          true       break            yes
-			-- false (or)          false      next field       --
-			---------------------------------------------------------------
-			if logic_choice ~= flag then break end
-		end
-	else
-		-- call this query args function
-		flag = query_args(obj)
-	end
-
-	return flag
-end
-bamboo.internals.checkLogicRelation = checkLogicRelation
-
 
 function luasplit(str, pat)
    local t = {}
@@ -361,12 +367,12 @@ local collectQueryFunctionUpvalues = function (func)
 		local name, v = debug.getupvalue(func, i)
 		if not name then break end
 		local ctype = type(v)
-		local table_has_metatable = false
-		if ctype == 'table' then
-			table_has_metatable = getmetatable(v) and true or false
-		end
+		-- local table_has_metatable = false
+		-- if ctype == 'table' then
+		-- 	table_has_metatable = getmetatable(v) and true or false
+		-- end
 		-- because we could not collect the upvalues whose type is 'table', print warning here
-		if type(v) == 'function' or table_has_metatable then
+		if type(v) == 'function' then
 			return false
 		end
 
@@ -682,7 +688,8 @@ Model = Object:extend {
 		I_AM_CLASS(self)
 
 		local logic = ''
-		local fields_string = cmsgpack.pack(self.__fields)
+		local fields = self.__fields
+		local fields_string = cmsgpack.pack(fields)
 		-- XXX: here, we only consider table first
 		local query_string
 		local ctype = type(query_args)
@@ -697,7 +704,23 @@ Model = Object:extend {
 			error("[Error] no valid query args type @filter 'query_args'.")
 		end
 		
-		local data = db:eval(snippets.SNIPPET_get, 0, self.__name, fields_string, ctype, query_string, logic) 
+		local ltype = type(limit_params)
+		local find_rev = ''
+		local start_point = ''
+		local ffields = {}
+		if ltype == 'string' and limit_params == 'rev' then find_rev = 'rev' end
+		if ltype == 'table' then
+			find_rev = limit_params.find_rev or ''
+			local ffields_args = limit_params.foreigns
+			if ffields_args and #ffields_args > 0 then
+				for _, field in ipairs(ffields_args) do
+					ffields[field] = fields[field]
+				end
+			end
+			start_point = limit_params.start_point or ''
+		end
+
+		local data = db:eval(snippets.SNIPPET_get, 0, self.__name, fields_string, ctype, query_string, logic, cmsgpack.pack(ffields), start_point, find_rev) 
 		
 		if data then return makeObject(self, data) end
 
@@ -710,11 +733,12 @@ Model = Object:extend {
 	-- @param 
 	-- @param 
 	-- @return
-	filter = function (self, query_args, limit_params)
+	filter = function (self, query_args, start, stop, is_rev)
 		I_AM_CLASS(self)
 		assert(type(query_args) == 'table' or type(query_args) == 'function', 
 			'[Error] the query_args passed to filter must be table or function.')
 
+		local fields = self.__fields
 		local logic = query_args[1] == 'or' and 'or' or 'and'
 		local fields_string = cmsgpack.pack(self.__fields)
 		-- XXX: here, we only consider table first
@@ -730,11 +754,35 @@ Model = Object:extend {
 			error("[Error] no valid query args type @filter 'query_args'.")
 		end
 
-		local data_list = db:eval(snippets.SNIPPET_filter, 0, self.__name, fields_string, ctype, query_string, logic) 
-		
-		if data_list then return makeObjects(self, data_list) end
+		local limit_params
+		if start then 
+			local l3type = type(start)
+			assert(l3type == 'number' or l3type == 'table', 
+				   '[Error] @filter - #3 must be number or table.') 
+			if l3type == 'table' then limit_params = start end
+		end
 
-		return QuerySet()
+		local start = start or ''
+		local stop = stop or ''
+		local is_rev = is_rev or ''
+		local start_point, find_rev, length = '', '', ''
+		if limit_params then
+			start = limit_params.start or ''
+			stop = limit_params.stop or ''
+			is_rev = limit_params.is_rev or ''
+			
+			start_point = limit_params.start_point or ''
+			find_rev = limit_params.find_rev or ''
+			length = limit_params.length or ''
+		end
+
+		local r_data = db:eval(snippets.SNIPPET_filter, 0, self.__name, fields_string, ctype, query_string, logic, start, stop, is_rev, cmsgpack.pack(ffields_str), start_point, length, find_rev) 
+		
+		local data_list = r_data[1] 
+		local num = r_data[2]
+		if data_list then return makeObjects(self, data_list), num end
+
+		return QuerySet(), 0
 
 	end;
 	
@@ -1363,7 +1411,6 @@ Model.classname = Model.getClassName
 Model.clearForeign = Model.delForeign
 Model.deepClearForeign = Model.deepDelForeign
 Model.hasForeign = Model.hasForeignMember
-
 
 return Model
 

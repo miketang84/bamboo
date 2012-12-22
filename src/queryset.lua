@@ -4,129 +4,147 @@ local QuerySetMeta = {__spectype='QuerySet'}
 -- require neccessary methods
 local checkLogicRelation = bamboo.internals.checkLogicRelation
 
+local walkcheck = function (objs, query_args, logic)
+	local query_set = QuerySet()
+	for i, obj in ipairs(objs) do
+		-- check the object's legalery, only act on valid object
+		local flag = checkLogicRelation(obj, query_args, logic)
+
+		-- if walk to this line, means find one
+		if flag then
+			table.insert(query_set, obj)
+		end
+	end
+
+	return query_set
+end
 
 QuerySetMeta.get = function (self, query_args, find_rev)
 	I_AM_QUERY_SET(self)
-
-	local checkRelation = function (obj)
-		-- logic check
-local checkLogicRelation = bamboo.internals.checkLogicRelation
-        
-		flag = checkLogicRelation(obj, query_args, logic == 'and')
-		if flag then return obj end
-
-		return nil
-	end
 	
+	local logic
+	local qtype = type(query_args)
+	if qtype == 'table' then
+		logic = query_args[1] == 'or' and 'or' or 'and'
+		query_args[1] = nil
+		assert( not query_args['id'], 
+			"[Error] query set doesn't support searching by id, please use getById.")
+	end
+
 	local obj
 	if find_rev == 'rev' then
 		for i=#self, 1, -1 do
-			return checkRelation(self[i])
+			obj = self[i]
+			local flag = checkLogicRelation(obj, query_args, logic)
+			if flag then return obj end
 		end
 	else
 		for i=1, #self do
-			return checkRelation(self[i])
+			obj = self[i]
+			local flag = checkLogicRelation(obj, query_args, logic)
+			if flag then return obj end
 		end
-		
 	end
 
-
-	
 end
 
-QuerySetMeta.filter = function (self, query_args, ...)
+QuerySetMeta.filter = function (self, query_args, start, stop, is_rev)
 	I_AM_QUERY_SET(self)
 	local objs = self
-	if #objs == 0 then return QuerySet() end
+	if #objs == 0 then return objs, 0 end
 
-	assert(type(query_args) == 'table' or type(query_args) == 'function', 
+	local qtype = type(query_args)
+	assert(qtype == 'table' or qtype == 'function', 
 		'[Error] the query_args passed to filter must be table or function.')
-	local no_sort_rule
-	-- regular the args
-	local sort_field, sort_dir, sort_func, start, stop, is_rev
-	local first_arg = select(1, ...)
-	if type(first_arg) == 'function' then
-		sort_func = first_arg
-		start = select(2, ...)
-		stop = select(3, ...)
-		is_rev = select(4, ...)
-		no_sort_rule = false
-	elseif type(first_arg) == 'string' then
-		sort_field = first_arg
-		sort_dir = select(2, ...)
-		start = select(3, ...)
-		stop = select(4, ...)
-		is_rev = select(5, ...)
-		no_sort_rule = false
-	elseif type(first_arg) == 'number' then
-		start = first_arg
-		stop = select(2, ...)
-		is_rev = select(3, ...)
-		no_sort_rule = true
+
+	if stop then assert(type(stop) == 'number', '[Error] @filter - #4 must be number.') end
+	if is_rev then assert(type(is_rev) == 'string', '[Error] @filter - #5 must be string.') end
+
+	local limit_params
+	if start then 
+		local l3type = type(start)
+		assert(l3type == 'number' or l3type == 'table', 
+			   '[Error] @filter - #3 must be number or table.') 
+		if l3type == 'table' then limit_params = start end
 	end
 
-	if start then assert(type(start) == 'number', '[Error] @filter - start must be number.') end
-	if stop then assert(type(stop) == 'number', '[Error] @filter - stop must be number.') end
-	if is_rev then assert(type(is_rev) == 'string', '[Error] @filter - is_rev must be string.') end
+	local start_point, find_rev, length
+	if limit_params then
+		start = limit_params.start
+		stop = limit_params.stop
+		is_rev = limit_params.is_rev
+		
+		start_point = limit_params.start_point
+		find_rev = limit_params.find_rev
+		length = limit_params.length
+	end
 
-	local is_args_table = (type(query_args) == 'table')
+	-- process the query_args logical arguments
 	local logic = 'and'
-
-	-- create a query set
-	local query_set = QuerySet()
-
-	if is_args_table then
+	if qtype == 'table' then
 		assert( not query_args['id'], 
 			"[Error] query set doesn't support searching by id, please use getById.")
 
 		-- if query table is empty, treate it as all action, or slice action
-		if isFalse(query_args) and no_sort_rule then
-			return self:slice(start, stop, is_rev)
+		if isFalse(query_args) then
+			local qs = self:slice(start, stop, is_rev)
+			return qs, #qs
 		end
 		
 		if query_args[1] then
 			-- normalize the 'and' and 'or' logic
 			assert(query_args[1] == 'or' or query_args[1] == 'and',
 				"[Error] The logic should be 'and' or 'or', rather than: " .. tostring(query_args[1]))
-			if query_args[1] == 'or' then
-				logic = 'or'
-			end
+			if query_args[1] == 'or' then logic = 'or' end
 			query_args[1] = nil
 		end
 
 	end
 
-	local logic_choice = (logic == 'and')
-	-- walkcheck can process full object and partial object
-	local walkcheck = function (objs)
+	local query_set = QuerySet()
+
+	if start_point then
+		local counter = 0
+		local istop = #objs
 		for i, obj in ipairs(objs) do
 			-- check the object's legalery, only act on valid object
-local checkLogicRelation = bamboo.internals.checkLogicRelation
-			local flag = checkLogicRelation(obj, query_args, logic_choice)
+			local flag = checkLogicRelation(obj, query_args, logic)
+
+			-- if walk to this line, means find one
+			if flag then
+				table.insert(query_set, obj)
+				counter = counter + 1
+				if counter >= length then istop = i; break end
+			end
+		end
+		
+		return query_set, istop
+	else
+		for i, obj in ipairs(objs) do
+			-- check the object's legalery, only act on valid object
+			local flag = checkLogicRelation(obj, query_args, logic)
 
 			-- if walk to this line, means find one
 			if flag then
 				table.insert(query_set, obj)
 			end
 		end
+		
+		local totalnum = #query_set
+		-- slice
+		if start then
+			query_set = query_set:slice(start, stop, is_rev)
+		end
+
+		return query_set, totalnum
 	end
 
-	walkcheck(objs)
-	-- sort
-	if not no_sort_rule then
-		query_set = query_set:sortBy(sort_field or sort_func, sort_dir)
-	end
-	-- slice
-	if start or stop then
-		query_set = query_set:slice(start, stop, is_rev)
-	end
-
-	return query_set
 end
 
 
-QuerySetMeta.sortBy = function (self, ...)
+QuerySetMeta.orderBy = function (self, ...)
 	I_AM_QUERY_SET(self)
+
 	local field, dir, sort_func, field2, dir2, sort_func2
 	-- regular the args, 6 cases
 	local first_arg = select(1, ...)
@@ -172,7 +190,7 @@ QuerySetMeta.sortBy = function (self, ...)
 
 	-- secondary sort
 	if field2 then
-		checkType(field2, 'string')
+--		checkType(field2, 'string')
 
 		-- divide to parts
 		local work_t = {{self[1]}, }
@@ -277,5 +295,8 @@ QuerySet = function (list)
 
 	return query_set
 end
+
+QuerySetMeta.sortBy = QuerySetMeta.orderBy
+
 
 _G['QuerySet'] = QuerySet

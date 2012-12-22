@@ -2,6 +2,7 @@
 local db = BAMBOO_DB
 
 local getStoreModule = bamboo.internals.getStoreModule
+local transEdgeFromLuaToRedis = bamboo.internals.transEdgeFromLuaToRedis
 
 local function getCustomKey(self, key)
 	return format('%s:custom:%s', self.__name, key)
@@ -27,7 +28,7 @@ return function ()
 		-- 2. getCustom
 		-- 3. delCustom
 		-- 4. existCustom
-		-- 5. updateCustom
+		-- 5. updateCustom  XXX
 		-- 6. addCustomMember
 		-- 7. removeCustomMember
 		-- 8. hasCustomMember
@@ -50,7 +51,7 @@ return function ()
 		-- if no this key, the value is 0 before performing the operation
 		incrCustom = function(self, key, step)
 			I_AM_CLASS_OR_INSTANCE(self)
-			checkType(key, 'string')
+--			checkType(key, 'string')
 			local custom_key = makeCustomKey(self, key)
 			db:incrby(custom_key,step or 1)
 			
@@ -59,7 +60,7 @@ return function ()
 		
 		decrCustom = function(self, key, step)
 			I_AM_CLASS_OR_INSTANCE(self)
-			checkType(key, 'string')
+--			checkType(key, 'string')
 			local custom_key = makeCustomKey(self, key)
 			db:decrby(custom_key,step or 1);
 			
@@ -71,14 +72,17 @@ return function ()
 		-- if fifo ,the scores is the length of the fifo
 		setCustom = function (self, key, val, st, scores)
 			I_AM_CLASS_OR_INSTANCE(self)
-			checkType(key, 'string')
-			
+--			checkType(key, 'string')
+			assert( type(key) == 'string', 
+					"[Error] @setCustom: 'key' should be string.")
+
 			local custom_key = makeCustomKey(self, key)		
 
 			if not st or st == 'string' then
 				assert( type(val) == 'string' or type(val) == 'number',
 						"[Error] @setCustom - In the string mode of setCustom, val should be string or number.")
-				rdstring.save(custom_key, val)
+				db:set(custom_key, val)
+--				rdstring.save(custom_key, val)
 			else
 				local store_module = getStoreModule(st)
 				store_module.save(custom_key, val, scores)
@@ -90,12 +94,15 @@ return function ()
 		setCustomQuerySet = function (self, key, query_set, scores)
 			I_AM_CLASS_OR_INSTANCE(self)
 			I_AM_QUERY_SET(query_set)
-			checkType(key, 'string')
+			assert( type(key) == 'string', 
+					"[Error] @setCustomQuerySet: 'key' should be string.")
+
+--			checkType(key, 'string')
 
 			if type(scores) == 'table' then
 				local ids = {}
 				for i, v in ipairs(query_set) do
-					tinsert(ids, v.id)
+					table.insert(ids, v.id)
 				end
 				self:setCustom(key, ids, 'zset', scores)
 			else
@@ -112,7 +119,7 @@ return function ()
 		--
 		getCustomKey = function (self, key)
 			I_AM_CLASS_OR_INSTANCE(self)
-			checkType(key, 'string')
+--			checkType(key, 'string')
 			local custom_key = makeCustomKey(self, key)
 
 			return custom_key, db:type(custom_key)
@@ -122,52 +129,46 @@ return function ()
 		-- compitable to old version, start is start or atype
 		getCustom = function (self, key, start, stop, is_rev)
 			I_AM_CLASS_OR_INSTANCE(self)
-			checkType(key, 'string')
+--			checkType(key, 'string')
 			
 			local custom_key = makeCustomKey(self, key)
 			if not db:exists(custom_key) then
-				local atype = start
-				print(("[Warning] @getCustom - Key %s doesn't exist!"):format(custom_key))
-				if not atype or atype == 'string' then return nil
-				elseif atype == 'list' then
-					return List()
-				else
-					-- TODO: need to seperate every type
-					return {}
-				end
+				print(("[Warning] @getCustom: Key %s doesn't exist!"):format(custom_key))
+				return nil
 			end
 
 			-- get the store type in redis
 			local store_type = db:type(custom_key)
 			local store_module = getStoreModule(store_type)
-			local ids, scores = store_module.retrieve(custom_key)
+			local istart, istop = transEdgeFromLuaToRedis(start, stop)
+			local ids, scores = store_module.retrieve(custom_key, istart, istop, is_rev)
 
-			if type(ids) == 'table' and (type(start)=='number' or stop) then
-				ids = ids:slice(start, stop, is_rev)
-				if type(scores) == 'table' then
-					scores = scores:slice(start, stop, is_rev)
-				end
-			end
+			-- if type(ids) == 'table' and (type(start)=='number' or stop) then
+			-- 	ids = ids:slice(start, stop, is_rev)
+			-- 	if type(scores) == 'table' then
+			-- 		scores = scores:slice(start, stop, is_rev)
+			-- 	end
+			-- end
 
 			return ids, scores
 		end;
 
 		getCustomQuerySet = function (self, key, start, stop, is_rev)
 			I_AM_CLASS_OR_INSTANCE(self)
-			checkType(key, 'string')
+--			checkType(key, 'string')
 			local query_set_ids, scores = self:getCustom(key, start, stop, is_rev)
 			if isFalse(query_set_ids) then
-				return QuerySet(), nil
+				return QuerySet(), scores
 			else
-				local query_set, nils = getFromRedisPipeline(self, query_set_ids)
+				local query_set = self:getByIds(query_set_ids)
 
-				if bamboo.config.auto_clear_index_when_get_failed then
-					if not isFalse(nils) then
-						for _, v in ipairs(nils) do
-							self:removeCustomMember(key, v)
-						end
-					end
-				end
+				-- if bamboo.config.auto_clear_index_when_get_failed then
+				-- 	if not isFalse(nils) then
+				-- 		for _, v in ipairs(nils) do
+				-- 			self:removeCustomMember(key, v)
+				-- 		end
+				-- 	end
+				-- end
 
 				return query_set, scores
 			end
@@ -175,7 +176,7 @@ return function ()
 
 		delCustom = function (self, key)
 			I_AM_CLASS_OR_INSTANCE(self)
-			checkType(key, 'string')
+--			checkType(key, 'string')
 			local custom_key = makeCustomKey(self, key)
 
 			return db:del(custom_key)
@@ -184,7 +185,7 @@ return function ()
 		-- check whether exist custom key
 		existCustom = function (self, key)
 			I_AM_CLASS_OR_INSTANCE(self)
-			checkType(key, 'string')
+--			checkType(key, 'string')
 			local custom_key = makeCustomKey(self, key)
 
 			if not db:exists(custom_key) then
@@ -194,23 +195,23 @@ return function ()
 			end
 		end;
 
-		-- XXX: this is a odd api, useless
-		-- TODO: add score argument appending
-		updateCustom = function (self, key, val)
-			I_AM_CLASS_OR_INSTANCE(self)
-			checkType(key, 'string')
-			local custom_key = makeCustomKey(self, key)		
+		-- -- XXX: this is a odd api, useless
+		-- -- TODO: add score argument appending
+		-- updateCustom = function (self, key, val)
+		-- 	I_AM_CLASS_OR_INSTANCE(self)
+		-- 	checkType(key, 'string')
+		-- 	local custom_key = makeCustomKey(self, key)		
 
-			if not db:exists(custom_key) then print('[Warning] @updateCustom - This custom key does not exist.'); return nil end
-			local store_type = db:type(custom_key)
-			local store_module = getStoreModule(store_type)
-			return store_module.update(custom_key, val)
+		-- 	if not db:exists(custom_key) then print('[Warning] @updateCustom - This custom key does not exist.'); return nil end
+		-- 	local store_type = db:type(custom_key)
+		-- 	local store_module = getStoreModule(store_type)
+		-- 	return store_module.update(custom_key, val)
 
-		end;
+		-- end;
 
 		removeCustomMember = function (self, key, val)
 			I_AM_CLASS_OR_INSTANCE(self)
-			checkType(key, 'string')
+--			checkType(key, 'string')
 			local custom_key = makeCustomKey(self, key)		
 
 			if not db:exists(custom_key) then print('[Warning] @removeCustomMember - This custom key does not exist.'); return nil end
@@ -222,11 +223,12 @@ return function ()
 
 		addCustomMember = function (self, key, val, st, score)
 			I_AM_CLASS_OR_INSTANCE(self)
-			checkType(key, 'string')
+--			checkType(key, 'string')
 			local custom_key = makeCustomKey(self, key)		
 
 			if not db:exists(custom_key) then print('[Warning] @addCustomMember - This custom key does not exist.'); end
-			local store_type = db:type(custom_key) ~= 'none' and db:type(custom_key) or st
+			local ctype = db:type(custom_key)
+			local store_type = ctype ~= 'none' and ctype or st
 			local store_module = getStoreModule(store_type)
 			return store_module.add(custom_key, val, score)
 
@@ -234,7 +236,7 @@ return function ()
 
 		hasCustomMember = function (self, key, mem)
 			I_AM_CLASS_OR_INSTANCE(self)
-			checkType(key, 'string')
+--			checkType(key, 'string')
 			local custom_key = makeCustomKey(self, key)		
 
 			if not db:exists(custom_key) then print('[Warning] @hasCustomMember - This custom key does not exist.'); return nil end
@@ -246,7 +248,7 @@ return function ()
 
 		numCustom = function (self, key)
 			I_AM_CLASS_OR_INSTANCE(self)
-			checkType(key, 'string')
+--			checkType(key, 'string')
 			local custom_key = makeCustomKey(self, key)		
 
 			if not db:exists(custom_key) then return 0 end

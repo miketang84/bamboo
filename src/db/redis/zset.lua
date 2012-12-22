@@ -61,27 +61,42 @@ function add( key, val, score )
 end
 
 
-function retrieve( key )
+function retrieveNormally( key, start, stop, is_rev )
 	-- only have members, no scores
-	return List(db:zrange(key, 0, -1))
+--	return List(db:zrange(key, 0, -1))
+
+	local value_list = db:zrange(key, start, stop)
+	if is_rev == 'rev' then
+		return List(value_list):reverse()
+	else
+		return List(value_list)
+	end
 end
 
-function retrieveReversely( key )
-	return List(db:zrevrange(key, 0, -1))
+-- function retrieveReversely( key )
+-- 	return List(db:zrevrange(key, 0, -1))
+-- end
+
+function retrieveWithScores( key, start, stop, is_rev )
+	-- -- [1] is member, [2] is score
+	-- local value_list, score_list = db:zrange(key, 0, -1, 'withscores')
+	-- return List(value_list), List(score_list)
+
+	local value_list, score_list = db:zrange(key, start, stop, 'withscores')
+	if is_rev == 'rev' then
+		return List(value_list):reverse(), List(score_list):reverse()
+	else
+		return List(value_list), List(score_list)
+	end
+
 end
 
-function retrieveWithScores( key )
-	-- [1] is member, [2] is score
-	local value_list, score_list = db:zrange(key, 0, -1, 'withscores')
-	return List(value_list), List(score_list)
-end
+-- function retrieveReverselyWithScores( key )
+-- 	-- [1] is member, [2] is score
+-- 	local value_list, score_list = db:zrevrange(key, 0, -1, 'withscores')
 
-function retrieveReverselyWithScores( key )
-	-- [1] is member, [2] is score
-	local value_list, score_list = db:zrevrange(key, 0, -1, 'withscores')
-
-	return List(value_list), List(score_list)
-end
+-- 	return List(value_list), List(score_list)
+-- end
 
 function remove( key, val )
 	return db:zrem(key, val)
