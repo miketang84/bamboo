@@ -4,12 +4,16 @@ module(..., package.seeall)
 
 
 local db = BAMBOO_DB
+local snippets = bamboo.dbsnippets.set
+local cmsgpack = reuqire 'cmsgpack'
 
 -- @param tbl:  a member list
 function save(key, tbl)
-	for _, v in ipairs(tbl) do
-		db:sadd(key, tostring(v))
-	end
+	db:eval(snippets.SNIPPET_zsetSave, 0, key, cmsgpack.pack(tbl), scores_str)
+
+	-- for _, v in ipairs(tbl) do
+	-- 	db:sadd(key, tostring(v))
+	-- end
 end
 
 function update(key, tbl)

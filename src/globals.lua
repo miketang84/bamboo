@@ -167,4 +167,190 @@ _G.uninset = function (args)
 end
 
 
+local LOGIC_METHODS = bamboo.LOGIC_METHODS
 
+LOGIC_METHODS.eq = function ( cmp_obj )
+	return function (v)
+		if v == cmp_obj then
+			return true
+		else
+			return false
+		end
+	end
+end
+
+LOGIC_METHODS.uneq = function ( cmp_obj )
+	return function (v)
+		if v ~= cmp_obj then
+			return true
+		else
+			return false
+		end
+	end
+end
+
+LOGIC_METHODS.lt = function (limitation)
+	return function (v)
+		if v and v < limitation then
+			return true
+		else
+			return false
+		end
+	end
+end
+
+LOGIC_METHODS.gt = function (limitation)
+	return function (v)
+		if v and v > limitation then
+			return true
+		else
+			return false
+		end
+	end
+end
+
+LOGIC_METHODS.le = function (limitation)
+	return function (v)
+		if v and v <= limitation then
+			return true
+		else
+			return false
+		end
+	end
+end
+
+LOGIC_METHODS.ge = function (limitation)
+	return function (v)
+		if v and v >= limitation then
+			return true
+		else
+			return false
+		end
+	end
+end
+
+LOGIC_METHODS.bt = function (small, big)
+	return function (v)
+		if v and v > small and v < big then
+			return true
+		else
+			return false
+		end
+	end
+end
+
+LOGIC_METHODS.be = function (small, big)
+	return function (v)
+		if v and v >= small and v <= big then
+			return true
+		else
+			return false
+		end
+	end
+end
+
+LOGIC_METHODS.outside = function (small, big)
+	return function (v)
+		if v and (v < small or v > big) then
+			return true
+		else
+			return false
+		end
+	end
+end
+
+LOGIC_METHODS.contains = function (substr)
+	return function (v)
+		v = tostring(v)
+		if v:find(substr) then
+			return true
+		else
+			return false
+		end
+	end
+end
+
+LOGIC_METHODS.uncontains = function (substr)
+	return function (v)
+		v = tostring(v)
+		if not v:find(substr) then
+			return true
+		else
+			return false
+		end
+	end
+end
+
+LOGIC_METHODS.startsWith = function (substr)
+	return function (v)
+		v = tostring(v)
+		if v:find('^'..substr) then
+			return true
+		else
+			return false
+		end
+	end
+end
+
+LOGIC_METHODS.unstartsWith = function (substr)
+	return function (v)
+		v = tostring(v)
+		if not v:find('^'..substr) then
+			return true
+		else
+			return false
+		end
+	end
+end
+
+
+LOGIC_METHODS.endsWith = function (substr)
+	return function (v)
+		v = tostring(v)
+		if v:find(substr..'$') then
+			return true
+		else
+			return false
+		end
+	end
+end
+
+LOGIC_METHODS.unendsWith = function (substr)
+	return function (v)
+		v = tostring(v)
+		if not v:find(substr..'$') then
+			return true
+		else
+			return false
+		end
+	end
+end
+
+LOGIC_METHODS.inset = function (args)
+	return function (v)
+		v = tostring(v)
+		for _, val in ipairs(args) do
+			-- once meet one, ok
+			if tostring(val) == v then
+				return true
+			end
+		end
+
+		return false
+	end
+end
+
+LOGIC_METHODS.uninset = function (args)
+	local t = function (v)
+		v = tostring(v)
+		for _, val in ipairs(args) do
+			-- once meet one, false
+			if tostring(val) == v then
+				return false
+			end
+		end
+
+		return true
+	end
+	return t
+end

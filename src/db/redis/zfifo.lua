@@ -5,11 +5,19 @@ module(..., package.seeall)
 local List = require 'lglib.list'
 local rdzset = require 'bamboo.db.redis.zset'
 local db = BAMBOO_DB
+local snippets = bamboo.dbsnippets.set
+local cmsgpack = reuqire 'cmsgpack'
+
 
 function save(key,tbl,length)
-    for i,v in ipairs(tbl) do
-        push(key,v,length)
-    end
+
+	local length = length or 100
+	db:eval(snippets.SNIPPET_zfifoSave, 0, key, cmsgpack.pack(tbl), length)
+
+
+    -- for i,v in ipairs(tbl) do
+    --     push(key,v,length)
+    -- end
 end
 
 function update(key,tbl,length)
@@ -20,25 +28,27 @@ end
 
 
 function push( key, val, length )
+	local length = length or 100
+	db:eval(snippets.SNIPPET_zfifoPush, 0, key, tostring(val), length)
 
-	local n = db:zcard(key)
-	if n < length then
-		if n == 0 then
-			db:zadd(key, 1, val)
-		else
-			local _, scores = db:zrange(key, -1, -1, 'withscores')
-			local lastscore = scores[1]
-			db:zadd(key, lastscore + 1, val)
-		end
-	else
-		local _, scores = db:zrange(key, -1, -1, 'withscores')
-		local lastscore = scores[1]
+	-- local n = db:zcard(key)
+	-- if n < length then
+	-- 	if n == 0 then
+	-- 		db:zadd(key, 1, val)
+	-- 	else
+	-- 		local _, scores = db:zrange(key, -1, -1, 'withscores')
+	-- 		local lastscore = scores[1]
+	-- 		db:zadd(key, lastscore + 1, val)
+	-- 	end
+	-- else
+	-- 	local _, scores = db:zrange(key, -1, -1, 'withscores')
+	-- 	local lastscore = scores[1]
 
-		-- remove the oldest one
-		db:zremrangebyrank(key, 0, 0)
-		-- add the new one
-		db:zadd(key, lastscore + 1, val)
-	end
+	-- 	-- remove the oldest one
+	-- 	db:zremrangebyrank(key, 0, 0)
+	-- 	-- add the new one
+	-- 	db:zadd(key, lastscore + 1, val)
+	-- end
 
 end
 

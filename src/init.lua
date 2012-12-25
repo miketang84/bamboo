@@ -22,6 +22,7 @@ context = {}
 userdata = {}
 plugindata = {}
 internals = {}
+LOGIC_METHODS = {}
 dbsnippets = {set={}, sha2key={}, key2sha={}}
 
 compiled_views_tmpls = {}

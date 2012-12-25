@@ -7,11 +7,16 @@ module(..., package.seeall)
 local List = require 'lglib.list'
 local rdlist = require 'bamboo.db.redis.list'
 local db = BAMBOO_DB
+local snippets = bamboo.dbsnippets.set
+local cmsgpack = reuqire 'cmsgpack'
 
 function save (key, tbl, length)
-    for i,v in ipairs(tbl) do 
-        push(key,v,length);
-    end
+	local length = length or 100
+	db:eval(snippets.SNIPPET_fifoSave, 0, key, cmsgpack.pack(tbl), length)
+
+    -- for i,v in ipairs(tbl) do 
+    --     push(key,v,length);
+    -- end
 end
 
 function update (key, tbl, length)
@@ -21,15 +26,18 @@ function update (key, tbl, length)
 end
 
 function push (key, val, length)
-	local len = db:llen(key)
+	local length = length or 100
+	db:eval(snippets.SNIPPET_fifoPush, 0, key, val, length)
+
+	-- local len = db:llen(key)
 	
-	if len < length then
-		db:rpush(key, val)
-	else
-		-- if FIFO is full, push this element from left, pop one old from right
-		db:lpop(key)
-		db:rpush(key, val)
-	end
+	-- if len < length then
+	-- 	db:rpush(key, val)
+	-- else
+	-- 	-- if FIFO is full, push this element from left, pop one old from right
+	-- 	db:lpop(key)
+	-- 	db:rpush(key, val)
+	-- end
 		
 end
 

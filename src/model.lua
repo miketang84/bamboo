@@ -128,8 +128,8 @@ local checkLogicRelation = function (obj, query_args, logic)
 			-- to redundant query condition, once meet, jump immediately
 			if not fields[k] then flag=false; break end
 
-			if type(v) == 'function' then
-				flag = v(obj[k])
+			if type(v) == 'table' then
+				flag = bamboo.LOGIC_METHODS[v[1]](v[2], v[3])(obj[k])  -- v(obj[k])
 			else
 				flag = (obj[k] == v)
 			end

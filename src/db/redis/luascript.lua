@@ -259,6 +259,162 @@ end
 
 
 
+
+
+dbsnippets.set.SNIPPET_listSave = 
+[=[
+local key, items_str = unpack(ARGV);								 
+local items = cmsgpack.unpack(items_str)
+
+if redis.call('EXISTS', key) then
+	redis.call('DEL', key)
+end
+
+for _, v in ipairs (items) do
+	redis.call('RPUSH', key, tostring(v))
+end
+
+return true
+]=]
+
+
+dbsnippets.set.SNIPPET_listHas = 
+[=[
+local key, item = unpack(ARGV);								 
+local len = redis.call('LLEN', key)
+local elem
+for i = 0, len-1 do
+	elem = redis.call('LINDEX', key, i)
+	if item == elem then return true
+end
+
+return false
+]=]
+
+
+dbsnippets.set.SNIPPET_zsetSave = 
+[=[
+local key, items_str, scores_str = unpack(ARGV)
+local items = cmsgpack.unpack(items_str)
+local scores
+if scores_str ~= '' then
+	scores = cmspack.unpack(scores_str)
+end
+redis.call('DEL', key)
+
+if scores then
+	for i, v in ipairs(items) do
+		redis.call('ZADD', key, scores[i], tostring(v))
+	end
+else
+	local n = 1
+	for i, v in ipairs(items) do
+		redis.call('ZADD', key, n+1, tostring(v))
+		n = n + 1
+	end
+end
+
+]=]
+
+dbsnippets.set.SNIPPET_zsetAdd = 
+[=[
+local key, item, score = unpack(ARGV)
+
+if score == '' then
+	local len = redis.call('ZCARD', key)
+	if n == 0 then
+		redis.call('ZADD', key, 1, item)
+	else
+		local data = redis.call('ZRANGE', key, -1, -1, 'WITHSCORES')
+		redis.call('ZADD', key, tonumber(data[2])+1, item)
+	end
+else
+	redis.call('ZADD', key, score, item)
+end
+
+
+]=]
+
+dbsnippets.set.SNIPPET_setSave = 
+[=[
+local key, items_str = unpack(ARGV)
+local items = cmsgpack.unpack(items_str)
+
+for _, v in ipairs(items) do
+	redis.call('SADD', key, tostring(v))
+end
+]=]
+
+dbsnippets.set.SNIPPET_fifoPush = 
+[=[
+local key, item, length = unpack(ARGV)
+local length = tonumber(length)
+
+local len = redis.call('LLEN', key)
+if len < length then
+	redis.call('RPUSH', key, item)
+else
+	redis.call('LPOP', key)
+	redis.call('RPUSH', key, item)
+end
+
+]=]
+
+dbsnippets.set.SNIPPET_fifoSave = 
+[=[
+local key, items_str, length = unpack(ARGV)
+local items = cmsgpack.unpack(items_str)
+local length = tonumber(length)
+
+redis.call('RPUSH', key, unpack(items))
+
+local len = redis.call('LLEN', key)
+if len > length then
+	local delta = len - length
+	for i=1, delta do
+		redis.call('LPOP', key)
+	end
+end
+]=]
+
+dbsnippets.set.SNIPPET_zfifoPush = 
+[=[
+local key, item, length = unpack(ARGV)
+local length = tonumber(length)
+
+local len = redis.call('ZCARD', key)
+if len == 0 then
+	redis.call('ZADD', key, 1, item)
+elseif len < length then
+	local data = redis.call('ZRANGE', key, -1, -1, 'WITHSCORES')
+	redis.call('ZADD', key, tonumber(data[2])+1, item)
+else
+	local data = redis.call('ZRANGE', key, -1, -1, 'WITHSCORES')
+	redis.call('ZADD', key, tonumber(data[2])+1, item)
+	redis.call('ZREMRANGEBYRANK', key, 0, 0)
+end
+
+]=]
+
+dbsnippets.set.SNIPPET_zfifoSave = 
+[=[
+local key, items_str, length = unpack(ARGV)
+local items = cmsgpack.unpack(items_str)
+local length = tonumber(length)
+
+for i, v in ipairs(items) do
+	redis.call('ZADD', key, i, tostring(v))
+end
+
+local len = redis.call('ZCARD', key)
+if len > length then
+	redis.call('ZREMRANGEBYRANK', key, 0, len-length-1)
+end
+
+]=]
+
+
+
 dbsnippets.set.SNIPPET_hgetallByModelIds = 
 [=[
 local modelids_string = unpack(ARGV);								 
@@ -805,7 +961,16 @@ local flag = logic_choice
 local index_key = string.format('%s:__index', model_name)
 local length = redis.call('ZCARD', index_key)
 
+
 if query_type == 'table' then
+	local methods = {}
+	for k, v in pairs(query_args) do
+		if type(v) == 'table' then
+			local method = table.remove(v, 1)
+			methods[k] = method
+		end
+	end
+
 	for j = start_point-1, length-1, PARTLEN do
 		local r
 		if find_rev == 'rev' then
@@ -814,13 +979,6 @@ if query_type == 'table' then
 			r = redis.call('ZRANGE', index_key, j, j+PARTLEN-1, 'WITHSCORES')
 		end
 
-		local methods = {}
-		for k, v in pairs(query_args) do
-			if type(v) == 'table' then
-				local method = table.remove(v, 1)
-				methods[k] = method
-			end
-		end
 
 		for i = 1, #r, 2 do
 			local id = r[i+1]
@@ -982,20 +1140,30 @@ else
 	if not query_length then query_length = length end
 end
 
+if query_type == 'table' then
+	local methods = {}
+	for k, v in pairs(query_args) do
+		if type(v) == 'table' then
+			local method = table.remove(v, 1)
+			methods[k] = method
+		end
+	end
+end
+
 
 local objs = {}
 if start_point then
-	local istop = 1
-	local counter = 0
-	for j = start_point-1, length-1, PARTLEN do
-		local r
-		if find_rev == 'rev' then
-			r = redis.call('ZREVRANGE', index_key, j, j+PARTLEN-1, 'WITHSCORES')
-		else
-			r = redis.call('ZRANGE', index_key, j, j+PARTLEN-1, 'WITHSCORES')
-		end
+	if query_type == 'table' then
+		local istop = 1
+		local counter = 0
+		for j = start_point-1, length-1, PARTLEN do
+			local r
+			if find_rev == 'rev' then
+				r = redis.call('ZREVRANGE', index_key, j, j+PARTLEN-1, 'WITHSCORES')
+			else
+				r = redis.call('ZRANGE', index_key, j, j+PARTLEN-1, 'WITHSCORES')
+			end
 
-		if query_type == 'table' then
 			for i = 1, #r, 2 do
 				local id = r[i+1]
 				local key = ('%s:%s'):format(model_name, id)
@@ -1012,8 +1180,7 @@ if start_point then
 
 					-- it uses a logic function
 					if type(v) == 'table' then
-						local method = table.remove(v, 1)
-						flag = LOGIC_METHODS[method](unpack(v))(hash_data[k])
+						flag = LOGIC_METHODS[methods[k]](unpack(v))(hash_data[k])
 					else
 						flag = (hash_data[k] == v)
 					end
@@ -1038,7 +1205,16 @@ if start_point then
 				end
 				istop = istop + 1
 			end
-		elseif query_type == 'function' then
+		end
+	elseif query_type == 'function' then
+		for j = start_point-1, length-1, PARTLEN do
+			local r
+			if find_rev == 'rev' then
+				r = redis.call('ZREVRANGE', index_key, j, j+PARTLEN-1, 'WITHSCORES')
+			else
+				r = redis.call('ZRANGE', index_key, j, j+PARTLEN-1, 'WITHSCORES')
+			end
+
 			for i = 1, #r, 2 do
 				local id = r[i+1]
 				local key = ('%s:%s'):format(model_name, id)
@@ -1093,24 +1269,24 @@ if start_point then
 				end
 				istop = istop + 1
 			end
-		elseif query_type == 'string' then
-			-- TODO
 		end
+	elseif query_type == 'string' then
+			-- TODO
 	end
 
 	return {objs, length}
 
 else  -- case 2: start, stop, is_rev
 
-	for j = 0, length-1, PARTLEN do
-		local r
-		if find_rev == 'rev' then
-			r = redis.call('ZREVRANGE', index_key, j, j+PARTLEN-1, 'WITHSCORES')
-		else
-			r = redis.call('ZRANGE', index_key, j, j+PARTLEN-1, 'WITHSCORES')
-		end
+	if query_type == 'table' then
+		for j = 0, length-1, PARTLEN do
+			local r
+			if find_rev == 'rev' then
+				r = redis.call('ZREVRANGE', index_key, j, j+PARTLEN-1, 'WITHSCORES')
+			else
+				r = redis.call('ZRANGE', index_key, j, j+PARTLEN-1, 'WITHSCORES')
+			end
 
-		if query_type == 'table' then
 			for i = 1, #r, 2 do
 				local id = r[i+1]
 				local key = ('%s:%s'):format(model_name, id)
@@ -1127,8 +1303,7 @@ else  -- case 2: start, stop, is_rev
 
 					-- it uses a logic function
 					if type(v) == 'table' then
-						local method = table.remove(v, 1)
-						flag = LOGIC_METHODS[method](unpack(v))(hash_data[k])
+						flag = LOGIC_METHODS[methods[k]](unpack(v))(hash_data[k])
 					else
 						flag = (hash_data[k] == v)
 					end
@@ -1148,7 +1323,16 @@ else  -- case 2: start, stop, is_rev
 					table.insert(objs, obj) 
 				end
 			end
-		elseif query_type == 'function' then
+		end
+	elseif query_type == 'function' then
+		for j = 0, length-1, PARTLEN do
+			local r
+			if find_rev == 'rev' then
+				r = redis.call('ZREVRANGE', index_key, j, j+PARTLEN-1, 'WITHSCORES')
+			else
+				r = redis.call('ZRANGE', index_key, j, j+PARTLEN-1, 'WITHSCORES')
+			end
+
 			for i = 1, #r, 2 do
 				local id = r[i+1]
 				local key = ('%s:%s'):format(model_name, id)
@@ -1198,9 +1382,9 @@ else  -- case 2: start, stop, is_rev
 					table.insert(objs, obj) 
 				end
 			end
-		elseif query_type == 'string' then
-			-- TODO
 		end
+	elseif query_type == 'string' then
+		-- TODO
 	end
 	
 	local totalnum = #objs

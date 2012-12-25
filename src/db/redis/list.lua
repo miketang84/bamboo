@@ -4,19 +4,14 @@ module(..., package.seeall)
 
 local db = BAMBOO_DB
 local List = require 'lglib.list'
+local snippets = bamboo.dbsnippets.set
+local cmsgpack = reuqire 'cmsgpack'
 
 --- create a list
 --
 function save( key, tbl )
-	-- if exist, remove it first
-	if db:exists(key) then
-		db:del(key)
-	end
-	
-	-- push all elements in tbl to redis list
-	for _, v in ipairs(tbl) do
-		db:rpush(key, tostring(v))
-	end
+
+	db:eval(snippets.SNIPPET_listSave, 0, key, cmsgpack.pack(tbl))
 
 end
 
@@ -99,15 +94,20 @@ function del( key )
 end
 
 function has(key, obj)
-	-- Need To Optimaze
-	local len = db:llen(key)
-	for i = 0, len-1 do
-		local elem = db:lindex(key, i)
-		if obj == elem then
-			return true
-		end
-	end 
+	-- -- Need To Optimaze
+	-- local len = db:llen(key)
+	-- for i = 0, len-1 do
+	-- 	local elem = db:lindex(key, i)
+	-- 	if obj == elem then
+	-- 		return true
+	-- 	end
+	-- end 
 
-	return false
+	local r = db:eval(snippets.SNIPPET_listHas, 0, key, obj)
+	if r then 
+		return true
+	else
+		return false
+	end
 end
 
