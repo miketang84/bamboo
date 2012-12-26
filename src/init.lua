@@ -9,10 +9,8 @@ require 'lglib'
 
 module('bamboo', package.seeall)
 
-local Set = require 'lglib.set'
-local List = require 'lglib.list'
-local FieldType = require 'bamboo.mvm.prototype'
-require 'bamboo.globals'
+-- local Set = require 'lglib.set'
+-- local List = require 'lglib.list'
 -- require 'bamboo.model'
 local cmsgpack = require 'cmsgpack'
 
@@ -30,7 +28,9 @@ compiled_views = {}
 compiled_views_locals = {}
 
 WIDGETS = {}
+require 'bamboo.globals'
 require 'bamboo.widget'
+local FieldType = require 'bamboo.mvm.prototype'
 
 -- for session life time
 SESSION_LIFE = 3600 * 24

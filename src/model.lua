@@ -63,8 +63,8 @@ rdactions['set'].num = rdset.num
 
 rdactions['zset'].save = rdzset.save
 rdactions['zset'].update = rdzset.update
---rdactions['zset'].retrieve = rdzset.retrieve
-rdactions['zset'].retrieve = rdzset.retrieveWithScores
+rdactions['zset'].retrieve = rdzset.retrieve
+--rdactions['zset'].retrieve = rdzset.retrieveWithScores
 rdactions['zset'].remove = rdzset.remove
 rdactions['zset'].add = rdzset.add
 rdactions['zset'].has = rdzset.has
@@ -153,8 +153,6 @@ end
 bamboo.internals.checkLogicRelation = checkLogicRelation
 
 
-require 'bamboo.queryset'
-
 
 -- -- switches
 -- -- can be called by instance and class
@@ -216,6 +214,9 @@ local transEdgeFromLuaToRedis = function (start, stop)
 	
 	return istart, istop
 end
+bamboo.internals.transEdgeFromLuaToRedis = transEdgeFromLuaToRedis
+
+require 'bamboo.queryset'
 
 
 -----------------------------------------------------------------

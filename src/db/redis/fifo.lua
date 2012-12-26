@@ -8,7 +8,7 @@ local List = require 'lglib.list'
 local rdlist = require 'bamboo.db.redis.list'
 local db = BAMBOO_DB
 local snippets = bamboo.dbsnippets.set
-local cmsgpack = reuqire 'cmsgpack'
+local cmsgpack = require 'cmsgpack'
 
 function save (key, tbl, length)
 	local length = length or 100

@@ -294,15 +294,22 @@ return false
 
 dbsnippets.set.SNIPPET_zsetSave = 
 [=[
+redis.log(redis.LOG_WARNING, 'enter zsetSave')
+
 local key, items_str, scores_str = unpack(ARGV)
 local items = cmsgpack.unpack(items_str)
 local scores
+
+redis.log(redis.LOG_WARNING, 'enter ----'..scores_str)
+
 if scores_str ~= '' then
-	scores = cmspack.unpack(scores_str)
+	scores = cmsgpack.unpack(scores_str)
 end
 redis.call('DEL', key)
 
-if scores then
+redis.log(redis.LOG_WARNING, 'enter ===')
+
+if scores and #scores == #items then
 	for i, v in ipairs(items) do
 		redis.call('ZADD', key, scores[i], tostring(v))
 	end
@@ -322,7 +329,7 @@ local key, item, score = unpack(ARGV)
 
 if score == '' then
 	local len = redis.call('ZCARD', key)
-	if n == 0 then
+	if len == 0 then
 		redis.call('ZADD', key, 1, item)
 	else
 		local data = redis.call('ZRANGE', key, -1, -1, 'WITHSCORES')

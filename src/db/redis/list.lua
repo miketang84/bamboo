@@ -5,7 +5,7 @@ module(..., package.seeall)
 local db = BAMBOO_DB
 local List = require 'lglib.list'
 local snippets = bamboo.dbsnippets.set
-local cmsgpack = reuqire 'cmsgpack'
+local cmsgpack = require 'cmsgpack'
 
 --- create a list
 --

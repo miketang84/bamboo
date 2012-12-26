@@ -6,12 +6,12 @@ module(..., package.seeall)
 local db = BAMBOO_DB
 
 local snippets = bamboo.dbsnippets.set
-local cmsgpack = reuqire 'cmsgpack'
+local cmsgpack = require 'cmsgpack'
 
 
 function save(key, tbl, scores)
 	local scores_str
-	if scores then
+	if type(scores) == 'table' then
 		scores_str = cmsgpack.pack(scores)
 	else
 		scores_str = ''
@@ -79,7 +79,7 @@ function add( key, val, score )
 end
 
 
-function retrieveNormally( key, start, stop, is_rev )
+function retrieve( key, start, stop, is_rev )
 	-- only have members, no scores
 --	return List(db:zrange(key, 0, -1))
 
