@@ -5,7 +5,7 @@ module(..., package.seeall)
 
 local db = BAMBOO_DB
 
-local snippets = bamboo.dbsnippets.set
+local snippets = bamboo.dbsnippets.key2sha
 local cmsgpack = require 'cmsgpack'
 
 
@@ -17,7 +17,7 @@ function save(key, tbl, scores)
 		scores_str = ''
 	end
 
-	db:eval(snippets.SNIPPET_zsetSave, 0, key, cmsgpack.pack(tbl), scores_str)
+	db:evalsha(snippets.SNIPPET_zsetSave, 0, key, cmsgpack.pack(tbl), scores_str)
 
 -- 	db:del(key)
 -- 	if not scores then
@@ -53,7 +53,7 @@ function add( key, val, score )
 
 	local score = score or ''
 
-	db:eval(snippets.SNIPPET_zsetAdd, 0, key, tostring(val), score)
+	db:evalsha(snippets.SNIPPET_zsetAdd, 0, key, tostring(val), score)
 
 --	local oscore = db:zscore(key, val)
 	-- is exist, do nothing, else redis will update the score of val

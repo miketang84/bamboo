@@ -7,12 +7,12 @@ module(..., package.seeall)
 local List = require 'lglib.list'
 local rdlist = require 'bamboo.db.redis.list'
 local db = BAMBOO_DB
-local snippets = bamboo.dbsnippets.set
+local snippets = bamboo.dbsnippets.key2sha
 local cmsgpack = require 'cmsgpack'
 
 function save (key, tbl, length)
 	local length = length or 100
-	db:eval(snippets.SNIPPET_fifoSave, 0, key, cmsgpack.pack(tbl), length)
+	db:evalsha(snippets.SNIPPET_fifoSave, 0, key, cmsgpack.pack(tbl), length)
 
     -- for i,v in ipairs(tbl) do 
     --     push(key,v,length);
@@ -27,7 +27,7 @@ end
 
 function push (key, val, length)
 	local length = length or 100
-	db:eval(snippets.SNIPPET_fifoPush, 0, key, val, length)
+	db:evalsha(snippets.SNIPPET_fifoPush, 0, key, val, length)
 
 	-- local len = db:llen(key)
 	

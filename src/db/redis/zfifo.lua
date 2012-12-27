@@ -5,14 +5,14 @@ module(..., package.seeall)
 local List = require 'lglib.list'
 local rdzset = require 'bamboo.db.redis.zset'
 local db = BAMBOO_DB
-local snippets = bamboo.dbsnippets.set
+local snippets = bamboo.dbsnippets.key2sha
 local cmsgpack = require 'cmsgpack'
 
 
 function save(key,tbl,length)
 
 	local length = length or 100
-	db:eval(snippets.SNIPPET_zfifoSave, 0, key, cmsgpack.pack(tbl), length)
+	db:evalsha(snippets.SNIPPET_zfifoSave, 0, key, cmsgpack.pack(tbl), length)
 
 
     -- for i,v in ipairs(tbl) do
@@ -29,7 +29,7 @@ end
 
 function push( key, val, length )
 	local length = length or 100
-	db:eval(snippets.SNIPPET_zfifoPush, 0, key, tostring(val), length)
+	db:evalsha(snippets.SNIPPET_zfifoPush, 0, key, tostring(val), length)
 
 	-- local n = db:zcard(key)
 	-- if n < length then

@@ -17,7 +17,7 @@ local rdzfifo = require 'bamboo.db.redis.zfifo'
 local rdhash = require 'bamboo.db.redis.hash'
 
 local db = BAMBOO_DB
-local snippets = bamboo.dbsnippets.set
+local snippets = bamboo.dbsnippets.key2sha
 
 -- Thouge Session is not a model, but we use model way to process it
 local PREFIX = 'Session:'
@@ -181,7 +181,7 @@ Session = Object:extend {
 
 		local session_id = req.session_id
 		local expiration = bamboo.config.expiration or bamboo.SESSION_LIFE
-		local data = db:eval(snippets.SNIPPET_getSession, 0, session_id, expiration)
+		local data = db:evalsha(snippets.SNIPPET_getSession, 0, session_id, expiration)
 		local session = {}
 		for i=1, #data, 2 do
 			session[data[i]] = data[i+1]

@@ -11,6 +11,18 @@ local format = string.format
 
 local db = BAMBOO_DB
 
+require 'bamboo.db.redis.luascript'
+local snippets = bamboo.dbsnippets.set
+for key, snippet in pairs(snippets) do
+	local shakey = db:evalsha('SCRIPT', 'LOAD', snippet)
+	if shakey then
+		bamboo.dbsnippets.sha2key[shakey] = key
+		bamboo.dbsnippets.key2sha[key] = shakey
+	end
+end
+snippets = bamboo.dbsnippets.key2sha
+
+
 local rdstring = require 'bamboo.db.redis.string'
 local rdlist = require 'bamboo.db.redis.list'
 local rdset = require 'bamboo.db.redis.set'
@@ -18,9 +30,6 @@ local rdzset = require 'bamboo.db.redis.zset'
 local rdfifo = require 'bamboo.db.redis.fifo'
 local rdzfifo = require 'bamboo.db.redis.zfifo'
 local rdhash = require 'bamboo.db.redis.hash'
-
-require 'bamboo.db.redis.luascript'
-local snippets = bamboo.dbsnippets.set
 
 -----------------------------------------------------------------
 local rdactions = {
@@ -323,7 +332,7 @@ local delFromRedis = function (self, id)
 	local index_key = getIndexKey(self)
 
 	local fields_string = cmsgpack.pack(self.__fields)
-	local data_list = db:eval(snippets.SNIPPET_delInstanceAndForeignKeys, 0, model_name, id, fields_string)
+	local data_list = db:evalsha(snippets.SNIPPET_delInstanceAndForeignKeys, 0, model_name, id, fields_string)
 
 end
 bamboo.internals['delFromRedis'] = delFromRedis
@@ -334,7 +343,7 @@ local fakeDelFromRedis = function (self, id)
 	local index_key = getIndexKey(self)
 
 	local fields_string = cmsgpack.pack(self.__fields)
-	local data_list = db:eval(snippets.SNIPPET_fakeDelInstanceAndForeignKeys, 0, model_name, id, fields_string, dcollector)
+	local data_list = db:evalsha(snippets.SNIPPET_fakeDelInstanceAndForeignKeys, 0, model_name, id, fields_string, dcollector)
 
 end
 bamboo.internals['fakeDelFromRedis'] = fakeDelFromRedis
@@ -563,7 +572,7 @@ Model = Object:extend {
 		I_AM_CLASS(self)
 		if type(tonumber(id)) ~= 'number' then return nil end
 
-		local data = db:eval(snippets.SNIPPET_getById, 0, self.__name, id)
+		local data = db:evalsha(snippets.SNIPPET_getById, 0, self.__name, id)
 		return makeObject(self, data)
 	end;
 
@@ -571,7 +580,7 @@ Model = Object:extend {
 		I_AM_CLASS(self)
 		assert(type(ids) == 'table')
 
-		local data = db:eval(snippets.SNIPPET_getByIds, 0, self.__name, cmsgpack.pack(ids))
+		local data = db:evalsha(snippets.SNIPPET_getByIds, 0, self.__name, cmsgpack.pack(ids))
 		return makeObjects(self, data)
 	end;
 	
@@ -580,7 +589,7 @@ Model = Object:extend {
 		if type(tonumber(id)) ~= 'number' then return nil end
 		local fields_args = {...}
 
-		local data = db:eval(snippets.SNIPPET_getByIdFields, 0, self.__name, id, cmsgpack.pack(fields_args))
+		local data = db:evalsha(snippets.SNIPPET_getByIdFields, 0, self.__name, id, cmsgpack.pack(fields_args))
 		return makeObject(self, data)
 	end;
 
@@ -589,7 +598,7 @@ Model = Object:extend {
 		assert(type(ids) == 'table')
 		local fields_args = {...}
 
-		local data = db:eval(snippets.SNIPPET_getByIdsFields, 0, self.__name, cmsgpack.pack(ids), cmsgpack.pack(fields_args))
+		local data = db:evalsha(snippets.SNIPPET_getByIdsFields, 0, self.__name, cmsgpack.pack(ids), cmsgpack.pack(fields_args))
 		return makeObjects(self, data)
 	end;
 	
@@ -603,7 +612,7 @@ Model = Object:extend {
 			ffields[field] = fields[field]
 		end
 
-		local data = db:eval(snippets.SNIPPET_getByIdWithForeigns, 0, self.__name, id, cmsgpack.pack(ffields))
+		local data = db:evalsha(snippets.SNIPPET_getByIdWithForeigns, 0, self.__name, id, cmsgpack.pack(ffields))
 		return makeObject(self, data)
 	end;
 
@@ -617,7 +626,7 @@ Model = Object:extend {
 			ffields[field] = fields[field]
 		end
 
-		local data = db:eval(snippets.SNIPPET_getByIdsWithForeigns, 0, self.__name, cmsgpack.pack(ids), cmsgpack.pack(ffields))
+		local data = db:evalsha(snippets.SNIPPET_getByIdsWithForeigns, 0, self.__name, cmsgpack.pack(ids), cmsgpack.pack(ffields))
 		return makeObjects(self, data)
 	end;
 	
@@ -660,7 +669,7 @@ Model = Object:extend {
 		I_AM_CLASS(self)
 		local is_rev = is_rev or ''
 
-		local data_list = db:eval(snippets.SNIPPET_all, 0, self.__name, is_rev)
+		local data_list = db:evalsha(snippets.SNIPPET_all, 0, self.__name, is_rev)
 		return makeObjects(self, data_list)
 	end;
 
@@ -672,7 +681,7 @@ Model = Object:extend {
 		local istart, istop = transEdgeFromLuaToRedis(start, stop)
 		local is_rev = is_rev or ''
 
-		local data_list = db:eval(snippets.SNIPPET_slice, 0, self.__name, istart, istop, is_rev)
+		local data_list = db:evalsha(snippets.SNIPPET_slice, 0, self.__name, istart, istop, is_rev)
 		return makeObjects(self, data_list)
 	end;
 
@@ -721,7 +730,7 @@ Model = Object:extend {
 			start_point = limit_params.start_point or ''
 		end
 
-		local data = db:eval(snippets.SNIPPET_get, 0, self.__name, fields_string, ctype, query_string, logic, cmsgpack.pack(ffields), start_point, find_rev) 
+		local data = db:evalsha(snippets.SNIPPET_get, 0, self.__name, fields_string, ctype, query_string, logic, cmsgpack.pack(ffields), start_point, find_rev) 
 		
 		if data then return makeObject(self, data) end
 
@@ -777,7 +786,7 @@ Model = Object:extend {
 			length = limit_params.length or ''
 		end
 
-		local r_data = db:eval(snippets.SNIPPET_filter, 0, self.__name, fields_string, ctype, query_string, logic, start, stop, is_rev, cmsgpack.pack(ffields_str), start_point, length, find_rev) 
+		local r_data = db:evalsha(snippets.SNIPPET_filter, 0, self.__name, fields_string, ctype, query_string, logic, start, stop, is_rev, cmsgpack.pack(ffields_str), start_point, length, find_rev) 
 		
 		local data_list = r_data[1] 
 		local num = r_data[2]
@@ -871,7 +880,7 @@ Model = Object:extend {
 		r_params.created_time = timestamp
 		r_params.lastmodified_time = timestamp
 
-		local ret_id = db:eval(snippets.SNIPPET_save, 0, self.__name, id, self.__primarykey, cmsgpack.pack(r_params))
+		local ret_id = db:evalsha(snippets.SNIPPET_save, 0, self.__name, id, self.__primarykey, cmsgpack.pack(r_params))
 
 		if ret_id then 
 			self.created_time = r_params.created_time
@@ -901,7 +910,7 @@ Model = Object:extend {
 
 		local new_value = new_value or ''
 		local lmtime = socket.gettime()
-		local ret = db:eval(snippets.SNIPPET_update, 0, self.__name, self.id, self.__primarykey, field, new_value, self.lastmodified_time)
+		local ret = db:evalsha(snippets.SNIPPET_update, 0, self.__name, self.id, self.__primarykey, field, new_value, self.lastmodified_time)
 
 		if ret then
 			self.lastmodified_time = lmtime
@@ -1009,7 +1018,7 @@ Model = Object:extend {
 		end
 
 		local timestamp = tostring(socket.gettime())
-		local ret = db:eval(snippets.SNIPPET_addForeign, 0, self.__name, self.id, field, new_id, cmsgpack.pack(fdt), timestamp)
+		local ret = db:evalsha(snippets.SNIPPET_addForeign, 0, self.__name, self.id, field, new_id, cmsgpack.pack(fdt), timestamp)
 
 		if ret then
 			if store_type == 'ONE' then
@@ -1071,7 +1080,7 @@ Model = Object:extend {
 		else
 			local is_rev = is_rev or ''
 			local istart, istop = transEdgeFromLuaToRedis(start, stop)
-			local data = db:eval(snippets.SNIPPET_getForeign, 0, 
+			local data = db:evalsha(snippets.SNIPPET_getForeign, 0, 
 								 self.__name, 
 								 self.id, 
 								 field, 

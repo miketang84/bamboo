@@ -4,12 +4,12 @@ module(..., package.seeall)
 
 
 local db = BAMBOO_DB
-local snippets = bamboo.dbsnippets.set
+local snippets = bamboo.dbsnippets.key2sha
 local cmsgpack = require 'cmsgpack'
 
 -- @param tbl:  a member list
 function save(key, tbl)
-	db:eval(snippets.SNIPPET_setSave, 0, key, cmsgpack.pack(tbl))
+	db:evalsha(snippets.SNIPPET_setSave, 0, key, cmsgpack.pack(tbl))
 
 	-- for _, v in ipairs(tbl) do
 	-- 	db:sadd(key, tostring(v))

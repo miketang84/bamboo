@@ -4,14 +4,14 @@ module(..., package.seeall)
 
 local db = BAMBOO_DB
 local List = require 'lglib.list'
-local snippets = bamboo.dbsnippets.set
+local snippets = bamboo.dbsnippets.key2sha
 local cmsgpack = require 'cmsgpack'
 
 --- create a list
 --
 function save( key, tbl )
 
-	db:eval(snippets.SNIPPET_listSave, 0, key, cmsgpack.pack(tbl))
+	db:evalsha(snippets.SNIPPET_listSave, 0, key, cmsgpack.pack(tbl))
 
 end
 
@@ -103,7 +103,7 @@ function has(key, obj)
 	-- 	end
 	-- end 
 
-	local r = db:eval(snippets.SNIPPET_listHas, 0, key, obj)
+	local r = db:evalsha(snippets.SNIPPET_listHas, 0, key, obj)
 	if r then 
 		return true
 	else
