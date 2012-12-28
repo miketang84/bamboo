@@ -14,7 +14,7 @@ local db = BAMBOO_DB
 require 'bamboo.db.redis.luascript'
 local snippets = bamboo.dbsnippets.set
 for key, snippet in pairs(snippets) do
-	local shakey = db:evalsha('SCRIPT', 'LOAD', snippet)
+	local shakey = db:script('LOAD', snippet)
 	if shakey then
 		bamboo.dbsnippets.sha2key[shakey] = key
 		bamboo.dbsnippets.key2sha[key] = shakey
@@ -138,6 +138,7 @@ local checkLogicRelation = function (obj, query_args, logic)
 			if not fields[k] then flag=false; break end
 
 			if type(v) == 'table' then
+				-- at most 3 args for logic method
 				flag = bamboo.LOGIC_METHODS[v[1]](v[2], v[3])(obj[k])  -- v(obj[k])
 			else
 				flag = (obj[k] == v)
@@ -343,6 +344,7 @@ local fakeDelFromRedis = function (self, id)
 	local index_key = getIndexKey(self)
 
 	local fields_string = cmsgpack.pack(self.__fields)
+print('ready to del')
 	local data_list = db:evalsha(snippets.SNIPPET_fakeDelInstanceAndForeignKeys, 0, model_name, id, fields_string, dcollector)
 
 end

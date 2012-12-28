@@ -19,6 +19,7 @@ local walkcheck = function (objs, query_args, logic)
 	return query_set
 end
 
+
 QuerySetMeta.get = function (self, query_args, find_rev)
 	I_AM_QUERY_SET(self)
 	
@@ -31,16 +32,38 @@ QuerySetMeta.get = function (self, query_args, find_rev)
 			"[Error] query set doesn't support searching by id, please use getById.")
 	end
 
+
+	local limit_params
+	if find_rev then 
+		local l3type = type(find_rev)
+		assert(l3type == 'string' or l3type == 'table', 
+			   '[Error] @get - #3 must be string or table.') 
+		if l3type == 'table' then limit_params = find_rev end
+	end
+
+	local start_point
+	if limit_params then		
+		start_point = limit_params.start_point
+		find_rev = limit_params.find_rev
+	end
+
+	local objs = self
+	if start_point then
+		assert(start_point <= #objs, '[Error] start_point is larger than #objs.')
+	else
+		start_point = 1
+	end
+
 	local obj
 	if find_rev == 'rev' then
-		for i=#self, 1, -1 do
-			obj = self[i]
+		for i=#objs-start_point+1, 1, -1 do
+			obj = objs[i]
 			local flag = checkLogicRelation(obj, query_args, logic)
 			if flag then return obj end
 		end
 	else
-		for i=1, #self do
-			obj = self[i]
+		for i=start_point, #objs do
+			obj = objs[i]
 			local flag = checkLogicRelation(obj, query_args, logic)
 			if flag then return obj end
 		end
@@ -102,34 +125,78 @@ QuerySetMeta.filter = function (self, query_args, start, stop, is_rev)
 	end
 
 	local query_set = QuerySet()
-
+	local counter = 0
+	local istop = #objs
 	if start_point then
-		local counter = 0
-		local istop = #objs
-		for i, obj in ipairs(objs) do
-			-- check the object's legalery, only act on valid object
-			local flag = checkLogicRelation(obj, query_args, logic)
+		assert(start_point <= #objs, '[Error] start_point is larger than #objs.')
+	else
+		start_point = 1
+	end
 
-			-- if walk to this line, means find one
-			if flag then
-				table.insert(query_set, obj)
+	local checkObj = function (obj)
+		-- check the object's legalery, only act on valid object
+		local flag = checkLogicRelation(obj, query_args, logic)
+
+		-- if walk to this line, means find one
+		if flag then
+			table.insert(query_set, obj)
+			if start_point and length then
 				counter = counter + 1
-				if counter >= length then istop = i; break end
+				if counter >= length then 
+					istop = i 
+					return 0
+				end
 			end
 		end
-		
+
+		return 1
+	end
+
+	if find_rev == 'rev' then
+		for i=#objs - start_point + 1, 1, -1 do
+			local obj = objs[i]
+			local ret = checkObj(obj)
+			if ret == 0 then break end
+			-- -- check the object's legalery, only act on valid object
+			-- local flag = checkLogicRelation(obj, query_args, logic)
+
+			-- -- if walk to this line, means find one
+			-- if flag then
+			-- 	table.insert(query_set, obj)
+			-- 	if start_point then
+			-- 		counter = counter + 1
+			-- 		if counter >= length then 
+			-- 			istop = i 
+			-- 			break
+			-- 		end
+			-- 	end
+			-- end
+		end
+	else
+		for i=start_point, #objs do
+			local obj = objs[i]
+			local ret = checkObj(obj)
+			if ret == 0 then break end
+			-- -- check the object's legalery, only act on valid object
+			-- local flag = checkLogicRelation(obj, query_args, logic)
+
+			-- -- if walk to this line, means find one
+			-- if flag then
+			-- 	table.insert(query_set, obj)
+			-- 	if start_point then
+			-- 		counter = counter + 1
+			-- 		if counter >= length then 
+			-- 			istop = i 
+			-- 			break
+			-- 		end
+			-- 	end
+			-- end
+		end
+	end	
+
+	if start_point and length then
 		return query_set, istop
 	else
-		for i, obj in ipairs(objs) do
-			-- check the object's legalery, only act on valid object
-			local flag = checkLogicRelation(obj, query_args, logic)
-
-			-- if walk to this line, means find one
-			if flag then
-				table.insert(query_set, obj)
-			end
-		end
-		
 		local totalnum = #query_set
 		-- slice
 		if start then
@@ -164,7 +231,7 @@ QuerySetMeta.orderBy = function (self, ...)
 		if type(third_arg) == 'function' then
 			sort_func2 = third_arg
 		elseif type(third_arg) == 'string' then
-			filed2 = third_arg
+			field2 = third_arg
 			dir2 = select(4, ...)
 		end
 	end
@@ -189,7 +256,7 @@ QuerySetMeta.orderBy = function (self, ...)
 	table.sort(self, sort_func)
 
 	-- secondary sort
-	if field2 then
+	if field2 or sort_func2 then
 --		checkType(field2, 'string')
 
 		-- divide to parts
@@ -237,7 +304,7 @@ QuerySetMeta.querySetIds = function (self)
 	return ids
 end
 	
-QuerySetMeta.combineQuerySets = function (self, another)
+QuerySetMeta.combineQuerySet = function (self, another)
 	I_AM_QUERY_SET(self)
 	I_AM_QUERY_SET(another)		
 	local ids = List()
@@ -261,11 +328,9 @@ QuerySetMeta.fakeDel = function (self)
 	local fakeDelFromRedis = bamboo.internals.fakeDelFromRedis
 	
 	for _, v in ipairs(self) do
+		print('0---')
 		fakeDelFromRedis(v)
-		v = nil
 	end
-
-	self = nil
 end;
 
 QuerySetMeta.trueDel = function (self)
@@ -274,10 +339,7 @@ QuerySetMeta.trueDel = function (self)
 	
 	for _, v in ipairs(self) do
 		delFromRedis(v)
-		v = nil
 	end
-
-	self = nil
 end;
 
 QuerySetMeta.del = function (self)

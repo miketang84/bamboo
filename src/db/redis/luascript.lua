@@ -266,7 +266,7 @@ dbsnippets.set.SNIPPET_listSave =
 local key, items_str = unpack(ARGV);								 
 local items = cmsgpack.unpack(items_str)
 
-if redis.call('EXISTS', key) then
+if redis.call('EXISTS', key) == 1 then
 	redis.call('DEL', key)
 end
 
@@ -285,7 +285,7 @@ local len = redis.call('LLEN', key)
 local elem
 for i = 0, len-1 do
 	elem = redis.call('LINDEX', key, i)
-	if item == elem then return true
+	if item == elem then return true end
 end
 
 return false
@@ -466,7 +466,7 @@ local foreign_key
 for k, fdt in pairs(fields) do
 	if fdt and fdt.foreign then
 		foreign_key = string.format('%s:%s', instance_key, k)
-		if redis.call('EXISTS', foreign_key) then
+		if redis.call('EXISTS', foreign_key) == 1 then
 			redis.call('RENAME', foreign_key, 'DELETED:' .. foreign_key)
 		end
 
@@ -523,7 +523,7 @@ dbsnippets.set.SNIPPET_getById =
 [[
 local model_name, id = unpack(ARGV)
 local key = string.format('%s:%s', model_name, id)
-if not redis.call('EXISTS', key) then return false end
+if redis.call('EXISTS', key) == 0 then return false end
 return redis.call('HGETALL', key)
 ]]
 
@@ -592,7 +592,7 @@ local model_name, id, ffields_str = unpack(ARGV)
 local key = string.format('%s:%s', model_name, id)
 local ffields = cmsgpack.unpack(ffields_str)
 
-if not redis.call('EXISTS', key) then return false end
+if redis.call('EXISTS', key) == 0 then return false end
 local data = redis.call('HGETALL', key)
 local hash_data = {}
 for i=1, #data, 2 do
@@ -645,7 +645,7 @@ local r_data = {}
 for _, id in ipairs(ids) do
 	local key = string.format('%s:%s', model_name, id)
 
-	if redis.call('EXISTS', key) then
+	if redis.call('EXISTS', key) == 1 then
 		local data = redis.call('HGETALL', key)
 		local hash_data = {}
 		for i=1, #data, 2 do
@@ -820,7 +820,7 @@ dbsnippets.set.SNIPPET_update =
 local model_name, id, primarykey, field, new_value, lmtime = unpack(ARGV)
 local key = string.format('%s:%s', model_name, id)
 local index_key = string.format('%s:__index', model_name)
-if not redis.call('EXISTS', key) then return false end
+if redis.call('EXISTS', key) == 0 then return false end
 if field == primarykey then
 	if new_value == '' then return false end
 	redis.call('ZREMRANGEBYSCORE', index_key, id, id)
