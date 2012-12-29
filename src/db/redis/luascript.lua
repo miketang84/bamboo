@@ -257,6 +257,53 @@ local deserializeQueryFunction = function (qstr)
 end
 ]]
 
+local SNIPPET_attachForeignData = 
+[=[
+local attachForeignData = function (hash_data, key, ffields)
+	local foreign_data = {}
+	-- process the foreign parts
+	for field, fdt in pairs(ffields) do
+		local value = hash_data[field]
+		local fkey = string.format('%s:%s', key, field)
+		local foreign_type = fdt.foreign
+		local store_type = fdt.st
+
+		-- for ONE case
+		if value then
+			if foreign_type == 'UNFIXED' then
+				local objdata = redis.call('HGETALL', value)
+				local obj = {}
+				for p = 1, #objdata, 2 do
+					obj[objdata[p]] = objdata[p+1]
+				end
+				hash_data[field] = obj
+				foreign_data[field] = objdata
+			elseif foreign_type ~= 'ANYSTRING' then
+				local target_key = string.format('%s:%s', foreign_type, value)
+				local objdata = redis.call('HGETALL', target_key)
+				local obj = {}
+				for p = 1, #objdata, 2 do
+					obj[objdata[p]] = objdata[p+1]
+				end
+				hash_data[field] = obj
+				foreign_data[field] = objdata
+			end
+		else
+			if store_type == 'MANY' or store_type == 'ZFIFO' then
+				local objdata = redis.call('ZRANGE', fkey, 0, -1)
+				hash_data[field] = objdata
+				foreign_data[field] = objdata
+			elseif store_type == 'LIST' or store_type == 'FIFO' then
+				local objdata = redis.call('LRANGE', fkey, 0, -1)
+				hash_data[field] = objdata
+				foreign_data[field] = objdata
+			end
+		end
+	end
+
+	return hash_data, foreign_data
+end
+]=]
 
 
 
@@ -294,20 +341,14 @@ return false
 
 dbsnippets.set.SNIPPET_zsetSave = 
 [=[
-redis.log(redis.LOG_WARNING, 'enter zsetSave')
-
 local key, items_str, scores_str = unpack(ARGV)
 local items = cmsgpack.unpack(items_str)
 local scores
-
-redis.log(redis.LOG_WARNING, 'enter ----'..scores_str)
 
 if scores_str ~= '' then
 	scores = cmsgpack.unpack(scores_str)
 end
 redis.call('DEL', key)
-
-redis.log(redis.LOG_WARNING, 'enter ===')
 
 if scores and #scores == #items then
 	for i, v in ipairs(items) do
@@ -550,7 +591,6 @@ dbsnippets.set.SNIPPET_getByIdFields =
 local model_name, id, fields_string = unpack(ARGV)								 
 local fields = cmsgpack.unpack(fields_string)
 local key = string.format('%s:%s', model_name, id)
-redis.log(redis.LOG_WARNING, fields[1])
 local data = redis.call('HMGET', key, unpack(fields))
 
 local obj = {}
@@ -886,8 +926,6 @@ return true
 dbsnippets.set.SNIPPET_getForeign = 
 [[
 
-redis.log(redis.LOG_WARNING, 'entern getForeign')
-
 -- here, start and stop is the transformed location index for redis, not lua
 local model_name, id, field, fdt_str, start, stop, is_rev = unpack(ARGV)
 
@@ -897,9 +935,6 @@ local foreign_type = fdt.foreign
 local store_type = fdt.st
 local key = string.format('%s:%s', model_name, id)
 local fkey = string.format('%s:%s:%s', model_name, id, field)
-
-redis.log(redis.LOG_WARNING, 'ready to start getForeign')
-
 
 local r_data = {}
 local data
@@ -916,9 +951,6 @@ if is_rev == 'rev' then
 else
 	r_data = data
 end
-
-redis.log(redis.LOG_WARNING, #r_data)
-
 
 local objs = {}
 if foreign_type == 'ANYSTRING' then	return r_data end
@@ -947,6 +979,7 @@ dbsnippets.set.SNIPPET_get =
 ${logicMethods}
 ${stringSplit}
 ${deserializeQueryFunction}
+${attachForeignData}
 
 local model_name, fields_string, query_type, query_string, logic, ffields_str, start_point, find_rev = unpack(ARGV)
 local fields = cmsgpack.unpack(fields_string)
@@ -961,23 +994,13 @@ end
 local ffields = cmsgpack.unpack(ffields_str)
 local start_point = start_point == '' and 1 or tonumber(start_point)
 
-
 local PARTLEN = 1024
 local logic_choice = logic == 'and'
 local flag = logic_choice
 local index_key = string.format('%s:__index', model_name)
 local length = redis.call('ZCARD', index_key)
 
-
 if query_type == 'table' then
-	local methods = {}
-	for k, v in pairs(query_args) do
-		if type(v) == 'table' then
-			local method = table.remove(v, 1)
-			methods[k] = method
-		end
-	end
-
 	for j = start_point-1, length-1, PARTLEN do
 		local r
 		if find_rev == 'rev' then
@@ -985,7 +1008,6 @@ if query_type == 'table' then
 		else
 			r = redis.call('ZRANGE', index_key, j, j+PARTLEN-1, 'WITHSCORES')
 		end
-
 
 		for i = 1, #r, 2 do
 			local id = r[i+1]
@@ -1004,7 +1026,7 @@ if query_type == 'table' then
 				-- it uses a logic function
 				if type(v) == 'table' then
 
-					flag = LOGIC_METHODS[methods[k]](unpack(v))(hash_data[k])
+					flag = LOGIC_METHODS[v[1]](v[2],v[3])(hash_data[k])
 				else
 					flag = (hash_data[k] == v)
 				end
@@ -1020,7 +1042,15 @@ if query_type == 'table' then
 				if logic_choice ~= flag then break end
 			end
 
-			if flag then return obj end
+			if flag then
+				-- add foreign part
+				local _, foreign_data = attachForeignData (hash_data, key, ffields)
+				for ffield, fdata in pairs(foreign_data) do
+					table.insert(obj, ffield)
+					table.insert(obj, fdata)
+				end
+				return obj 
+			end
 		end
 	end
 elseif query_type == 'function' then
@@ -1042,43 +1072,18 @@ elseif query_type == 'function' then
 				hash_data[obj[ii]] = obj[ii+1]
 			end
 
-			-- process the foreign parts
-			for field, fdt in pairs(ffields) do
-				local value = hash_data[field]
-				local fkey = string.format('%s:%s', key, field)
-				local foreign_type = fdt.foreign
-				local store_type = fdt.st
-
-				-- for ONE case
-				if value then
-					if foreign_type == 'UNFIXED' then
-						local objdata = redis.call('HGETALL', value)
-						local obj = {}
-						for p = 1, #objdata, 2 do
-							obj[objdata[p]] = objdata[p+1]
-						end
-						hash_data[field] = obj
-					elseif foreign_type ~= 'ANYSTRING' then
-						local target_key = string.format('%s:%s', foreign_type, value)
-						local objdata = redis.call('HGETALL', target_key)
-						local obj = {}
-						for p = 1, #objdata, 2 do
-							obj[objdata[p]] = objdata[p+1]
-						end
-						hash_data[field] = obj
-					end
-				else
-					if store_type == 'MANY' or store_type == 'ZFIFO' then
-						hash_data[field] = redis.call('ZRANGE', fkey, 0, -1)
-					elseif store_type == 'LIST' or store_type == 'FIFO' then
-						hash_data[field] = redis.call('LRANGE', fkey, 0, -1)
-					end
-				end
-			end
-			
+			local foreign_data = {}
+			hash_data, foreign_data = attachForeignData (hash_data, key, ffields)
 			-- now hash_data is with foreigns
 			local flag = query_args(hash_data)
-			if flag then return obj end
+			if flag then 
+				-- add the foreign part to return
+				for ffield, fdata in pairs(foreign_data) do
+					table.insert(obj, ffield)
+					table.insert(obj, fdata)
+				end
+				return obj 
+			end
 		end
 	end
 elseif query_type == 'string' then
@@ -1089,7 +1094,8 @@ end
 ]=] % {
 	logicMethods = SNIPPET_logicMethods,
 	stringSplit = SNIPPET_stringSplit, 
-	deserializeQueryFunction = SNIPPET_deserializeQueryFunction
+	deserializeQueryFunction = SNIPPET_deserializeQueryFunction,
+	attachForeignData = SNIPPET_attachForeignData
 }
 
 
@@ -1100,11 +1106,13 @@ dbsnippets.set.SNIPPET_filter =
 ${logicMethods}
 ${stringSplit}
 ${deserializeQueryFunction}
+${attachForeignData}
 
 local normalizeSlice = function (start, stop, totalnum)
 	local start = start or 1
 	local stop = stop or totalnum
-	local istart, istop
+	local istart = start
+	local istop = stop
 	
 	if start <= 0 then
 		istart = totalnum + start + 1
@@ -1119,7 +1127,7 @@ end
 
 
 local model_name, fields_string, query_type, query_string, logic, start, stop, is_rev, ffields_str, start_point, query_length, find_rev = unpack(ARGV)
-local fields = cmsgpack.unpack(query_string)
+local fields = cmsgpack.unpack(fields_string)
 local query_args
 if query_type == 'table' then
 	query_args = cmsgpack.unpack(query_string)
@@ -1138,308 +1146,154 @@ local index_key = string.format('%s:__index', model_name)
 local length = redis.call('ZCARD', index_key)
 
 if start_point == '' then
-	start_point = nil
-	start = tonumber(start)
-	stop = tonumber(stop)
+	start_point = 1
+	query_length = nil
+	start = tonumber(start) or 1
+	stop = tonumber(stop) or length
 else 
 	start_point = tonumber(start_point)
-	query_length = tonumber(query_length)
-	if not query_length then query_length = length end
-end
-
-if query_type == 'table' then
-	local methods = {}
-	for k, v in pairs(query_args) do
-		if type(v) == 'table' then
-			local method = table.remove(v, 1)
-			methods[k] = method
-		end
-	end
+	query_length = tonumber(query_length) or length
+	start = nil
+	stop = nil
 end
 
 
 local objs = {}
-if start_point then
-	if query_type == 'table' then
-		local istop = 1
-		local counter = 0
-		for j = start_point-1, length-1, PARTLEN do
-			local r
-			if find_rev == 'rev' then
-				r = redis.call('ZREVRANGE', index_key, j, j+PARTLEN-1, 'WITHSCORES')
-			else
-				r = redis.call('ZRANGE', index_key, j, j+PARTLEN-1, 'WITHSCORES')
-			end
+local istop = 1
+local counter = 0
 
-			for i = 1, #r, 2 do
-				local id = r[i+1]
-				local key = ('%s:%s'):format(model_name, id)
-				local obj = redis.call('HGETALL', key)
-
-				local hash_data = {}
-				for i = 1, #obj, 2 do
-					hash_data[obj[i]] = obj[i+1]
-				end
-
-				for k, v in pairs(query_args) do
-					-- to redundant query condition, once meet, jump immediately
-					if not fields[k] then flag=false; break end
-
-					-- it uses a logic function
-					if type(v) == 'table' then
-						flag = LOGIC_METHODS[methods[k]](unpack(v))(hash_data[k])
-					else
-						flag = (hash_data[k] == v)
-					end
-
-					---------------------------------------------------------------
-					-- logic_choice,       flag,      action,          append?
-					---------------------------------------------------------------
-					-- true (and)          true       next field       --
-					-- true (and)          false      break            no
-					-- false (or)          true       break            yes
-					-- false (or)          false      next field       --
-					---------------------------------------------------------------
-					if logic_choice ~= flag then break end
-				end
-
-				if flag then 
-					table.insert(objs, obj) 
-					counter = counter + 1
-					if counter >= query_length then
-						return {objs, istop}
-					end
-				end
-				istop = istop + 1
-			end
-		end
-	elseif query_type == 'function' then
-		for j = start_point-1, length-1, PARTLEN do
-			local r
-			if find_rev == 'rev' then
-				r = redis.call('ZREVRANGE', index_key, j, j+PARTLEN-1, 'WITHSCORES')
-			else
-				r = redis.call('ZRANGE', index_key, j, j+PARTLEN-1, 'WITHSCORES')
-			end
-
-			for i = 1, #r, 2 do
-				local id = r[i+1]
-				local key = ('%s:%s'):format(model_name, id)
-				local obj = redis.call('HGETALL', key)
-
-				local hash_data = {}
-				for i = 1, #obj, 2 do
-					hash_data[obj[i]] = obj[i+1]
-				end
-				
-				-- process the foreign parts
-				for field, fdt in pairs(ffields) do
-					local value = hash_data[field]
-					local fkey = string.format('%s:%s', key, field)
-					local foreign_type = fdt.foreign
-					local store_type = fdt.st
-
-					-- for ONE case
-					if value then
-						if foreign_type == 'UNFIXED' then
-							local objdata = redis.call('HGETALL', value)
-							local obj = {}
-							for p = 1, #objdata, 2 do
-								obj[objdata[p]] = objdata[p+1]
-							end
-							hash_data[field] = obj
-						elseif foreign_type ~= 'ANYSTRING' then
-							local target_key = string.format('%s:%s', foreign_type, value)
-							local objdata = redis.call('HGETALL', target_key)
-							local obj = {}
-							for p = 1, #objdata, 2 do
-								obj[objdata[p]] = objdata[p+1]
-							end
-							hash_data[field] = obj
-						end
-					else
-						if store_type == 'MANY' or store_type == 'ZFIFO' then
-							hash_data[field] = redis.call('ZRANGE', fkey, 0, -1)
-						elseif store_type == 'LIST' or store_type == 'FIFO' then
-							hash_data[field] = redis.call('LRANGE', fkey, 0, -1)
-						end
-					end
-				end
-
-				local flag = query_args(hash_data)
-				if flag then 
-					table.insert(objs, obj) 
-					counter = counter + 1
-					if counter >= query_length then
-						return {objs, istop}
-					end
-				end
-				istop = istop + 1
-			end
-		end
-	elseif query_type == 'string' then
-			-- TODO
-	end
-
-	return {objs, length}
-
-else  -- case 2: start, stop, is_rev
-
-	if query_type == 'table' then
-		for j = 0, length-1, PARTLEN do
-			local r
-			if find_rev == 'rev' then
-				r = redis.call('ZREVRANGE', index_key, j, j+PARTLEN-1, 'WITHSCORES')
-			else
-				r = redis.call('ZRANGE', index_key, j, j+PARTLEN-1, 'WITHSCORES')
-			end
-
-			for i = 1, #r, 2 do
-				local id = r[i+1]
-				local key = ('%s:%s'):format(model_name, id)
-				local obj = redis.call('HGETALL', key)
-
-				local hash_data = {}
-				for i = 1, #obj, 2 do
-					hash_data[obj[i]] = obj[i+1]
-				end
-
-				for k, v in pairs(query_args) do
-					-- to redundant query condition, once meet, jump immediately
-					if not fields[k] then flag=false; break end
-
-					-- it uses a logic function
-					if type(v) == 'table' then
-						flag = LOGIC_METHODS[methods[k]](unpack(v))(hash_data[k])
-					else
-						flag = (hash_data[k] == v)
-					end
-
-					---------------------------------------------------------------
-					-- logic_choice,       flag,      action,          append?
-					---------------------------------------------------------------
-					-- true (and)          true       next field       --
-					-- true (and)          false      break            no
-					-- false (or)          true       break            yes
-					-- false (or)          false      next field       --
-					---------------------------------------------------------------
-					if logic_choice ~= flag then break end
-				end
-
-				if flag then 
-					table.insert(objs, obj) 
-				end
-			end
-		end
-	elseif query_type == 'function' then
-		for j = 0, length-1, PARTLEN do
-			local r
-			if find_rev == 'rev' then
-				r = redis.call('ZREVRANGE', index_key, j, j+PARTLEN-1, 'WITHSCORES')
-			else
-				r = redis.call('ZRANGE', index_key, j, j+PARTLEN-1, 'WITHSCORES')
-			end
-
-			for i = 1, #r, 2 do
-				local id = r[i+1]
-				local key = ('%s:%s'):format(model_name, id)
-				local obj = redis.call('HGETALL', key)
-
-				local hash_data = {}
-				for i = 1, #obj, 2 do
-					hash_data[obj[i]] = obj[i+1]
-				end
-				
-				-- process the foreign parts
-				for field, fdt in pairs(ffields) do
-					local value = hash_data[field]
-					local fkey = string.format('%s:%s', key, field)
-					local foreign_type = fdt.foreign
-					local store_type = fdt.st
-
-					-- for ONE case
-					if value then
-						if foreign_type == 'UNFIXED' then
-							local objdata = redis.call('HGETALL', value)
-							local obj = {}
-							for p = 1, #objdata, 2 do
-								obj[objdata[p]] = objdata[p+1]
-							end
-							hash_data[field] = obj
-						elseif foreign_type ~= 'ANYSTRING' then
-							local target_key = string.format('%s:%s', foreign_type, value)
-							local objdata = redis.call('HGETALL', target_key)
-							local obj = {}
-							for p = 1, #objdata, 2 do
-								obj[objdata[p]] = objdata[p+1]
-							end
-							hash_data[field] = obj
-						end
-					else
-						if store_type == 'MANY' or store_type == 'ZFIFO' then
-							hash_data[field] = redis.call('ZRANGE', fkey, 0, -1)
-						elseif store_type == 'LIST' or store_type == 'FIFO' then
-							hash_data[field] = redis.call('LRANGE', fkey, 0, -1)
-						end
-					end
-				end
-
-				local flag = query_args(hash_data)
-				if flag then 
-					table.insert(objs, obj) 
-				end
-			end
-		end
-	elseif query_type == 'string' then
-		-- TODO
-	end
-	
-	local totalnum = #objs
-	if start then
-		local nobjs = {}
-		local istart, istop = normalizeSlice(start, stop, totalnum)
-		-- now start and stop are all positive 
-		if is_rev == 'rev' then
-			for n = istop, istart, -1 do
-				table.insert(nobjs, objs[n])
-			end
+if query_type == 'table' then
+	for j = start_point-1, length-1, PARTLEN do
+		local r
+		if find_rev == 'rev' then
+			r = redis.call('ZREVRANGE', index_key, j, j+PARTLEN-1, 'WITHSCORES')
 		else
-			for n = istart, istop do
-				table.insert(nobjs, objs[n])
-			end
+			r = redis.call('ZRANGE', index_key, j, j+PARTLEN-1, 'WITHSCORES')
 		end
-		objs = nobjs
-	end
 
-	return {objs, totalnum}
+		for i = 1, #r, 2 do
+			local id = r[i+1]
+			local key = ('%s:%s'):format(model_name, id)
+			local obj = redis.call('HGETALL', key)
+
+			local hash_data = {}
+			for t = 1, #obj, 2 do
+				hash_data[obj[t]] = obj[t+1]
+			end
+
+			for k, v in pairs(query_args) do
+				-- to redundant query condition, once meet, jump immediately
+				if not fields[k] then flag=false; break end
+
+				-- it uses a logic function
+				if type(v) == 'table' then
+					flag = LOGIC_METHODS[v[1]](v[2], v[3])(hash_data[k])
+				else
+					flag = (hash_data[k] == v)
+				end
+
+				---------------------------------------------------------------
+				-- logic_choice,       flag,      action,          append?
+				---------------------------------------------------------------
+				-- true (and)          true       next field       --
+				-- true (and)          false      break            no
+				-- false (or)          true       break            yes
+				-- false (or)          false      next field       --
+				---------------------------------------------------------------
+				if logic_choice ~= flag then break end
+			end
+
+			if flag then 
+				-- add foreign part
+				local _, foreign_data = attachForeignData (hash_data, key, ffields)
+				for ffield, fdata in pairs(foreign_data) do
+					table.insert(obj, ffield)
+					table.insert(obj, fdata)
+				end
+				table.insert(objs, obj)
+
+				if start_point and query_length then
+					counter = counter + 1
+					if counter >= query_length then
+						table.insert(objs, istop)
+						return objs
+					end
+				end
+			end
+			istop = istop + 1
+		end
+	end
+elseif query_type == 'function' then
+	for j = start_point-1, length-1, PARTLEN do
+		local r
+		if find_rev == 'rev' then
+			r = redis.call('ZREVRANGE', index_key, j, j+PARTLEN-1, 'WITHSCORES')
+		else
+			r = redis.call('ZRANGE', index_key, j, j+PARTLEN-1, 'WITHSCORES')
+		end
+
+		for i = 1, #r, 2 do
+			local id = r[i+1]
+			local key = ('%s:%s'):format(model_name, id)
+			local obj = redis.call('HGETALL', key)
+
+			local hash_data = {}
+			for t = 1, #obj, 2 do
+				hash_data[obj[t]] = obj[t+1]
+			end
+			
+			local foreign_data = {}
+			hash_data, foreign_data = attachForeignData (hash_data, key, ffields)
+			-- now hash_data is with foreigns
+			local flag = query_args(hash_data)
+			if flag then 
+				for ffield, fdata in pairs(foreign_data) do
+					table.insert(obj, ffield)
+					table.insert(obj, fdata)
+				end
+				table.insert(objs, obj) 
+
+				if start_point and query_length then
+					counter = counter + 1
+					if counter >= query_length then
+						table.insert(objs, istop)
+						return objs
+					end
+				end
+			end
+			istop = istop + 1
+		end
+	end
+elseif query_type == 'string' then
+	-- TODO
 end
 
+local totalnum = #objs
+if start and stop then
+	local nobjs = {}
+	local istart, istop = normalizeSlice(start, stop, totalnum)
+	-- now start and stop are all positive 
+	if is_rev == 'rev' then
+		for n = istop, istart, -1 do
+			table.insert(nobjs, objs[n])
+		end
+	else
+		for n = istart, istop do
+			table.insert(nobjs, objs[n])
+		end
+	end
+	objs = nobjs
+end
+
+table.insert(objs, totalnum)
+return objs
 
 ]=] % {
 	logicMethods = SNIPPET_logicMethods,
 	stringSplit = SNIPPET_stringSplit, 
-	deserializeQueryFunction = SNIPPET_deserializeQueryFunction
+	deserializeQueryFunction = SNIPPET_deserializeQueryFunction,
+	attachForeignData = SNIPPET_attachForeignData
 }
-
-
-
---[[
-
-local obj_list = {}
-for i, id in ipairs(ids) do
-	local key = ('%s:%s'):format(model_name, id)
-	local obj = redis.call('HGETALL', key)
-	table.insert(obj_list, obj)
-end
-
--- here, obj_list is the form of 
--- {{key1, val1, key2, val2}, {key1, val1, key2, val2}, {...}}
-return obj_list
-
-
---]]
-
-
 
 -- redis.log(redis.LOG_WARNING, 'enter now')
 

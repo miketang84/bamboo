@@ -720,8 +720,9 @@ Model = Object:extend {
 		local find_rev = ''
 		local start_point = ''
 		local ffields = {}
-		if ltype == 'string' and limit_params == 'rev' then find_rev = 'rev' end
-		if ltype == 'table' then
+		if ltype == 'string' and limit_params == 'rev' then 
+			find_rev = 'rev'
+		elseif ltype == 'table' then
 			find_rev = limit_params.find_rev or ''
 			local ffields_args = limit_params.foreigns
 			if ffields_args and #ffields_args > 0 then
@@ -751,9 +752,8 @@ Model = Object:extend {
 			'[Error] the query_args passed to filter must be table or function.')
 
 		local fields = self.__fields
-		local logic = query_args[1] == 'or' and 'or' or 'and'
-		local fields_string = cmsgpack.pack(self.__fields)
-		-- XXX: here, we only consider table first
+		local logic = 'and'
+		local fields_string = cmsgpack.pack(fields)
 		local query_string
 		local ctype = type(query_args)
 		if ctype == 'string' then
@@ -761,6 +761,7 @@ Model = Object:extend {
 		elseif ctype == 'function' then
 			query_string = serializeQueryFunction(query_args)
 		elseif ctype == 'table' then
+			logic = query_args[1] == 'or' and 'or' or 'and'
 			query_string = cmsgpack.pack(query_args)
 		else
 			error("[Error] no valid query args type @filter 'query_args'.")
@@ -778,6 +779,7 @@ Model = Object:extend {
 		local stop = stop or ''
 		local is_rev = is_rev or ''
 		local start_point, find_rev, length = '', '', ''
+		local ffields = {}
 		if limit_params then
 			start = limit_params.start or ''
 			stop = limit_params.stop or ''
@@ -786,12 +788,20 @@ Model = Object:extend {
 			start_point = limit_params.start_point or ''
 			find_rev = limit_params.find_rev or ''
 			length = limit_params.length or ''
+
+			local ffields_args = limit_params.foreigns
+			if ffields_args and #ffields_args > 0 then
+				for _, field in ipairs(ffields_args) do
+					ffields[field] = fields[field]
+				end
+			end
 		end
 
-		local r_data = db:evalsha(snippets.SNIPPET_filter, 0, self.__name, fields_string, ctype, query_string, logic, start, stop, is_rev, cmsgpack.pack(ffields_str), start_point, length, find_rev) 
-		
-		local data_list = r_data[1] 
-		local num = r_data[2]
+		local r_data = db:evalsha(snippets.SNIPPET_filter, 0, self.__name, fields_string, ctype, query_string, logic, start, stop, is_rev, cmsgpack.pack(ffields), start_point, length, find_rev) 
+--		ptable(r_data)
+
+		local num = table.remove(r_data)
+		local data_list = r_data
 		if data_list then return makeObjects(self, data_list), num end
 
 		return QuerySet(), 0
