@@ -1,4 +1,4 @@
-#!/usr/bin/env luajit
+#!/usr/bin/env lua
 
 require 'posix'
 require 'signal'
@@ -108,7 +108,7 @@ local function run_script(app_dir, script)
 end
 
 
-local function run_app(app_dir, targets)
+local function run_app(app_dir, targets, num)
     local pid
     local running = {}
 
@@ -118,7 +118,9 @@ local function run_app(app_dir, targets)
 
     for _, script in ipairs(targets) do
         if not running[script] then
-            run_script(app_dir, script)
+            	for i=1, tonumber(num) do
+		run_script(app_dir, script)
+		end	
         end
     end
 end
@@ -234,14 +236,14 @@ local function makeMD5()
 end
 
 local killProcesses = function (settings)
-	local fd = io.popen('ps eaux|grep luajit|grep $(pwd)', 'r')
+	local fd = io.popen('ps eaux|grep lua|grep PWD=$(pwd)', 'r')
 	local output = fd:read("*a")
 	fd:close()
 	-- print(output)
 
 	local cmd_output = output:split('\n')
-	local pattern0 = "(%d+).+luajit /usr/local/bin/bamboo start"
-	local pattern1 = "(%d+).+luajit /usr/local/bin/bamboo_handler"
+	local pattern0 = "(%d+).+lua /usr/local/bin/bamboo start"
+	local pattern1 = "(%d+).+lua /usr/local/bin/bamboo_handler"
 	local pid
 	for _, part in ipairs(cmd_output) do
 		pid = part:match(pattern0)
@@ -271,6 +273,7 @@ local startProcesses = function (settings)
 	local app_dir = settings.app or './'
 	local app = ('%s%s'):format((settings.app or "./"), 'app/handler_*.lua')
 	local script_times = {}
+	local num = settings[1] or 1
 
 	-- while true do
 
@@ -283,7 +286,7 @@ local startProcesses = function (settings)
 			end
 		end
 
-		run_app(app_dir, targets)
+		run_app(app_dir, targets, num)
 		local script, pid = wait_on_children(app_dir, targets)
 		local tick = os.time()
 
