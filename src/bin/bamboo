@@ -1,4 +1,4 @@
-#!/usr/bin/env lua
+#!/usr/bin/env luajit
 
 require 'posix'
 require 'signal'
@@ -236,14 +236,14 @@ local function makeMD5()
 end
 
 local killProcesses = function (settings)
-	local fd = io.popen('ps eaux|grep lua|grep PWD=$(pwd)', 'r')
+	local fd = io.popen('ps eaux|grep luajit|grep PWD=$(pwd)', 'r')
 	local output = fd:read("*a")
 	fd:close()
 	-- print(output)
 
 	local cmd_output = output:split('\n')
-	local pattern0 = "(%d+).+lua /usr/local/bin/bamboo start"
-	local pattern1 = "(%d+).+lua /usr/local/bin/bamboo_handler"
+	local pattern0 = "(%d+).+luajit /usr/local/bin/bamboo start"
+	local pattern1 = "(%d+).+luajit /usr/local/bin/bamboo_handler"
 	local pid
 	for _, part in ipairs(cmd_output) do
 		pid = part:match(pattern0)
