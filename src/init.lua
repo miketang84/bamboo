@@ -17,11 +17,12 @@ local cmsgpack = require 'cmsgpack'
 config = {}
 -- for global rendering usage
 context = {}
-userdata = {}
-plugindata = {}
+appdata = {}
+pids = {}
+--plugindata = {}
 internals = {}
-LOGIC_METHODS = {}
 dbsnippets = {set={}, sha2key={}, key2sha={}}
+LOGIC_METHODS = {}
 
 compiled_views_tmpls = {}
 compiled_views = {}
@@ -47,7 +48,7 @@ URLS_STATES = {}
 PATTERN_URLS = {}
 ------------------------------------------------------------------------
 
-pubToCluster = function (msg_obj)
+pubCluster = function (msg_obj)
 	bamboo.cluster_channel_pub:send(cmsgpack.pack(msg_obj))
 end
 

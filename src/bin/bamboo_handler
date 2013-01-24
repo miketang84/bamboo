@@ -24,6 +24,7 @@ local DEFAULT_ALLOWED_METHODS = {GET = true, POST = true, PUT = true, JSON = tru
 
 -- ==============================================================
 -- 
+local pid = posix.getpid('pid')
 local is_testing = false
 -- APP_DIR: application directory, default is './', because we start it in application directory
 local APP_DIR = './'
@@ -92,7 +93,7 @@ config.APP_DIR = APP_DIR
 config.config_file = config.config_file or "config.lua"
 if config.lgserver_dir then
 	-- format full directory of config_file, to find lgserver's configuration
-	config.config_file = config.lgserver_dir + '/' + config.config_file
+  config.config_file = config.lgserver_dir + '/' + config.config_file
 end
 config.route = config.route or '/'
 
@@ -125,12 +126,101 @@ bamboo.registerModule(childenv)
 config.disconnect = childenv.disconnect
 config.clusterSubHandler = childenv.clusterSubHandler
 
+
+local lgserver_request = function () end
+local already_shaked = false
+local MsgHandlerSwitch = {
+  ['hello'] = function (msg) 
+      print('he says hello')
+      bamboo.pubCluster({type='reply_hello', pids = bamboo.pids})
+  end,
+  
+  ['reply_hello'] = function (msg) 
+      print('he replies hello')
+
+    local pids = msg.pids or {}
+    -- if #pids == 0, only my self process, ready to work directly
+    if not already_shaked then
+      if #pids == 0 then
+        table.insert(bamboo.pids, pid)
+        bamboo.pids_dict[pid] = #bamboo.pids
+        poller:add(lgserver_conn.channel_req, zmq.POLLIN, lgserver_request)
+      else
+        local to_pid = pids[1]
+        bamboo.pubCluster({type='req_sync', from_pid=pid, to_pid=to_pid})
+      end
+      already_shaked = true
+    end 
+  end,
+  
+  ['req_sync'] = function (msg) 
+      print('req_sync')
+
+    if msg.to_pid == pid then
+      bamboo.pubCluster({type='res_sync', sync_data = bamboo.appdata})
+    end
+  end,
+  ['res_sync'] = function (msg)
+      print('res_sync')
+
+    if msg.from_pid == pid then
+      bamboo.appdata = msg.sync_data
+      bamboo.pubCluster({type='add_pid', pid = pid})
+      poller:add(lgserver_conn.channel_req, zmq.POLLIN, lgserver_request)
+    end
+  end,
+
+  ['add_pid'] = function (msg)
+        print('add_pid')
+
+    table.insert(bamboo.pids, msg.pid)
+    bamboo.pids_dict[msg.pid] = #bamboo.pids
+  end,
+  
+  -- for receiving daemon process msg
+  ['remove_pid'] = function (msg)  
+    local nlocation = bamboo.pids_dict[msg.pid]
+    table.remove(bamboo.pids, nlocation)
+    bamboo.pids_dict[msg.pid] = nil
+  end,
+
+--  ['is_alive'] = function (msg)
+--      -- send this msg one second a time like heart jump by an daemon process
+--      -- bamboo.pubCluster({type='is_alive', from_pid = pid})
+--      bamboo.pubCluster({type='i_am_alive', by_pid = pid})
+--  end,
+--  
+--  ['i_am_alive'] = function (msg)  
+--    table.insert(bamboo.pids, msg.pid)
+--    bamboo.pids_dict[msg.pid] = true
+--  end,
+
+
+  ['reboot'] = function (msg)   end,
+
+}
+
+
+local default_cluster_handler = function (msg)
+  local mtype = msg.type
+  local msg_handler = MsgHandlerSwitch[mtype]
+  if msg_handler then
+    msg_handler(msg)
+  else
+    -- no predefined handler to process this msg
+    if childenv.clusterSubHandler then
+      childenv.clusterSubHandler(msg)
+    end
+  end
+end
+
+
 local cluster_listener = function ()
 	local ch_sub = lgserver_conn.cluster_channel_sub
-	local msg = ch_sub:recv()
-	if childenv.clusterSubHandler then
-		childenv.clusterSubHandler(cmsgpack.unpack(msg))
-	end
+	local msg_str = ch_sub:recv()
+	local msg = cmsgpack.unpack(msg_str)
+  
+  default_cluster_handler(msg)
 end
 
 
@@ -141,7 +231,6 @@ local file_log_driver = require "logging.file"
 
 local log_dir = config.log_dir or '/var/tmp/logs/'
 local appname = config.appname or config.project_name or 'bambooapp'
-local pid = posix.getpid('pid')
 local ctime = os.date("%H%M%S", os.time())
 local logfile = log_dir.."/"..appname.."_%s_"..ctime.."_"..pid..".log"
 -- bambooapp date time pid
@@ -324,7 +413,7 @@ local function run(lgserver_conn, config)
 	local makeSessionId = Session.identRequest
 
 	-- main loop
-	local lgserver_request = function ()
+	lgserver_request = function ()
 		-- Get a message from the lgserver, if have no, block to wait
 		req = lgserver_conn:recv()
 		-- update the latest request object to global request reference
@@ -378,9 +467,12 @@ local function run(lgserver_conn, config)
 		if lgserver_conn.cluster_channel_sub then
 		   poller:add(lgserver_conn.cluster_channel_sub, zmq.POLLIN, lgserver_request)
 		end
+    
+    bamboo.pubCluster({type='hello'})
+    
 		-- add the main lgserver request to poll
 		-- lgserver_conn.channel_req is the socket pull from lgserver
-		poller:add(lgserver_conn.channel_req, zmq.POLLIN, lgserver_request)
+		-- poller:add(lgserver_conn.channel_req, zmq.POLLIN, lgserver_request)
 		-- start the main loop
 		poller:start()
 	end
