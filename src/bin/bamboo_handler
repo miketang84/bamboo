@@ -1,14 +1,16 @@
 #!/usr/bin/env lua
 
 -- ATTEN: this file is not a module
-package.path = './?.lua;./?/init.lua;./?/src/init.lua;/usr/local/lib/lua/5.1/?.lua;/usr/local/lib/lua/5.1/?/init.lua;' .. package.path
+package.path = './?.lua;./?/init.lua;./?/src/init.lua;/usr/local/share/lua/5.1/?.lua;/usr/local/share/lua/5.1/?/init.lua;' .. package.path
 
 require 'posix'
 require 'lglib'
 require 'bamboo'
+local socket = require 'socket'
 local utils = require 'bamboo.utils'
 local normalizePath = require('lglib.path').normalize
 
+local cmsgpack = require 'cmsgpack'
 require 'zmq.poller'
 local poller = zmq.poller(64)
 bamboo.poller = poller
@@ -55,9 +57,10 @@ bamboo.config = config
 -- ==============================================================
 -- connect redis, basic db
 local redis = require 'bamboo.db.redis'
+config.redis_config = config.redis_config or {master={ip="127.0.0.1", port=6379}, slaves={}}
 
-local DB_HOST = config.DB_HOST or '127.0.0.1'
-local DB_PORT = config.DB_PORT or 6379
+local DB_HOST = config.DB_HOST or config.redis_config.master.ip
+local DB_PORT = config.DB_PORT or config.redis_config.master.port
 local WHICH_DB = config.WHICH_DB or 0
 local AUTH = config.AUTH or nil
 
@@ -65,6 +68,15 @@ local AUTH = config.AUTH or nil
 -- we will create one redis connection for every process
 BAMBOO_DB = redis.connect {host=DB_HOST, port=DB_PORT, which = WHICH_DB, auth = AUTH}
 assert(BAMBOO_DB, '[Error] Database connection is failed.')
+-- try to connect slaves
+BAMBOO_DB._slaves = {}
+for i, slave in ipairs(config.redis_config.slaves) do
+	local sdb = redis.connect {host=slave.ip, port=slave.port, which = WHICH_DB, auth = AUTH}
+	if sdb then
+		table.insert(BAMBOO_DB._slaves, sdb)
+--		redis.pushslave(sdb)
+	end
+end
 
 
 _G['View'] = require 'bamboo.view'
@@ -92,7 +104,6 @@ bamboo.lgserver_conn = lgserver_conn
 config.lgserver_conn = lgserver_conn
 bamboo.cluster_channel_pub = lgserver_conn.cluster_channel_pub
 
-
 -- ==============================================================
 -- load handler_entry file
 local childenv = {}
@@ -114,7 +125,28 @@ bamboo.registerModule(childenv)
 config.disconnect = childenv.disconnect
 config.clusterSubHandler = childenv.clusterSubHandler
 
+local cluster_listener = function ()
+	local ch_sub = lgserver_conn.cluster_channel_sub
+	local msg = ch_sub:recv()
+	if childenv.clusterSubHandler then
+		childenv.clusterSubHandler(cmsgpack.unpack(msg))
+	end
+end
+
+
 local URLS = childenv.URLS
+
+
+local file_log_driver = require "logging.file"
+
+local log_dir = config.log_dir or '/var/tmp/logs/'
+local appname = config.appname or config.project_name or 'bambooapp'
+local pid = posix.getpid('pid')
+local ctime = os.date("%H%M%S", os.time())
+local logfile = log_dir.."/"..appname.."_%s_"..ctime.."_"..pid..".log"
+-- bambooapp date time pid
+bamboo.logger = file_log_driver(logfile, "%Y-%m-%d")
+
 
 
 -- ==============================================================
@@ -227,11 +259,11 @@ local function preparse(req)
 	if req.method == 'GET' then
 		req.GET = Form:parseQuery(req)
 		req.POST = {}
-		req.PARAMS = req.GET
+		req.PARAMS = req.GET or {}
 	elseif req.method == 'POST' then
 		req.GET = Form:parseQuery(req)
 		req.POST = Form:parse(req)
-		req.PARAMS = table.update(req.GET, req.POST)
+		req.PARAMS = req.GET and req.POST and table.update(req.GET, req.POST) or {}
 	end
 end
 
@@ -256,8 +288,10 @@ local function execute(lgserver_conn, main, req)
     local web = Web(lgserver_conn, main, req)
     -- update the latest web state to global variale web
     _G['web'] = web
-	
-	local good, err = pcall(main, web, req)
+	bamboo.logger:info( 'handler func start time: '..socket.gettime())
+	--local good, err = pcall(main, web, req)
+	local good, err = xpcall(function () main(web, req) end, function () print(debug.traceback()) end)
+	bamboo.logger:info( 'handler func end time: '..socket.gettime())
     if not good and err then
 		-- production mode
 		if config.PRODUCTION then
@@ -266,7 +300,8 @@ local function execute(lgserver_conn, main, req)
 			-- print debug info in console log
 			print('[Error] Page error.')
 			print("[Error]", err)
-			print( debug.traceback() )
+			-- XXX
+			-- print( debug.traceback() )
 		else
 			-- dev mode
 			local errors = require 'bamboo.errors'
@@ -318,6 +353,7 @@ local function run(lgserver_conn, config)
 					preprocessRequest(req)
 
 					print(("req %s: %s"):format(config.route, req.meta.conn_id), os.date(), req.path, req.method, req.session_id)
+					bamboo.logger:info(("req %s: %s\t%s\t%s\t%s"):format(config.route, req.meta.conn_id, req.path, req.method, req.session_id))
 
 					-- record session
 					Session:set(req)

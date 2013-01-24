@@ -194,27 +194,12 @@ return function ()
 				return true
 			end
 		end;
-
-		-- -- XXX: this is a odd api, useless
-		-- -- TODO: add score argument appending
-		-- updateCustom = function (self, key, val)
-		-- 	I_AM_CLASS_OR_INSTANCE(self)
-		-- 	checkType(key, 'string')
-		-- 	local custom_key = makeCustomKey(self, key)		
-
-		-- 	if not db:exists(custom_key) then print('[Warning] @updateCustom - This custom key does not exist.'); return nil end
-		-- 	local store_type = db:type(custom_key)
-		-- 	local store_module = getStoreModule(store_type)
-		-- 	return store_module.update(custom_key, val)
-
-		-- end;
-
 		removeCustomMember = function (self, key, val)
 			I_AM_CLASS_OR_INSTANCE(self)
 --			checkType(key, 'string')
 			local custom_key = makeCustomKey(self, key)		
 
-			if not db:exists(custom_key) then print('[Warning] @removeCustomMember - This custom key does not exist.'); return nil end
+			-- if not db:exists(custom_key) then print('[Warning] @removeCustomMember - This custom key does not exist.'); return nil end
 			local store_type = db:type(custom_key)
 			local store_module = getStoreModule(store_type)
 			return store_module.remove(custom_key, val)

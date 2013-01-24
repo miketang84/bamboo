@@ -158,8 +158,9 @@ local View = Object:extend {
     ------------------------------------------------------------------------
     init = function (self, name, is_inline)
         local tmpl
-
-		if bamboo.config.PRODUCTION then
+	if not name then return '' end
+	
+	if bamboo.config.PRODUCTION then
             -- if cached
 	        -- NOTE: here, 5 is an empiric value
     	    bamboo.compiled_views_locals[name] = getlocals({}, 5)

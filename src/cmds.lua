@@ -1,6 +1,6 @@
 
 local readSettings = require('bamboo.utils').readSettings
-
+local config = {}
 
 return {
 
@@ -284,7 +284,7 @@ host = "%s"
 
 	
     shell = function (settings)
-   		local config = readSettings({})
+   		local config = readSettings(config)
 		local bamboo_dir = config.bamboo_dir
 
 		local shell_file = bamboo_dir + '/src/bin/shell.lua'

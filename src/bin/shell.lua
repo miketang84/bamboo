@@ -1,4 +1,6 @@
 #!/usr/bin/lua
+package.path = './?.lua;./?/init.lua;/usr/local/share/lua/5.1/?.lua;/usr/local/share/lua/5.1/?/init.lua;' .. package.path
+
 require 'bamboo'
 
 local redis = require 'bamboo.db.redis'

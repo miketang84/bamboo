@@ -76,12 +76,13 @@ local function savefile(t)
 		os.execute('mkdir -p ' + dest_dir)
 	end
 
+	local newfilename = filename
 	-- if passed in a rename function, use it to replace the orignial filename
 	if rename_func and type(rename_func) == 'function' then
-		filename = rename_func(filename)
+		newfilename = rename_func(filename)
 	end
 
-	local newbasename, ext = calcNewFilename(dest_dir, filename)
+	local newbasename, ext = calcNewFilename(dest_dir, newfilename)
 	local newname = prefix + newbasename + postfix + ext
 	
 	local path = dest_dir + newname
@@ -91,7 +92,7 @@ local function savefile(t)
 	fd:write(body)
 	fd:close()
 	
-	return newname, path
+	return newname, path, filename
 end
 
 
@@ -130,7 +131,7 @@ local Upload = Model:extend {
 	
 	init = function (self, t)
 		if not t then return self end
-		
+		self.oldname = t.oldname
 		self.name = t.name
 		self.path = t.path or 'media/uploads/default'
 		self.size = posix.stat(self.path).size
@@ -179,10 +180,10 @@ local Upload = Model:extend {
 	    -- if upload in html5 way
 	    if req.headers['x-requested-with'] then
 			-- stored to disk
-			local name, path = savefile { req = req, dest_dir = dest_dir, prefix = prefix, postfix = postfix, rename_func = rename_func }    
+			local name, path, oldname = savefile { req = req, dest_dir = dest_dir, prefix = prefix, postfix = postfix, rename_func = rename_func }    
 			if not path or not name then return nil, '[Error] empty file.' end
 			
-			local file_instance = self { name = name, path = path }
+			local file_instance = self { name = name, path = path, oldname = oldname }
 			if file_instance then
 				-- file_instance:save()
 				return file_instance, 'single'
