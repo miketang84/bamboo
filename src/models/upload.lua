@@ -76,7 +76,7 @@ local function savefile(t)
 		os.execute('mkdir -p ' + dest_dir)
 	end
 
-	local newfilename
+	local newfilename = filename
 	-- if passed in a rename function, use it to replace the orignial filename
 	if rename_func and type(rename_func) == 'function' then
 		newfilename = rename_func(filename)

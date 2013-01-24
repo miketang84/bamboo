@@ -6,6 +6,7 @@ package.path = './?.lua;./?/init.lua;./?/src/init.lua;/usr/local/share/lua/5.1/?
 require 'posix'
 require 'lglib'
 require 'bamboo'
+local socket = require 'socket'
 local utils = require 'bamboo.utils'
 local normalizePath = require('lglib.path').normalize
 
@@ -134,6 +135,18 @@ end
 
 
 local URLS = childenv.URLS
+
+
+local file_log_driver = require "logging.file"
+
+local log_dir = config.log_dir or '/var/tmp/logs/'
+local appname = config.appname or config.project_name or 'bambooapp'
+local pid = posix.getpid('pid')
+local ctime = os.date("%H%M%S", os.time())
+local logfile = log_dir.."/"..appname.."_%s_"..ctime.."_"..pid..".log"
+-- bambooapp date time pid
+bamboo.logger = file_log_driver(logfile, "%Y-%m-%d")
+
 
 
 -- ==============================================================
@@ -275,8 +288,10 @@ local function execute(lgserver_conn, main, req)
     local web = Web(lgserver_conn, main, req)
     -- update the latest web state to global variale web
     _G['web'] = web
-	
-	local good, err = pcall(main, web, req)
+	bamboo.logger:info( 'handler func start time: '..socket.gettime())
+	--local good, err = pcall(main, web, req)
+	local good, err = xpcall(function () main(web, req) end, function () print(debug.traceback()) end)
+	bamboo.logger:info( 'handler func end time: '..socket.gettime())
     if not good and err then
 		-- production mode
 		if config.PRODUCTION then
@@ -285,7 +300,8 @@ local function execute(lgserver_conn, main, req)
 			-- print debug info in console log
 			print('[Error] Page error.')
 			print("[Error]", err)
-			print( debug.traceback() )
+			-- XXX
+			-- print( debug.traceback() )
 		else
 			-- dev mode
 			local errors = require 'bamboo.errors'
@@ -337,6 +353,7 @@ local function run(lgserver_conn, config)
 					preprocessRequest(req)
 
 					print(("req %s: %s"):format(config.route, req.meta.conn_id), os.date(), req.path, req.method, req.session_id)
+					bamboo.logger:info(("req %s: %s\t%s\t%s\t%s"):format(config.route, req.meta.conn_id, req.path, req.method, req.session_id))
 
 					-- record session
 					Session:set(req)
