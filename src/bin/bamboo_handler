@@ -28,9 +28,9 @@ local is_testing = false
 -- APP_DIR: application directory, default is './', because we start it in application directory
 local APP_DIR = './'
 if arg[1] == '-f' and arg[2]:startsWith('tests/') then
-	is_testing = true
+  is_testing = true
 else
-	APP_DIR = arg[1] or './'
+  APP_DIR = arg[1] or './'
 end
 
 -- arg[2]: target file, every process handle one entry file, arg[2] is that file, default is 'handler_entry.lua'
@@ -71,11 +71,11 @@ assert(BAMBOO_DB, '[Error] Database connection is failed.')
 -- try to connect slaves
 BAMBOO_DB._slaves = {}
 for i, slave in ipairs(config.redis_config.slaves) do
-	local sdb = redis.connect {host=slave.ip, port=slave.port, which = WHICH_DB, auth = AUTH}
-	if sdb then
-		table.insert(BAMBOO_DB._slaves, sdb)
+  local sdb = redis.connect {host=slave.ip, port=slave.port, which = WHICH_DB, auth = AUTH}
+  if sdb then
+    table.insert(BAMBOO_DB._slaves, sdb)
 --		redis.pushslave(sdb)
-	end
+  end
 end
 
 
@@ -91,8 +91,8 @@ local Web = require 'bamboo.web'
 config.APP_DIR = APP_DIR
 config.config_file = config.config_file or "config.lua"
 if config.lgserver_dir then
-	-- format full directory of config_file, to find lgserver's configuration
-	config.config_file = config.lgserver_dir + '/' + config.config_file
+  -- format full directory of config_file, to find lgserver's configuration
+  config.config_file = config.lgserver_dir + '/' + config.config_file
 end
 config.route = config.route or '/'
 
@@ -126,11 +126,11 @@ config.disconnect = childenv.disconnect
 config.clusterSubHandler = childenv.clusterSubHandler
 
 local cluster_listener = function ()
-	local ch_sub = lgserver_conn.cluster_channel_sub
-	local msg = ch_sub:recv()
-	if childenv.clusterSubHandler then
-		childenv.clusterSubHandler(cmsgpack.unpack(msg))
-	end
+  local ch_sub = lgserver_conn.cluster_channel_sub
+  local msg = ch_sub:recv()
+  if childenv.clusterSubHandler then
+    childenv.clusterSubHandler(cmsgpack.unpack(msg))
+  end
 end
 
 
@@ -154,31 +154,31 @@ bamboo.logger = file_log_driver(logfile, "%Y-%m-%d")
 -- 
 -- check the structure legality
 local function checkURLS(urls)
-	for k, v in pairs(urls) do
-		checkType(k, v, 'string', 'function')
-	end
+  for k, v in pairs(urls) do
+    checkType(k, v, 'string', 'function')
+  end
 end
 checkURLS(URLS)
 
 local function makeUrlHandlerMapping(URLS)
-	local table_concrete = {}
-	local table_pattern = {}
-	
-	local base = router
-	for k, v in pairs(URLS) do
-		local url_t = base + k
-		-- remove abundant '/'
-		url_t = normalizePath(url_t)
-		
-		-- separate the pattern format from normal concrete format
-		if url_t:find('%[?%%[%%%-_a-zA-Z]+%]?%+?%-?') or url_t:find('%.%+?%-?') then
-			table_pattern[url_t:lower()] = v
-		else
-			table_concrete[url_t:lower()] = v
-		end
-	end	
-	
-	return table_concrete, table_pattern
+  local table_concrete = {}
+  local table_pattern = {}
+  
+  local base = router
+  for k, v in pairs(URLS) do
+    local url_t = base + k
+    -- remove abundant '/'
+    url_t = normalizePath(url_t)
+    
+    -- separate the pattern format from normal concrete format
+    if url_t:find('%[?%%[%%%-_a-zA-Z]+%]?%+?%-?') or url_t:find('%.%+?%-?') then
+      table_pattern[url_t:lower()] = v
+    else
+      table_concrete[url_t:lower()] = v
+    end
+  end	
+  
+  return table_concrete, table_pattern
 end
 
 local MappingTableConcrete, MappingTablePattern = makeUrlHandlerMapping(URLS)
@@ -200,41 +200,41 @@ end
 -- @return:  two values, first is a handler function, second is a boolean to indict whether is state programming
 ------------------------------------------------------------------------
 local function getHandlerByPath(path)
-	local path = path:lower() 
-	local parse = function (v)
-		if type(v) == 'table' then
-			checkType(v.handler, 'function')
-			return v.handler
-		elseif type(v) == 'function' then
-			return v
-		end
-	end
-	
-	local key, value = "", nil
-	-- process concrete case first
-	if MappingTableConcrete[path] then return parse(MappingTableConcrete[path]), path end
+  local path = path:lower() 
+  local parse = function (v)
+    if type(v) == 'table' then
+      checkType(v.handler, 'function')
+      return v.handler
+    elseif type(v) == 'function' then
+      return v
+    end
+  end
+  
+  local key, value = "", nil
+  -- process concrete case first
+  if MappingTableConcrete[path] then return parse(MappingTableConcrete[path]), path end
 
-	-- if process the pattern case
-	for k, v in pairs(MappingTablePattern) do
-		-- for pattern cases, we select the concretest one
-		if k == path then
-			return parse(v)
-		-- if some pattern cases meet one path meanwhile, and they have the save length, select the last one
-		elseif path:match('^' + k + '$') then
-			if key == '' or #k >= #key then 
-				key, value = k, v
-			end
-		end
+  -- if process the pattern case
+  for k, v in pairs(MappingTablePattern) do
+    -- for pattern cases, we select the concretest one
+    if k == path then
+      return parse(v)
+    -- if some pattern cases meet one path meanwhile, and they have the save length, select the last one
+    elseif path:match('^' + k + '$') then
+      if key == '' or #k >= #key then 
+        key, value = k, v
+      end
+    end
 
-	end	
+  end	
 
-	-- if walks here, means this is a pattern case path
-	if key and value then
-		return parse(value), key
-	end
-	
-	-- if walks here, means no suited case matched
-	return nil
+  -- if walks here, means this is a pattern case path
+  if key and value then
+    return parse(value), key
+  end
+  
+  -- if walks here, means no suited case matched
+  return nil
 end
 
 
@@ -256,24 +256,24 @@ bamboo.internals.connDispatcher = connDispatcher
 
 
 local function preparse(req)
-	if req.method == 'GET' then
-		req.GET = Form:parseQuery(req)
-		req.POST = {}
-		req.PARAMS = req.GET or {}
-	elseif req.method == 'POST' then
-		req.GET = Form:parseQuery(req)
-		req.POST = Form:parse(req)
-		req.PARAMS = req.GET and req.POST and table.update(req.GET, req.POST) or {}
-	end
+  if req.method == 'GET' then
+    req.GET = Form:parseQuery(req)
+    req.POST = {}
+    req.PARAMS = req.GET or {}
+  elseif req.method == 'POST' then
+    req.GET = Form:parseQuery(req)
+    req.POST = Form:parse(req)
+    req.PARAMS = req.GET and req.POST and table.update(req.GET, req.POST) or {}
+  end
 end
 
 
 local function preprocessRequest (req)
-	-- keep capatible
-	req.conn_id = req.meta.conn_id
+  -- keep capatible
+  req.conn_id = req.meta.conn_id
 
-	if req.headers['x-requested-with'] == 'XMLHttpRequest' then req.ajax = true end
-	req.userdata = {}
+  if req.headers['x-requested-with'] == 'XMLHttpRequest' then req.ajax = true end
+  req.userdata = {}
 end
 
 
@@ -285,29 +285,32 @@ end
 -- @return: none
 ------------------------------------------------------------------------
 local function execute(lgserver_conn, main, req)
-    local web = Web(lgserver_conn, main, req)
-    -- update the latest web state to global variale web
-    _G['web'] = web
-	bamboo.logger:info( 'handler func start time: '..socket.gettime())
-	--local good, err = pcall(main, web, req)
-	local good, err = xpcall(function () main(web, req) end, function () print(debug.traceback()) end)
-	bamboo.logger:info( 'handler func end time: '..socket.gettime())
-    if not good and err then
-		-- production mode
-		if config.PRODUCTION then
-			web.conn:reply_http('<h2>Page error.</h2>', 500, 'Page error.', nil, nil, req.meta)
-			
-			-- print debug info in console log
-			print('[Error] Page error.')
-			print("[Error]", err)
-			-- XXX
-			-- print( debug.traceback() )
-		else
-			-- dev mode
-			local errors = require 'bamboo.errors'
-			errors.reportError(lgserver_conn, req, err, web)
-		end
+  local web = Web(lgserver_conn, main, req)
+  -- update the latest web state to global variale web
+  _G['web'] = web
+  bamboo.logger:info( 'handler func start time: '..socket.gettime())
+
+  -- call the handler in protected mode
+  --local good, err = pcall(main, web, req)
+  local good, err = xpcall(function () 
+    main(web, req) 
+  end, 
+  function (errmsg) 
+    print(debug.traceback(errmsg, 2))
+    bamboo.logger:error(errmsg)
+  end)
+    
+  bamboo.logger:info( 'handler func end time: '..socket.gettime())
+  if not good then
+    -- production mode
+    if config.PRODUCTION then
+      web.conn:reply_http('<h2>Page error.</h2>', 500, 'Page error.', nil, nil, req.meta)
+    else
+      -- dev mode
+      local errors = require 'bamboo.errors'
+      errors.reportError(lgserver_conn, req, err, web)
     end
+  end
 end
 
 
@@ -319,72 +322,72 @@ end
 -- @return:				none
 ------------------------------------------------------------------------
 local function run(lgserver_conn, config)
-	local disconnect = ident, config.disconnect
-	local req, path
-	local makeSessionId = Session.identRequest
+  local disconnect = ident, config.disconnect
+  local req, path
+  local makeSessionId = Session.identRequest
 
-	-- main loop
-	local lgserver_request = function ()
-		-- Get a message from the lgserver, if have no, block to wait
-		req = lgserver_conn:recv()
-		-- update the latest request object to global request reference
-		_G['req'] = req
+  -- main loop
+  local lgserver_request = function ()
+    -- Get a message from the lgserver, if have no, block to wait
+    req = lgserver_conn:recv()
+    -- update the latest request object to global request reference
+    _G['req'] = req
 
-		if req and req.meta then
-			-- if client close the connection
-			if req.meta.type == 'disconnect' then
-				print("DISCONNECT", req.meta.conn_id)
-				if disconnect then disconnect(req) end
-			else
-				-- normalize the path's format
-				path = normalizePath(req.path)
+    if req and req.meta then
+      -- if client close the connection
+      if req.meta.type == 'disconnect' then
+        print("DISCONNECT", req.meta.conn_id)
+        if disconnect then disconnect(req) end
+      else
+        -- normalize the path's format
+        path = normalizePath(req.path)
               req.path = path
-				-------------------------------------------------
-				-- according coming path, find the corresponding handler function
-				local main, copath = getHandlerByPath(path)
-				if not main then
-					-- return 404 page
-					print(('[Warning] No handler to process this path: %s.'):format(path))
-					lgserver_conn:reply_http('<h2>Page Not Found.</h2>', 404, 'Not Found', nil, nil, req.meta)
-				else
-					-- generate req.session_id
-					makeSessionId(req)
-					-- add some other attributes
-					preprocessRequest(req)
+        -------------------------------------------------
+        -- according coming path, find the corresponding handler function
+        local main, copath = getHandlerByPath(path)
+        if not main then
+          -- return 404 page
+          print(('[Warning] No handler to process this path: %s.'):format(path))
+          lgserver_conn:reply_http('<h2>Page Not Found.</h2>', 404, 'Not Found', nil, nil, req.meta)
+        else
+          -- generate req.session_id
+          makeSessionId(req)
+          -- add some other attributes
+          preprocessRequest(req)
 
-					print(("req %s: %s"):format(config.route, req.meta.conn_id), os.date(), req.path, req.method, req.session_id)
-					bamboo.logger:info(("req %s: %s\t%s\t%s\t%s"):format(config.route, req.meta.conn_id, req.path, req.method, req.session_id))
+          print(("req %s: %s"):format(config.route, req.meta.conn_id), os.date(), req.path, req.method, req.session_id)
+          bamboo.logger:info(("req %s: %s\t%s\t%s\t%s"):format(config.route, req.meta.conn_id, req.path, req.method, req.session_id))
 
-					-- record session
-					Session:set(req)
-					
-					-- inject req.GET, req.POST, req.PARAMS
-					preparse(req)
-					
-					-- call process handler to work
-					execute(lgserver_conn, main, req)
-				end
+          -- record session
+          Session:set(req)
+          
+          -- inject req.GET, req.POST, req.PARAMS
+          preparse(req)
+          
+          -- call process handler to work
+          execute(lgserver_conn, main, req)
+        end
 
-			end
-		else
-			print("FATAL ERROR", good, req, err)
-		end
-	end
+      end
+    else
+      print("FATAL ERROR", good, req, err)
+    end
+  end
     
-	if is_testing then
-		while true do lgserver_request() end
-	else
-		print('Enter polling....')
-		ptable(lgserver_conn)
-		poller:add(lgserver_conn.cluster_channel_sub, zmq.POLLIN, cluster_listener)
-		-- add the main lgserver request to poll
-		-- lgserver_conn.channel_req is the socket pull from lgserver
-		poller:add(lgserver_conn.channel_req, zmq.POLLIN, lgserver_request)
-		-- start the main loop
-		poller:start()
-	end
+  if is_testing then
+    while true do lgserver_request() end
+  else
+    print('Enter polling....')
+    ptable(lgserver_conn)
+    poller:add(lgserver_conn.cluster_channel_sub, zmq.POLLIN, cluster_listener)
+    -- add the main lgserver request to poll
+    -- lgserver_conn.channel_req is the socket pull from lgserver
+    poller:add(lgserver_conn.channel_req, zmq.POLLIN, lgserver_request)
+    -- start the main loop
+    poller:start()
+  end
 
-	print('Bamboo main loop aborted!')
+  print('Bamboo main loop aborted!')
 end
 
 
@@ -399,12 +402,12 @@ local function start(config)
 end
 
 bamboo.EXPORT_FOR_TESTING = {
-	config = config,
-	run = run,
-	updateConfig = updateConfig,
-	DEFAULT_ALLOWED_METHODS = DEFAULT_ALLOWED_METHODS,
-	ident = Session.identRequest,
-	parseSessionId = Session.parseSessionId,
+  config = config,
+  run = run,
+  updateConfig = updateConfig,
+  DEFAULT_ALLOWED_METHODS = DEFAULT_ALLOWED_METHODS,
+  ident = Session.identRequest,
+  parseSessionId = Session.parseSessionId,
 --	getState = getState,
 }
 
