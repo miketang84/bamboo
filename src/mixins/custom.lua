@@ -127,7 +127,7 @@ return function ()
 			local custom_key = makeCustomKey(self, key)
 			if not db:exists(custom_key) then
 				local atype = start
-				print(("[Warning] @getCustom - Key %s doesn't exist!"):format(custom_key))
+				-- print(("[Warning] @getCustom - Key %s doesn't exist!"):format(custom_key))
 				if not atype or atype == 'string' then return nil
 				elseif atype == 'list' then
 					return List()

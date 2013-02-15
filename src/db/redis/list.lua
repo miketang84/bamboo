@@ -57,7 +57,10 @@ end
 
 function retrieve( key )
 	-- if no element exists, return empty list
-	return List(db:lrange(key, 0, -1))
+  local r = db:lrange(key, 0, -1)
+  --print('r', r)
+  if r and type(r) ~= 'table' then return List() end 
+	return List(r)
 end
 
 function append( key, val )
