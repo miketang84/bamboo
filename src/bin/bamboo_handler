@@ -11,9 +11,18 @@ local utils = require 'bamboo.utils'
 local normalizePath = require('lglib.path').normalize
 
 local cmsgpack = require 'cmsgpack'
-require 'zmq.poller'
-local poller = zmq.poller(64)
-bamboo.poller = poller
+--require 'zmq.poller'
+--local poller = zmq.poller(64)
+--bamboo.poller = poller
+
+local zmq = require'handler.zmq'
+local httpserver = require'handler.http.server'
+local ev = require'ev'
+local loop = ev.Loop.default
+local tremove = table.remove
+
+local ctx = zmq.init(loop, 1)
+
 
 -- ==============================================================
 -- Global variables delarations: in top project code, we can see these variables
@@ -88,21 +97,24 @@ local Web = require 'bamboo.web'
 -- ==============================================================
 -- write some attributes to config
 -- 
-config.APP_DIR = APP_DIR
-config.config_file = config.config_file or "config.lua"
-if config.lgserver_dir then
-  -- format full directory of config_file, to find lgserver's configuration
-  config.config_file = config.lgserver_dir + '/' + config.config_file
-end
-config.route = config.route or '/'
+--config.APP_DIR = APP_DIR
+--config.config_file = config.config_file or "config.lua"
+--if config.webserver_dir then
+--  -- format full directory of config_file, to find webserver's configuration
+--  config.config_file = config.webserver_dir + '/' + config.config_file
+--end
+--config.route = config.route or '/'
+--
+--local driver = require 'bamboo.webserver_driver'
+--driver.loadConfig(config)
 
-local driver = require 'bamboo.lgserver_driver'
-driver.loadConfig(config)
-local lgserver_conn = assert(driver.connect(config), "Failed to connect to lgserver.")
 
-bamboo.lgserver_conn = lgserver_conn
-config.lgserver_conn = lgserver_conn
-bamboo.cluster_channel_pub = lgserver_conn.cluster_channel_pub
+
+--local webserver_conn = assert(driver.connect(config), "Failed to connect to webserver.")
+
+--bamboo.webserver_conn = webserver_conn
+--config.webserver_conn = webserver_conn
+--bamboo.cluster_channel_pub = webserver_conn.cluster_channel_pub
 
 -- ==============================================================
 -- load handler_entry file
@@ -112,7 +124,7 @@ setfenv(assert(loadfile(handler_file)), setmetatable(childenv, {__index=_G}))()
 
 -- get the router and simplify the entry file's URLS
 -- assert(not isFalse(childenv.URLS[1]), '[Error] URLS value is not right. URLS[1] must be string and NOT be blank.')
-local router = config.route
+local router = config.route or '/'
 if childenv.URLS[1] then childenv.URLS[1] = nil end
 
 table.update(bamboo.URLS, childenv.URLS)
@@ -123,22 +135,22 @@ bamboo.registerModule(childenv)
 
 -- hook the disconnect handler
 config.disconnect = childenv.disconnect
-config.clusterSubHandler = childenv.clusterSubHandler
-
-local cluster_listener = function ()
-  local ch_sub = lgserver_conn.cluster_channel_sub
-  local msg = ch_sub:recv()
-  if childenv.clusterSubHandler then
-    childenv.clusterSubHandler(cmsgpack.unpack(msg))
-  end
-end
+--config.clusterSubHandler = childenv.clusterSubHandler
+--
+--local cluster_listener = function ()
+--  local ch_sub = webserver_conn.cluster_channel_sub
+--  local msg = ch_sub:recv()
+--  if childenv.clusterSubHandler then
+--    childenv.clusterSubHandler(cmsgpack.unpack(msg))
+--  end
+--end
 
 
 local URLS = childenv.URLS
 
 
+-- logging file
 local file_log_driver = require "logging.file"
-
 local log_dir = config.log_dir or '/var/tmp/logs/'
 local appname = config.appname or config.project_name or 'bambooapp'
 local pid = posix.getpid('pid')
@@ -279,13 +291,13 @@ end
 
 ------------------------------------------------------------------------
 -- stateless programming
--- @param lgserver_conn:		connection object
+-- @param webserver_conn:		connection object
 -- @param main:		application main function
 -- @param req:		request object
 -- @return: none
 ------------------------------------------------------------------------
-local function execute(lgserver_conn, main, req)
-  local web = Web(lgserver_conn, main, req)
+local function execute(webserver_conn, main, req)
+  local web = Web(webserver_conn, main, req)
   -- update the latest web state to global variale web
   _G['web'] = web
   bamboo.logger:info( 'handler func start time: '..socket.gettime())
@@ -308,7 +320,7 @@ local function execute(lgserver_conn, main, req)
     else
       -- dev mode
       local errors = require 'bamboo.errors'
-      errors.reportError(lgserver_conn, req, err, web)
+      errors.reportError(webserver_conn, req, err, web)
     end
   end
 end
@@ -317,20 +329,21 @@ end
 
 ------------------------------------------------------------------------
 -- Bamboo's main loop for every bamboo process
--- @param lgserver_conn:	 	connection object
+-- @param webserver_conn:	 	connection object
 -- @param config:		config table from external
 -- @return:				none
 ------------------------------------------------------------------------
-local function run(lgserver_conn, config)
+local function run(webserver_conn, config)
   local disconnect = ident, config.disconnect
   local req, path
   local makeSessionId = Session.identRequest
 
   -- main loop
-  local lgserver_request = function ()
-    -- Get a message from the lgserver, if have no, block to wait
-    req = lgserver_conn:recv()
+  local webserver_request = function (zsock, data)
+    -- Get a message from the webserver, if have no, block to wait
+    --req = webserver_conn:recv()
     -- update the latest request object to global request reference
+    req = cmsgpack.unpack(data)
     _G['req'] = req
 
     if req and req.meta then
@@ -348,7 +361,7 @@ local function run(lgserver_conn, config)
         if not main then
           -- return 404 page
           print(('[Warning] No handler to process this path: %s.'):format(path))
-          lgserver_conn:reply_http('<h2>Page Not Found.</h2>', 404, 'Not Found', nil, nil, req.meta)
+          webserver_conn:reply_http('<h2>Page Not Found.</h2>', 404, 'Not Found', nil, nil, req.meta)
         else
           -- generate req.session_id
           makeSessionId(req)
@@ -365,7 +378,7 @@ local function run(lgserver_conn, config)
           preparse(req)
           
           -- call process handler to work
-          execute(lgserver_conn, main, req)
+          execute(webserver_conn, main, req)
         end
 
       end
@@ -375,19 +388,35 @@ local function run(lgserver_conn, config)
   end
     
   if is_testing then
-    while true do lgserver_request() end
+    while true do webserver_request() end
   else
-    print('Enter polling....')
-    ptable(lgserver_conn)
-    poller:add(lgserver_conn.cluster_channel_sub, zmq.POLLIN, cluster_listener)
-    -- add the main lgserver request to poll
-    -- lgserver_conn.channel_req is the socket pull from lgserver
-    poller:add(lgserver_conn.channel_req, zmq.POLLIN, lgserver_request)
-    -- start the main loop
-    poller:start()
-  end
+--    print('Enter polling....')
+--    ptable(webserver_conn)
+--    poller:add(webserver_conn.cluster_channel_sub, zmq.POLLIN, cluster_listener)
+--    -- add the main webserver request to poll
+--    -- webserver_conn.channel_req is the socket pull from webserver
+--    poller:add(webserver_conn.channel_req, zmq.POLLIN, webserver_request)
+--    -- start the main loop
+--    poller:start()
+--  end
 
-  print('Bamboo main loop aborted!')
+    print('Enter main loop.')
+    local zpull = ctx:pull(webserver_request)
+    zpull:connect(config.pull_addr)
+
+    local zpub = ctx:pub()
+    zpub:connect(config.pub_addr)
+
+    bamboo.ch_recv = zpull
+    bamboo.ch_send = zpub
+    print('ch_recv', bamboo.ch_recv)
+    print('ch_send', bamboo.ch_send)
+    -- libev default main loop
+    loop:loop()
+    print('Bamboo main loop aborted!')
+  end
+  
+  print('Bamboo exited.')
 end
 
 
@@ -398,7 +427,7 @@ end
 ------------------------------------------------------------------------
 local function start(config)
     -- boot main loop
-    run(config.lgserver_conn, config)
+    run(config.webserver_conn, config)
 end
 
 bamboo.EXPORT_FOR_TESTING = {
