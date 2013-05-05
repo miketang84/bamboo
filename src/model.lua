@@ -100,7 +100,7 @@ local getStoreModule = function (store_type)
 	assert( store_module, "[Error] store type must be one of 'string', 'list', 'set', 'zset' or 'hash'.")
 	return store_module
 end
-bamboo.internals['getStoreModule'] = getStoreModule
+bamboo.internal['getStoreModule'] = getStoreModule
 
 ------------------------------------------------------------------------------------
 local getModelByName  = bamboo.getModelByName
@@ -299,7 +299,7 @@ local getFromRedis = function (self, model_key)
 	local data = db:hgetall(model_key)
 	return makeObject(self, data)
 end
-bamboo.internals['getFromRedis'] = getFromRedis
+bamboo.internal['getFromRedis'] = getFromRedis
 
 ------------------------------------------------------------
 -- get objects from redis with pipeline
@@ -326,7 +326,7 @@ local getFromRedisPipeline = function (self, ids)
 
 	return objs, nils
 end
-bamboo.internals['getFromRedisPipeline'] = getFromRedisPipeline
+bamboo.internal['getFromRedisPipeline'] = getFromRedisPipeline
 
 
 ------------------------------------------------------------
@@ -360,7 +360,7 @@ local getFromRedisPipeline2 = function (pattern_list)
 
 	return objs, nils
 end
-bamboo.internals['getFromRedisPipeline2'] = getFromRedisPipeline2
+bamboo.internal['getFromRedisPipeline2'] = getFromRedisPipeline2
 
 
 ------------------------------------------------------------
@@ -445,7 +445,7 @@ local delFromRedis = function (self, id)
 
 	-- clear fulltext index, only when it is instance
 	if isUsingFulltextIndex(self) and self.id then
-		bamboo.internals.clearFtIndexesOnDeletion(self)
+		bamboo.internal.clearFtIndexesOnDeletion(self)
 	end
 	if isUsingRuleIndex(self) and self.id then
 		updateIndexByRules(self, 'del')
@@ -454,7 +454,7 @@ local delFromRedis = function (self, id)
 	-- release the lua object
 	self = nil
 end
-bamboo.internals['delFromRedis'] = delFromRedis
+bamboo.internal['delFromRedis'] = delFromRedis
 
 --------------------------------------------------------------
 -- Fake Deletion
@@ -491,7 +491,7 @@ local fakedelFromRedis = function (self, id)
 
 	-- clear fulltext index
 	if isUsingFulltextIndex(self) and self.id then
-		bamboo.internals.clearFtIndexesOnDeletion(self)
+		bamboo.internal.clearFtIndexesOnDeletion(self)
 	end
 	if isUsingRuleIndex(self) and self.id then
 		updateIndexByRules(self, 'del')
@@ -500,7 +500,7 @@ local fakedelFromRedis = function (self, id)
 	-- release the lua object
 	self = nil
 end
-bamboo.internals['fakedelFromRedis'] = fakedelFromRedis
+bamboo.internal['fakedelFromRedis'] = fakedelFromRedis
 
 
 --------------------------------------------------------------
@@ -590,7 +590,7 @@ local checkLogicRelation = function (obj, query_args, logic_choice, model)
 
 	return flag
 end
-bamboo.internals.checkLogicRelation = checkLogicRelation
+bamboo.internal.checkLogicRelation = checkLogicRelation
 
 ---------------------------------------------------------------------------------
 -- RULE INDEX CODE
@@ -1759,7 +1759,7 @@ Model = Object:extend {
 
 		-- make fulltext indexes
 		if isUsingFulltextIndex(self) then
-			bamboo.internals.makeFulltextIndexes(self)
+			bamboo.internal.makeFulltextIndexes(self)
 		end
 		if isUsingRuleIndex(self) then
 			updateIndexByRules(self, 'update')
@@ -1823,7 +1823,7 @@ Model = Object:extend {
 
 		-- if fulltext index
 		if fld.fulltext_index and isUsingFulltextIndex(self) then
-			bamboo.internals.makeFulltextIndexes(self)
+			bamboo.internal.makeFulltextIndexes(self)
 		end
 		if isUsingRuleIndex(self) then
 			updateIndexByRules(self, 'update')

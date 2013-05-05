@@ -19,8 +19,8 @@ local zmq = require'handler.zmq'
 local httpserver = require'handler.http.server'
 local ev = require'ev'
 local loop = ev.Loop.default
+bamboo.internal.loop = loop
 local tremove = table.remove
-
 local ctx = zmq.init(loop, 1)
 
 
@@ -255,16 +255,22 @@ local SUSPENDED_TASKS = {}
 bamboo.SUSPENDED_TASKS = SUSPENDED_TASKS
 -- conn: zmq connection
 -- revents: return events
-local connDispatcher = function (conn, revents)
-    local state = SUSPENDED_TASKS[conn]
-    if not state then return nil end
+--local connDispatcher = function (conn, revents)
+--    local state = SUSPENDED_TASKS[conn]
+--    if not state then return nil end
+--
+--    return coroutine.resume(state.controller, conn:recv())
+--end
+--bamboo.internal.connDispatcher = connDispatcher
 
-    return coroutine.resume(state.controller, conn:recv())
+local dbioDispatcher = function (loop, io_watcher, revents)
+  local state = SUSPENDED_TASKS[io_watcher]
+  if not state then return nil end
+  
+  return coroutine.resume(state.controller)
+
 end
-bamboo.internals.connDispatcher = connDispatcher
-
-
-
+bambo.internal.dbioDispatcher = dbioDispatcher
 
 
 local function preparse(req)
@@ -296,8 +302,8 @@ end
 -- @param req:		request object
 -- @return: none
 ------------------------------------------------------------------------
-local function execute(webserver_conn, main, req)
-  local web = Web(webserver_conn, main, req)
+local function execute(main, req)
+  local web = Web(main, req, config.pdb_conf)
   -- update the latest web state to global variale web
   _G['web'] = web
   bamboo.logger:info( 'handler func start time: '..socket.gettime())
@@ -305,7 +311,9 @@ local function execute(webserver_conn, main, req)
   -- call the handler in protected mode
   --local good, err = pcall(main, web, req)
   local good, err = xpcall(function () 
-    main(web, req) 
+    -- main(web, req) 
+    -- this is a coroutine
+    coroutine.resume(web.controller, web, req)
   end, 
   function (errmsg) 
     print(debug.traceback(errmsg, 2))
@@ -313,14 +321,24 @@ local function execute(webserver_conn, main, req)
   end)
     
   bamboo.logger:info( 'handler func end time: '..socket.gettime())
+  
+  -- gc ev IO watcher and socket connection to db
+  if web.pdb_conn.io_watcher then
+    web.pdb_conn.io_watcher:stop()
+  end
+  if web.pdb_conn.sock then
+    web.pdb_conn.sock:close()
+  end
+  
   if not good then
     -- production mode
     if config.PRODUCTION then
-      web.conn:reply_http('<h2>Page error.</h2>', 500, 'Page error.', nil, nil, req.meta)
+      -- XXX
+      -- web.conn:reply_http('<h2>Page error.</h2>', 500, 'Page error.', nil, nil, req.meta)
     else
       -- dev mode
       local errors = require 'bamboo.errors'
-      errors.reportError(webserver_conn, req, err, web)
+      errors.reportError(req, err, web)
     end
   end
 end
@@ -333,7 +351,7 @@ end
 -- @param config:		config table from external
 -- @return:				none
 ------------------------------------------------------------------------
-local function run(webserver_conn, config)
+local function run()
   local disconnect = ident, config.disconnect
   local req, path
   local makeSessionId = Session.identRequest
@@ -354,14 +372,16 @@ local function run(webserver_conn, config)
       else
         -- normalize the path's format
         path = normalizePath(req.path)
-              req.path = path
+        req.path = path
         -------------------------------------------------
         -- according coming path, find the corresponding handler function
         local main, copath = getHandlerByPath(path)
         if not main then
           -- return 404 page
           print(('[Warning] No handler to process this path: %s.'):format(path))
-          webserver_conn:reply_http('<h2>Page Not Found.</h2>', 404, 'Not Found', nil, nil, req.meta)
+          local web = Web(function()end, req)
+          web:notFound();
+        
         else
           -- generate req.session_id
           makeSessionId(req)
@@ -378,7 +398,7 @@ local function run(webserver_conn, config)
           preparse(req)
           
           -- call process handler to work
-          execute(webserver_conn, main, req)
+          execute(main, req)
         end
 
       end
@@ -425,9 +445,9 @@ end
 -- @param config:	configuration table from application
 -- @return:			none
 ------------------------------------------------------------------------
-local function start(config)
+local function start()
     -- boot main loop
-    run(config.webserver_conn, config)
+    run()
 end
 
 bamboo.EXPORT_FOR_TESTING = {

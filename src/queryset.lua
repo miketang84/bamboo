@@ -2,7 +2,7 @@
 local QuerySetMeta = {__spectype='QuerySet'}
 
 -- require neccessary methods
-local checkLogicRelation = bamboo.internals.checkLogicRelation
+local checkLogicRelation = bamboo.internal.checkLogicRelation
 
 
 QuerySetMeta.get = function (self, query_args, find_rev)
@@ -10,7 +10,7 @@ QuerySetMeta.get = function (self, query_args, find_rev)
 
 	local checkRelation = function (obj)
 		-- logic check
-local checkLogicRelation = bamboo.internals.checkLogicRelation
+local checkLogicRelation = bamboo.internal.checkLogicRelation
         
 		flag = checkLogicRelation(obj, query_args, logic == 'and')
 		if flag then return obj end
@@ -101,7 +101,7 @@ QuerySetMeta.filter = function (self, query_args, ...)
 	local walkcheck = function (objs)
 		for i, obj in ipairs(objs) do
 			-- check the object's legalery, only act on valid object
-local checkLogicRelation = bamboo.internals.checkLogicRelation
+local checkLogicRelation = bamboo.internal.checkLogicRelation
 			local flag = checkLogicRelation(obj, query_args, logic_choice)
 
 			-- if walk to this line, means find one
@@ -240,7 +240,7 @@ end;
 	
 QuerySetMeta.fakeDel = function (self)
 	I_AM_QUERY_SET(self)
-	local fakedelFromRedis = bamboo.internals.fakedelFromRedis
+	local fakedelFromRedis = bamboo.internal.fakedelFromRedis
 	
 	for _, v in ipairs(self) do
 		fakedelFromRedis(v)
@@ -252,7 +252,7 @@ end;
 
 QuerySetMeta.trueDel = function (self)
 	I_AM_QUERY_SET(self)
-	local delFromRedis = bamboo.internals.delFromRedis
+	local delFromRedis = bamboo.internal.delFromRedis
 	
 	for _, v in ipairs(self) do
 		delFromRedis(v)

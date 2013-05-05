@@ -1,7 +1,7 @@
 
 local db = BAMBOO_DB
 
-local getStoreModule = bamboo.internals.getStoreModule
+local getStoreModule = bamboo.internal.getStoreModule
 
 local function getCustomKey(self, key)
 	return format('%s:custom:%s', self.__name, key)

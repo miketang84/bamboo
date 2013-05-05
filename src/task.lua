@@ -57,7 +57,7 @@ function connect(config)
 
     -- conn_dispatcher is the default bamboo connecion dispatcher
     function TaskConn:wait()
-		bamboo.poller:add(conn, zmq.POLLIN, bamboo.internals.connDispatcher)
+		bamboo.poller:add(conn, zmq.POLLIN, bamboo.internal.connDispatcher)
 		-- yield return data from task process
 		return coroutine.yield()
     end

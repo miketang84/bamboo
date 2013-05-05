@@ -23,7 +23,7 @@ local clearFtIndexesOnDeletion = function (instance)
 		db:del(format(ft_rft_pattern, instance.__name, instance.id, field))
 	end
 end
-bamboo.internals.clearFtIndexesOnDeletion = clearFtIndexesOnDeletion
+bamboo.internal.clearFtIndexesOnDeletion = clearFtIndexesOnDeletion
 
 -- Full Text Search utilities
 -- @param instance the object to be full text indexes
@@ -51,7 +51,7 @@ local makeFulltextIndexes = function (instance)
 
 	return true
 end
-bamboo.internals.makeFulltextIndexes = makeFulltextIndexes
+bamboo.internal.makeFulltextIndexes = makeFulltextIndexes
 
 local wordSegmentOnFieldFtIndex = function (self, field, ask_str)
 	local search_tags = mmseg.segment(ask_str)
@@ -121,7 +121,7 @@ local searchOnFieldFulltextIndexes = function (self, field, tags, n, onlyids)
 	if onlyids == 'onlyids' then
 		return QuerySet(ids)
 	else
-		local getFromRedisPipeline = bamboo.internals.getFromRedisPipeline
+		local getFromRedisPipeline = bamboo.internal.getFromRedisPipeline
 		-- return objects
 		return getFromRedisPipeline(self, ids)
 	end
@@ -143,7 +143,7 @@ local searchOnFieldFulltextIndexesByOr = function (self, field, tags, n, onlyids
 	if onlyids == 'onlyids' then
 		results = QuerySet(id_set:members():slice(1, n))
 	else
-		local getFromRedisPipeline = bamboo.internals.getFromRedisPipeline
+		local getFromRedisPipeline = bamboo.internal.getFromRedisPipeline
 		results = getFromRedisPipeline(self, id_set:members():slice(1, n))
 	end
 	
@@ -180,7 +180,7 @@ local searchOnFulltextIndexes = function (self, tags, n, is_or, standalone, only
 	end
 	
 	local results
-	local getFromRedisPipeline = bamboo.internals.getFromRedisPipeline
+	local getFromRedisPipeline = bamboo.internal.getFromRedisPipeline
 	if standalone == 'standalone' then
 		for k, ids in pairs(field_dict) do
 			results[k] = getFromRedisPipeline(self, ids)
