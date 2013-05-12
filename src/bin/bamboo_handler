@@ -22,7 +22,11 @@ local loop = ev.Loop.default
 bamboo.internal.loop = loop
 local tremove = table.remove
 local ctx = zmq.init(loop, 1)
-
+-- For background tasks
+local SUSPENDED_TASKS = {}
+local SUSPENDED_SOCKETS = {}
+bamboo.SUSPENDED_TASKS = SUSPENDED_TASKS
+bamboo.SUSPENDED_SOCKETS = SUSPENDED_SOCKETS
 
 -- ==============================================================
 -- Global variables delarations: in top project code, we can see these variables
@@ -86,7 +90,10 @@ for i, slave in ipairs(config.redis_config.slaves) do
 --		redis.pushslave(sdb)
   end
 end
+-- default persist db config 
+config.pdb_config = config.pdb_config or { host="127.0.0.1", port=27017 }
 
+config.route = config.route or '/'
 
 _G['View'] = require 'bamboo.view'
 _G['Form'] = require 'bamboo.form'
@@ -103,7 +110,7 @@ local Web = require 'bamboo.web'
 --  -- format full directory of config_file, to find webserver's configuration
 --  config.config_file = config.webserver_dir + '/' + config.config_file
 --end
---config.route = config.route or '/'
+
 --
 --local driver = require 'bamboo.webserver_driver'
 --driver.loadConfig(config)
@@ -250,27 +257,6 @@ local function getHandlerByPath(path)
 end
 
 
--- For background tasks
-local SUSPENDED_TASKS = {}
-bamboo.SUSPENDED_TASKS = SUSPENDED_TASKS
--- conn: zmq connection
--- revents: return events
---local connDispatcher = function (conn, revents)
---    local state = SUSPENDED_TASKS[conn]
---    if not state then return nil end
---
---    return coroutine.resume(state.controller, conn:recv())
---end
---bamboo.internal.connDispatcher = connDispatcher
-
-local dbioDispatcher = function (loop, io_watcher, revents)
-  local state = SUSPENDED_TASKS[io_watcher]
-  if not state then return nil end
-  
-  return coroutine.resume(state.controller)
-
-end
-bambo.internal.dbioDispatcher = dbioDispatcher
 
 
 local function preparse(req)
@@ -303,45 +289,137 @@ end
 -- @return: none
 ------------------------------------------------------------------------
 local function execute(main, req)
-  local web = Web(main, req, config.pdb_conf)
+  local web = Web(main, req, config.pdb_config)
   -- update the latest web state to global variale web
-  _G['web'] = web
-  bamboo.logger:info( 'handler func start time: '..socket.gettime())
+  -- XXX, global scope variable is not good idea
+  --_G['web'] = web
+  
+ -- bamboo.logger:info( 'handler func start time: '..socket.gettime())
 
-  -- call the handler in protected mode
-  --local good, err = pcall(main, web, req)
-  local good, err = xpcall(function () 
+  local good, err, extra = xpcall(function () 
     -- main(web, req) 
     -- this is a coroutine
-    coroutine.resume(web.controller, web, req)
-  end, 
-  function (errmsg) 
+    return coroutine.resume(web.controller, web, req)
+  end, function (errmsg) 
     print(debug.traceback(errmsg, 2))
     bamboo.logger:error(errmsg)
   end)
-    
-  bamboo.logger:info( 'handler func end time: '..socket.gettime())
+  print('------->', good, err, extra)
+
+--  end
+--  bamboo.logger:info( 'handler func end time: '..socket.gettime())
   
+  -- TODO: not neccessary to gc when handler is not finished
   -- gc ev IO watcher and socket connection to db
-  if web.pdb_conn.io_watcher then
-    web.pdb_conn.io_watcher:stop()
-  end
-  if web.pdb_conn.sock then
-    web.pdb_conn.sock:close()
-  end
+--  if web.pdb_conn.io_watcher then
+--    web.pdb_conn.io_watcher:stop()
+--  end
+--  if web.pdb_conn.sock then
+--    web.pdb_conn.sock:close()
+--  end
   
-  if not good then
-    -- production mode
-    if config.PRODUCTION then
-      -- XXX
-      -- web.conn:reply_http('<h2>Page error.</h2>', 500, 'Page error.', nil, nil, req.meta)
+--  if not good then
+--    -- production mode
+--    if config.PRODUCTION then
+--      -- XXX
+--      -- web.conn:reply_http('<h2>Page error.</h2>', 500, 'Page error.', nil, nil, req.meta)
+--    else
+--      -- dev mode
+--      local errors = require 'bamboo.errors'
+--      errors.reportError(req, err, web)
+--    end
+--  end
+--  
+--  print(coroutine.status(web.controller))
+
+end
+
+
+-- main loop
+local webserver_request = function (zsock, data)
+  local disconnect = config.disconnect
+  local req, path
+  local makeSessionId = Session.identRequest
+
+  -- Get a message from the webserver, if have no, block to wait
+  --req = webserver_conn:recv()
+  -- update the latest request object to global request reference
+  req = cmsgpack.unpack(data)
+  _G['req'] = req
+
+  if req and req.meta then
+    -- if client close the connection
+    if req.meta.type == 'disconnect' then
+      print("DISCONNECT", req.meta.conn_id)
+      if disconnect then disconnect(req) end
     else
-      -- dev mode
-      local errors = require 'bamboo.errors'
-      errors.reportError(req, err, web)
+      -- normalize the path's format
+      path = normalizePath(req.path)
+      req.path = path
+      -------------------------------------------------
+      -- according coming path, find the corresponding handler function
+      local main, copath = getHandlerByPath(path)
+      if not main then
+        -- return 404 page
+        print(('[Warning] No handler to process this path: %s.'):format(path))
+        local web = Web(function()end, req)
+        web:notFound();
+      
+      else
+        -- generate req.session_id
+        makeSessionId(req)
+        -- add some other attributes
+        preprocessRequest(req)
+
+        print(("req %s: %s"):format(config.route, req.meta.conn_id), os.date(), req.path, req.method, req.session_id)
+        bamboo.logger:info(("req %s: %s\t%s\t%s\t%s"):format(config.route, req.meta.conn_id, req.path, req.method, req.session_id))
+
+        -- record session
+        Session:set(req)
+        
+        -- inject req.GET, req.POST, req.PARAMS
+        preparse(req)
+        
+        -- call process handler to work
+        execute(main, req)
+      end
+
     end
+  else
+    print("FATAL ERROR", good, req, err)
   end
 end
+
+
+
+-- coroutineDispatcher act as two type task
+-- 1. zmq callback from web server
+-- 2. ordinary IO callback from database
+-- thus, 
+local coroutineDispatcher = function (loop, io_watcher, revents)
+
+  -- wait for database return 
+  print('--->', io_watcher)
+  local state = SUSPENDED_TASKS[io_watcher]
+  if state then 
+    print('before resume', io_watcher)
+    --bamboo.logger:info()
+    coroutine.resume(state)
+    print('after resume', io_watcher)
+    
+    -- if run off
+    if coroutine.status(state) == "dead" then
+      print('ready to end state', io_watcher)
+      SUSPENDED_TASKS[io_watcher] = nil
+      SUSPENDED_SOCKETS[io_watcher].sock:close()
+      SUSPENDED_SOCKETS[io_watcher] = nil
+      io_watcher:stop(loop)
+    end
+    
+  end
+  
+end
+bamboo.internal.coroutineDispatcher = coroutineDispatcher
 
 
 
@@ -352,61 +430,7 @@ end
 -- @return:				none
 ------------------------------------------------------------------------
 local function run()
-  local disconnect = ident, config.disconnect
-  local req, path
-  local makeSessionId = Session.identRequest
-
-  -- main loop
-  local webserver_request = function (zsock, data)
-    -- Get a message from the webserver, if have no, block to wait
-    --req = webserver_conn:recv()
-    -- update the latest request object to global request reference
-    req = cmsgpack.unpack(data)
-    _G['req'] = req
-
-    if req and req.meta then
-      -- if client close the connection
-      if req.meta.type == 'disconnect' then
-        print("DISCONNECT", req.meta.conn_id)
-        if disconnect then disconnect(req) end
-      else
-        -- normalize the path's format
-        path = normalizePath(req.path)
-        req.path = path
-        -------------------------------------------------
-        -- according coming path, find the corresponding handler function
-        local main, copath = getHandlerByPath(path)
-        if not main then
-          -- return 404 page
-          print(('[Warning] No handler to process this path: %s.'):format(path))
-          local web = Web(function()end, req)
-          web:notFound();
-        
-        else
-          -- generate req.session_id
-          makeSessionId(req)
-          -- add some other attributes
-          preprocessRequest(req)
-
-          print(("req %s: %s"):format(config.route, req.meta.conn_id), os.date(), req.path, req.method, req.session_id)
-          bamboo.logger:info(("req %s: %s\t%s\t%s\t%s"):format(config.route, req.meta.conn_id, req.path, req.method, req.session_id))
-
-          -- record session
-          Session:set(req)
-          
-          -- inject req.GET, req.POST, req.PARAMS
-          preparse(req)
-          
-          -- call process handler to work
-          execute(main, req)
-        end
-
-      end
-    else
-      print("FATAL ERROR", good, req, err)
-    end
-  end
-    
+ 
   if is_testing then
     while true do webserver_request() end
   else

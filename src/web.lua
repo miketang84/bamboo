@@ -41,7 +41,10 @@ local Web = Object:extend {
     
     if pdb_conf then
       -- add primary/persist connection create here (now is mongol)
-      self.pdb_conn = mongol(pdb_conf.host, pdb_conf.port)
+      self.pdb_conn = mongol(pdb_conf.host, 
+                              pdb_conf.port,
+                              bamboo.internal.loop,
+                              bamboo.internal.coroutineDispatcher)
     end
     
     return self
