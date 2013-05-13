@@ -366,17 +366,17 @@ local webserver_request = function (zsock, data)
         web:notFound();
       
       else
-        -- generate req.session_id
-        makeSessionId(req)
+        if not config.disable_default_session_management then
+		-- generate req.session_id
+        	makeSessionId(req)
+        	-- record session
+        	Session:set(req)
+	end
+        
+        print(("req %s: %s"):format(config.route, req.meta.conn_id), os.date(), req.path, req.method, req.session_id or '')
+        bamboo.logger:info(("req %s: %s\t%s\t%s\t%s"):format(config.route, req.meta.conn_id, req.path, req.method, req.session_id or ''))
         -- add some other attributes
         preprocessRequest(req)
-
-        print(("req %s: %s"):format(config.route, req.meta.conn_id), os.date(), req.path, req.method, req.session_id)
-        bamboo.logger:info(("req %s: %s\t%s\t%s\t%s"):format(config.route, req.meta.conn_id, req.path, req.method, req.session_id))
-
-        -- record session
-        Session:set(req)
-        
         -- inject req.GET, req.POST, req.PARAMS
         preparse(req)
         
