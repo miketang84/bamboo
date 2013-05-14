@@ -65,12 +65,14 @@ local Web = Object:extend {
       self:page(json.encode(data), 200, "OK", {['content-type'] = 'application/json'}, conns)
   end;
 
-  jsonError = function (self, err_code, err_desc)
-    self:json { success = false, err_code = err_code, err_desc = err_desc }	
+  jsonError = function (self, tbl)
+    tbl = tbl or {}
+    tbl['success'] = false
+    self:json(tbl)	
   end;
 
   jsonSuccess = function (self, tbl)
-    local tbl = tbl or {}
+    tbl = tbl or {}
     tbl['success'] = true
     self:json(tbl)
   end;

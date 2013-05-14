@@ -304,7 +304,7 @@ local function execute(main, req)
     print(debug.traceback(errmsg, 2))
     bamboo.logger:error(errmsg)
   end)
-  print('------->', good, err, extra)
+  --print('------->', good, err, extra)
 
 --  end
 --  bamboo.logger:info( 'handler func end time: '..socket.gettime())
@@ -318,8 +318,10 @@ local function execute(main, req)
 --    web.pdb_conn.sock:close()
 --  end
   
---  if not good then
---    -- production mode
+  if not good then
+	print(good, err, extra)
+  end
+	--    -- production mode
 --    if config.PRODUCTION then
 --      -- XXX
 --      -- web.conn:reply_http('<h2>Page error.</h2>', 500, 'Page error.', nil, nil, req.meta)
@@ -399,17 +401,17 @@ end
 local coroutineDispatcher = function (loop, io_watcher, revents)
 
   -- wait for database return 
-  print('--->', io_watcher)
+  --print('--->', io_watcher)
   local state = SUSPENDED_TASKS[io_watcher]
   if state then 
-    print('before resume', io_watcher)
+    --print('before resume', io_watcher)
     --bamboo.logger:info()
     coroutine.resume(state)
-    print('after resume', io_watcher)
+    --print('after resume', io_watcher)
     
     -- if run off
     if coroutine.status(state) == "dead" then
-      print('ready to end state', io_watcher)
+      --print('ready to end state', io_watcher)
       SUSPENDED_TASKS[io_watcher] = nil
       SUSPENDED_SOCKETS[io_watcher].sock:close()
       SUSPENDED_SOCKETS[io_watcher] = nil
@@ -445,6 +447,8 @@ local function run()
 --  end
 
     print('Enter main loop.')
+    assert(config.pull_addr, 'missing pull_addr in settings.lua')
+    assert(config.pub_addr, 'missing pub_addr in settings.lua')
     local zpull = ctx:pull(webserver_request)
     zpull:connect(config.pull_addr)
 
