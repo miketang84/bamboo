@@ -320,6 +320,7 @@ local function execute(main, req)
   
   if not good then
 	print(good, err, extra)
+	return web:error('handler error.')
   end
 	--    -- production mode
 --    if config.PRODUCTION then
