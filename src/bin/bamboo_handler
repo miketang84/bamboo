@@ -33,7 +33,7 @@ bamboo.SUSPENDED_SOCKETS = SUSPENDED_SOCKETS
 -- two important global variables
 _G['web'] = nil
 _G['req'] = nil
-local DEFAULT_ALLOWED_METHODS = {GET = true, POST = true, PUT = true, JSON = true, XML = true}
+local DEFAULT_ALLOWED_METHODS = {GET = true, POST = true, PUT = true, DEL = true}
 
 -- ==============================================================
 -- 
@@ -182,44 +182,66 @@ checkURLS(URLS)
 local function makeUrlHandlerMapping(URLS)
   local table_concrete = {}
   local table_pattern = {}
+  local table_rest = {}
   
   local base = router
+  local url_t
   for k, v in pairs(URLS) do
-    local url_t = base + k
     -- remove abundant '/'
-    url_t = normalizePath(url_t)
+    url_t = normalizePath(base..k):lower()
     
     -- separate the pattern format from normal concrete format
-    if url_t:find('%[?%%[%%%-_a-zA-Z]+%]?%+?%-?') or url_t:find('%.%+?%-?') then
-      table_pattern[url_t:lower()] = v
+    if url_t:find('/:') then
+      table_rest[url_t] = v
+    elseif url_t:find('%(?%[?%%[%%%-_a-zA-Z]+%]?%+?%-?%)?') or url_t:find('%(?%.%+?%-?%)?') then
+      table_pattern[url_t] = v
     else
-      table_concrete[url_t:lower()] = v
+      table_concrete[url_t] = v
     end
   end	
   
-  return table_concrete, table_pattern
+  return table_concrete, table_pattern, table_rest
 end
 
-local MappingTableConcrete, MappingTablePattern = makeUrlHandlerMapping(URLS)
+local MappingTableConcrete, MappingTablePattern, MappingTableRest = makeUrlHandlerMapping(URLS)
 -- keep syncronization
-bamboo.URLS = MappingTableConcrete
-bamboo.PATTERN_URLS = MappingTablePattern
 config.URLS = MappingTableConcrete
 config.PATTERN_URLS = MappingTablePattern
-
+config.REST_URLS = MappingTableRest
 
 if not config.PRODUCTION then
-print('-->> URL Settings')
-ptable(MappingTableConcrete)
-ptable(MappingTablePattern)
+  print('-->> URL Settings')
+  ptable(MappingTableConcrete)
+  ptable(MappingTablePattern)
+  ptable(MappingTableRest)
 end
+
+local RESTFUL_NAMED_PARAMS = {}
+local MappingTableRestTmp = {}
+for k, v in pairs(MappingTableRest) do
+  -- k now is the /xxx/:yyy/zzz format
+  local newkey = k:gsub(':%w+', '%(%%w%+%)')
+  MappingTableRestTmp[newkey] = v
+  RESTFUL_NAMED_PARAMS[newkey] = {}
+  
+  for name in k:gmatch('/:(%w+)') do
+    -- { name1, name2, name3 }
+    table.insert(RESTFUL_NAMED_PARAMS[newkey], name)
+  end
+end
+MappingTableRest = MappingTableRestTmp
+
+
+
+
 ------------------------------------------------------------------------
 -- find handler function by path
 -- @param path:	coming path
 -- @return:  two values, first is a handler function, second is a boolean to indict whether is state programming
 ------------------------------------------------------------------------
-local function getHandlerByPath(path)
-  local path = path:lower() 
+local function getHandlerByPath(req)
+  local path = req.path:lower() 
+  -- find the handler of URL config
   local parse = function (v)
     if type(v) == 'table' then
       checkType(v.handler, 'function')
@@ -229,27 +251,52 @@ local function getHandlerByPath(path)
     end
   end
   
-  local key, value = "", nil
+  local key, value
   -- process concrete case first
-  if MappingTableConcrete[path] then return parse(MappingTableConcrete[path]), path end
+  if MappingTableConcrete[path] then 
+    return parse(MappingTableConcrete[path])
+  end
 
+  -- we now only support most 6 restful params
+  local r1, r2, r3, r4, r5, r6
+  for k, v in pairs(MappingTableRest) do
+    r1, r2, r3, r4, r5, r6 = path:match('^' .. k .. '$')
+    if r1 then
+      local namelist = RESTFUL_NAMED_PARAMS[k]
+      if r1 then req.REST[namelist[1]] = r1 end
+      if r2 then req.REST[namelist[2]] = r2 end
+      if r3 then req.REST[namelist[3]] = r3 end
+      if r4 then req.REST[namelist[4]] = r4 end
+      if r5 then req.REST[namelist[5]] = r5 end
+      if r6 then req.REST[namelist[6]] = r6 end
+      
+      return parse(v)
+    end
+  
+  end
+  
+  
   -- if process the pattern case
   for k, v in pairs(MappingTablePattern) do
-    -- for pattern cases, we select the concretest one
-    if k == path then
-      return parse(v)
     -- if some pattern cases meet one path meanwhile, and they have the save length, select the last one
-    elseif path:match('^' + k + '$') then
-      if key == '' or #k >= #key then 
+    if path:match('^' .. k .. '$') then
+      if not key or #k >= #key then 
         key, value = k, v
       end
     end
-
   end	
 
   -- if walks here, means this is a pattern case path
   if key and value then
-    return parse(value), key
+    r1, r2, r3, r4, r5, r6 = path:match('^' .. key .. '$')
+    if r1 then table.insert(req.REST, r1) end
+    if r2 then table.insert(req.REST, r2) end
+    if r3 then table.insert(req.REST, r3) end
+    if r4 then table.insert(req.REST, r4) end
+    if r5 then table.insert(req.REST, r5) end
+    if r6 then table.insert(req.REST, r6) end
+
+    return parse(value)
   end
   
   -- if walks here, means no suited case matched
@@ -259,16 +306,20 @@ end
 
 
 
-local function preparse(req)
+local function preParseReq(req)
   if req.method == 'GET' then
     req.GET = Form:parseQuery(req)
     req.POST = {}
     req.PARAMS = req.GET or {}
-  elseif req.method == 'POST' then
+  else
+    -- POST, PUT, DEL
     req.GET = Form:parseQuery(req)
     req.POST = Form:parse(req)
     req.PARAMS = req.GET and req.POST and table.update(req.GET, req.POST) or {}
   end
+  
+  
+  
 end
 
 
@@ -319,10 +370,10 @@ local function execute(main, req)
 --  end
   
   if not good then
-	print(good, err, extra)
-	return web:error('handler error.')
+  print(good, err, extra)
+  return web:error('handler error.')
   end
-	--    -- production mode
+  --    -- production mode
 --    if config.PRODUCTION then
 --      -- XXX
 --      -- web.conn:reply_http('<h2>Page error.</h2>', 500, 'Page error.', nil, nil, req.meta)
@@ -348,20 +399,24 @@ local webserver_request = function (zsock, data)
   --req = webserver_conn:recv()
   -- update the latest request object to global request reference
   req = cmsgpack.unpack(data)
-  _G['req'] = req
 
   if req and req.meta then
+    _G['req'] = req
+    if not DEFAULT_ALLOWED_METHODS[req.method] then
+      print('Not allowed method', req.method)
     -- if client close the connection
-    if req.meta.type == 'disconnect' then
+    elseif req.meta.type == 'disconnect' then
       print("DISCONNECT", req.meta.conn_id)
       if disconnect then disconnect(req) end
     else
       -- normalize the path's format
       path = normalizePath(req.path)
       req.path = path
+      req.REST = {}
       -------------------------------------------------
       -- according coming path, find the corresponding handler function
-      local main, copath = getHandlerByPath(path)
+      local main = getHandlerByPath(req)
+      
       if not main then
         -- return 404 page
         print(('[Warning] No handler to process this path: %s.'):format(path))
@@ -370,18 +425,18 @@ local webserver_request = function (zsock, data)
       
       else
         if not config.disable_default_session_management then
-		-- generate req.session_id
-        	makeSessionId(req)
-        	-- record session
-        	Session:set(req)
-	end
+          -- generate req.session_id
+          makeSessionId(req)
+          -- record session
+          Session:set(req)
+        end
         
         print(("req %s: %s"):format(config.route, req.meta.conn_id), os.date(), req.path, req.method, req.session_id or '')
         bamboo.logger:info(("req %s: %s\t%s\t%s\t%s"):format(config.route, req.meta.conn_id, req.path, req.method, req.session_id or ''))
         -- add some other attributes
         preprocessRequest(req)
         -- inject req.GET, req.POST, req.PARAMS
-        preparse(req)
+        preParseReq(req)
         
         -- call process handler to work
         execute(main, req)
