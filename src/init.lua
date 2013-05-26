@@ -18,6 +18,7 @@ local cmsgpack = require 'cmsgpack'
 config = {}
 -- for global rendering usage
 context = {}
+dbs = {}
 userdata = {}
 plugindata = {}
 internal = {}

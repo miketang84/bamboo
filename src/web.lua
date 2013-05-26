@@ -4,8 +4,6 @@ module(..., package.seeall)
 local View = require 'bamboo.view'
 local json = require 'cjson'
 local cmsgpack = require 'cmsgpack'
-local mongol = require "mongol"
-
 
 local function rawwrap(data, meta)
   local ret = {
@@ -33,19 +31,12 @@ end
 
 local Web = Object:extend {
   __name = 'Web';
-  init = function (self, main, req, pdb_conf)
+  init = function (self, main, req)
     self.req = req
     -- self.main = main 
     -- for state programming
     self.controller = coroutine.create(main)
-    
-    if pdb_conf then
-      -- add primary/persist connection create here (now is mongol)
-      self.pdb_conn = mongol(pdb_conf.host, 
-                              pdb_conf.port,
-                              bamboo.internal.loop,
-                              bamboo.internal.coroutineDispatcher)
-    end
+    self.dbs = {}
     
     return self
   end;
