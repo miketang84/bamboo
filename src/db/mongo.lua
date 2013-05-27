@@ -45,9 +45,8 @@ function connect(mongo_config)
     conn = mongol(config.host, config.port)
   end
   assert(conn, '[Error] connect to mongodb failed.')
-  conn:use(config.which)
+  local db = conn:use(config.db)
   
-  
-  return conn
+  return db
 end
 
