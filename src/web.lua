@@ -71,7 +71,7 @@ local Web = Object:extend {
   page = function (self, data, code, status, headers, conns)
     headers = headers or {}
 
-    if self.req.headers['set-cookie'] then
+    if self.req.headers and self.req.headers['set-cookie'] then
         headers['set-cookie'] = self.req.headers['set-cookie']
     end
 

@@ -350,12 +350,14 @@ local webserver_request = function (zsock, data)
 
   if req and req.meta then
     _G['req'] = req
-    if not DEFAULT_ALLOWED_METHODS[req.method] then
-      print('Not allowed method', req.method)
-    -- if client close the connection
-    elseif req.meta.type == 'disconnect' then
+    if req.meta.type == 'disconnect' then
       print("DISCONNECT", req.meta.conn_id)
       if disconnect then disconnect(req) end
+    elseif not DEFAULT_ALLOWED_METHODS[req.method] then
+      print('Not allowed method', req.method)
+      local web = Web(function()end, req)
+      web:forbidden();
+    -- if client close the connection
     else
       -- normalize the path's format
       path = normalizePath(req.path)

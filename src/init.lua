@@ -40,13 +40,12 @@ PLUGIN_ARGS_LIFE = 3600
 
 -- global URLS definition
 URLS = {}
-URLS_STATES = {}
 PATTERN_URLS = {}
 ------------------------------------------------------------------------
 
-pubToCluster = function (msg_obj)
-	bamboo.cluster_channel_pub:send(cmsgpack.pack(msg_obj))
-end
+--pubToCluster = function (msg_obj)
+--	bamboo.cluster_channel_pub:send(cmsgpack.pack(msg_obj))
+--end
 
 ------------------------------------------------------------------------
 PLUGIN_LIST = {}
@@ -66,21 +65,22 @@ registerPlugin = function (name, mdl)
 	end	
 end
 
-registerPluginCallback = function (name, callback)
-	checkType(name, callback, 'string', 'function')
-	assert( name ~= '', 'Plugin callback name must not be blank.' )
-	
-	if PLUGIN_CALLBACKS[name] then
-		print('[Warning] This callback name:"'.. name ..'" has been used')
-	end
-	PLUGIN_CALLBACKS[name] = callback
-	
-end
 
-getPluginCallbackByName = function (name)
-	checkType(name, 'string')
-	return PLUGIN_CALLBACKS[name]
-end
+--registerPluginCallback = function (name, callback)
+--	checkType(name, callback, 'string', 'function')
+--	assert( name ~= '', 'Plugin callback name must not be blank.' )
+--	
+--	if PLUGIN_CALLBACKS[name] then
+--		print('[Warning] This callback name:"'.. name ..'" has been used')
+--	end
+--	PLUGIN_CALLBACKS[name] = callback
+--	
+--end
+--
+--getPluginCallbackByName = function (name)
+--	checkType(name, 'string')
+--	return PLUGIN_CALLBACKS[name]
+--end
 
 ------------------------------------------------------------------------
 
@@ -158,107 +158,34 @@ local function actionTransform(web, req, action)
 	if type(action) == 'function' then
 		return action
 	elseif type(action) == 'table' then
-		local fun = action.handler
+		local fun = table.remove(action)
 		checkType(fun, 'function')
 		
 		return function (web, req, inited_params)
 			local propagated_params = inited_params or {}
-			local filter_flag, permission_flag = true, true
-			
+			local ret
 			-- check filters
-			local action_filters = action.filters
+			local action_filters = action
 			if action_filters and #action_filters > 0 then
-				checkType(action_filters, 'table')
-				
-				filter_flag = true
 				-- execute all filters bound to this handler
-				for _, filter_name in ipairs(action_filters) do
-					local filter, args_list = parseFilterName(filter_name)
-					-- if filter is invalid, ignore it
-					if filter then 
-						local ret
-						ret, propagated_params = filter(args_list, propagated_params)
-						if not ret then 
-							filter_flag = false 
-							print(("[Warning] Filter chains was broken at %s."):format(filter_name))
-							break 
-						end
-					else
-						print(('[Warning] This filter %s is not registered.'):format(filter_name))
-					end
+				for i, filter_func in ipairs(action_filters) do
+          ret, propagated_params = filter_func(web, req, propagated_params)
+          if not ret then 
+            print(("[Warning] MiddleWare chains was broken at %s."):format(i))
+            return nil
+          end
 				end
-				
 			end
 			
-			-- check perms
-			if action.perms and #action.perms > 0 then
-				checkType(action.perms, 'table')
-				-- TODO
-				--
-				local user = req.user
-				if user then
-					-- check the user's permissions
-					if user.perms then
-						local perms = user:getForeign('perms')
-						permission_flag = permissionCheck(action.perms, perms)	
-						
-					end
-					
-					-- check groups' permissions
-					if user.groups then
-						local groups = user:getForeign('groups')
-						for _, group in ipairs(groups) do
-							if group then
-								if group.perms then
-									local group_perms = group:getForeign('perms')
-									local ret = permissionCheck(action.perms, group_perms)
-									-- once a group's permissions fit action_perms, return true
-									if ret then permission_flag = true; break end
-								end
-							end
-						end
-					end
-				end
-			end
-		
-			if not filter_flag or not permission_flag then
-				print("[Prompt] user was denied to execute this handler.")
-				return false
-			end
-
 			-- execute handler
 			-- after execute filters and permissions check, pass here, then execute this handler
 			local ret, propagated_params = fun(web, req, propagated_params)
-			
-			-- check post filters
-			local action_post_filters = action.post_filters
-			if ret and action_post_filters and #action_post_filters > 0 then
-				checkType(action_post_filters, 'table')
-				
-				filter_flag = true
-				-- execute all filters bound to this handler
-				for _, filter_name in ipairs(action_post_filters) do
-					local filter, args_list = parseFilterName(filter_name)
-					-- if filter is invalid, ignore it
-					if filter then 
-						ret, propagated_params = filter(args_list, propagated_params)
-						if not ret then 
-							filter_flag = false 
-							print(("[Warning] PostFilter chains was broken at %s."):format(filter_name))
-							break 
-						end
-					else
-						print(('[Warning] This post filter %s is not registered.'):format(filter_name))
-					end
-				end
-				
-			end
-			
+						
 			-- return from lua function
 			return ret, propagated_params
 		end
 	else
-		error("Action mush be function or table.", 2)
+		error("Handler must be function or middleware chains.", 2)
 	end
 end
 
@@ -280,12 +207,6 @@ registerModule = function (mdl, extra_params)
 			else
 				nurl = url
 			end
-
-			if type(action) == 'table' and action.stateful then
-			    -- 
-			    URLS_STATES[nurl] = action.stateful
-			end
-			
 			
 			local nfun
 			local exclude_flag = false
@@ -303,32 +224,36 @@ registerModule = function (mdl, extra_params)
 			
 			if mdl.init and type(mdl.init) == 'function' and not exclude_flag then
 				nfun = function (web, req)
-					local ret, inited_params = mdl.init(extra_params or {})
-					
-					-- if not ret then print(format("[Warning] abort in module %s's init function.", mdl._NAME or '')) end
+					local ret, inited_params = mdl.init(web, req, extra_params or {})
+					if not ret then
+            print(format("[Warning] chains aborted after module %s's init.", mdl._NAME or ''))
+          end
 					local finished_params
 					local last_params
 					if ret then
 						ret, finished_params = actionTransform(web, req, action)(web, req, inited_params)
 					end
-					-- if not ret then print(format("[Waring] abort in module %s's transformed handler function.", mdl._NAME or '')) end
+					if not ret and mdl.finish then
+            print("[Warning] chains aborted after handler: ", url)
+          end
 
 					
 					if ret and mdl.finish and type(mdl.finish) == 'function' then
-						ret, last_params = mdl.finish(finished_params)
+						ret, last_params = mdl.finish(web, req, finished_params)
 					end
-					-- if ret == false then print(format("[Warning] abort in module %s's finish function.", mdl._NAME or '')) end
 					
 					-- make no sense
 					return ret, last_params or finished_params or inited_params
 				end
+      
+      -- no init function, but have finish function
 			elseif mdl.finish and type(mdl.finish) == 'function' and not exclude_flag then
 				nfun = function (web, req)
-					local ret, finished_params = actionTransform(web, req, action)(web, req)
+					local ret, finished_params = actionTransform(web, req, action)(web, req, extra_params)
 
 					local last_params
 					if ret then
-						ret, last_params = mdl.finish(finished_params)
+						ret, last_params = mdl.finish(web, req, finished_params)
 					end
 					
 					-- make no sense
@@ -430,54 +355,54 @@ registerMainUser = function (mdl, extra_params)
 end;
 
 ------------------------------------------------------------------------
-FILTER_LIST = {}
-
-registerFilter = function ( filter_name, filter_func)
-	checkType(filter_name, filter_func, 'string', 'function')
-	
-	assert(not FILTER_LIST[filter_name], "[Error] This filter name has been registerd.")
-	
-	FILTER_LIST[filter_name] = filter_func
-end
-
-getFilterByName = function ( filter_name )
-	checkType(filter_name, 'string')
-	
-	local filter = FILTER_LIST[filter_name]
-	if not filter then
-		print(("[Warning] This filter %s is not registered!"):format(filter_name))
-	end
-	
-	return filter
-end
-
-
---- used mainly in entry file and each module's initial function
+--FILTER_LIST = {}
+--
+--registerFilter = function ( filter_name, filter_func)
+--	checkType(filter_name, filter_func, 'string', 'function')
+--	
+--	assert(not FILTER_LIST[filter_name], "[Error] This filter name has been registerd.")
+--	
+--	FILTER_LIST[filter_name] = filter_func
+--end
+--
+--getFilterByName = function ( filter_name )
+--	checkType(filter_name, 'string')
+--	
+--	local filter = FILTER_LIST[filter_name]
+--	if not filter then
+--		print(("[Warning] This filter %s is not registered!"):format(filter_name))
+--	end
+--	
+--	return filter
+--end
+--
+--
+-- used mainly in entry file and each module's initial function
 -- @filters   
-executeFilters = function ( filters, params )
-	checkType(filters, 'table')
-	params = params or {}
-	for _, filter_name in ipairs(filters) do
-		local filter, args_list = parseFilterName(filter_name)
-		if filter then
-			-- now filter has no extra parameters
-			local ret, params = filter(args_list, params)
-			if not ret then
-				print(("[Warning] Filter chains was broken at %s."):format(filter_name))				
-				return false
-			end
-		end
-	end
-	return true, params
-end
-
-registerFilters = function (filter_table)
-	checkType(filter_table, 'table')
-	for _, filter_define in ipairs(filter_table) do
-		-- 1. name, 2. func
-		registerFilter(filter_define[1], filter_define[2])
-	end
-end
+--executeFilters = function ( filters, params )
+--	checkType(filters, 'table')
+--	params = params or {}
+--	for _, filter_name in ipairs(filters) do
+--		local filter, args_list = parseFilterName(filter_name)
+--		if filter then
+--			-- now filter has no extra parameters
+--			local ret, params = filter(args_list, params)
+--			if not ret then
+--				print(("[Warning] Filter chains was broken at %s."):format(filter_name))				
+--				return false
+--			end
+--		end
+--	end
+--	return true, params
+--end
+--
+--registerFilters = function (filter_table)
+--	checkType(filter_table, 'table')
+--	for _, filter_define in ipairs(filter_table) do
+--		-- 1. name, 2. func
+--		registerFilter(filter_define[1], filter_define[2])
+--	end
+--end
 
 ------------------------------------------------------------------------
 PERMISSION_LIST = {}
