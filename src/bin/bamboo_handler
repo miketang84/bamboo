@@ -321,8 +321,8 @@ local function execute(main, req)
 
   local good, err, extra = xpcall(function () 
     -- this is a coroutine
-    return coroutine.resume(web.controller, web, req)
-    
+    --return coroutine.resume(web.controller, web, req)
+    main(web, req)
   end, function (errmsg) 
     -- XXX: why can't print info here?
     print(debug.traceback(errmsg, 2))
