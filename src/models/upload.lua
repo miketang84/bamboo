@@ -40,8 +40,10 @@ end
 local function savefile(t)
 	local req, file_obj = t.req, t.file_obj
 
-	local dest_dir = t.dest_dir and ('/uploads/' + t.dest_dir + '/') or '/uploads/'
-	dest_dir = normalizePath(dest_dir)
+	
+	local export_dir = t.dest_dir and ('/uploads/' + t.dest_dir + '/') or '/uploads/'
+	export_dir = normalizePath(export_dir)
+	local dest_dir = 'media'.. export_dir
 
 	local prefix = t.prefix or ''
 	local postfix = t.postfix or ''
@@ -85,6 +87,7 @@ local function savefile(t)
 	local newbasename, ext = calcNewFilename(dest_dir, newfilename)
 	local newname = prefix + newbasename + postfix + ext
 	
+	local export_path = export_dir + newname
 	local path = dest_dir + newname
 
 	-- write file to disk
@@ -92,7 +95,7 @@ local function savefile(t)
 	fd:write(body)
 	fd:close()
 	
-	return newname, path, filename
+	return newname, path, export_path, filename
 end
 
 
@@ -133,8 +136,8 @@ local Upload = Model:extend {
 		if not t then return self end
 		self.oldname = t.oldname
 		self.name = t.name
-		self.path = t.path or 'media/uploads/default'
-		self.size = posix.stat(self.path).size
+		self.path = t.export_path
+		self.size = posix.stat(t.path).size
 		self.timestamp = os.time()
 		-- according the current design, desc field is nil
 		self.desc = t.desc or ''
@@ -149,10 +152,10 @@ local Upload = Model:extend {
 		local file_objs = List()
 		-- file data are stored as arraies in params
 		for i, v in ipairs(params) do
-			local name, path = savefile { req = req, file_obj = v, dest_dir = dest_dir, prefix = prefix, postfix = postfix, rename_func = rename_func }
+			local name, path, export_path = savefile { req = req, file_obj = v, dest_dir = dest_dir, prefix = prefix, postfix = postfix, rename_func = rename_func }
 			if not path or not name then return nil end
 			-- create file instance
-			local file_instance = self { name = name, path = path }
+			local file_instance = self { name = name, path = path, export_path = export_path }
 			if file_instance then
 				-- store to db
 				-- file_instance:save()
@@ -180,10 +183,10 @@ local Upload = Model:extend {
 	    -- if upload in html5 way
 	    if req.headers['x-requested-with'] then
 			-- stored to disk
-			local name, path, oldname = savefile { req = req, dest_dir = dest_dir, prefix = prefix, postfix = postfix, rename_func = rename_func }    
+			local name, path, export_path, oldname = savefile { req = req, dest_dir = dest_dir, prefix = prefix, postfix = postfix, rename_func = rename_func }    
 			if not path or not name then return nil, '[Error] empty file.' end
 			
-			local file_instance = self { name = name, path = path, oldname = oldname }
+			local file_instance = self { name = name, path = path, export_path = export_path, oldname = oldname }
 			if file_instance then
 				-- file_instance:save()
 				return file_instance, 'single'
