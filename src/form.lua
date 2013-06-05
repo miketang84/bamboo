@@ -74,8 +74,9 @@ local Form = Object:extend {
                 -- params is the dictory of query
                 params = http.parseURL(query_string)
             end
-        elseif method == 'POST' then
-            local ctype = headers['content-type'] or ""
+        --elseif method == 'POST' then
+	else
+	    local ctype = headers['content-type'] or ""
             local encoding, encparams = ctype:match(ENCODING_MATCH)
             if encoding then encoding = encoding:lower() end
 
