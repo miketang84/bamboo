@@ -6,6 +6,7 @@ package.path = './?.lua;./?/init.lua;./?/src/init.lua;/usr/local/share/lua/5.1/?
 require 'posix'
 require 'lglib'
 require 'bamboo'
+local tremove = table.remove
 local socket = require 'socket'
 local utils = require 'bamboo.utils'
 local normalizePath = require('lglib.path').normalize
@@ -20,7 +21,7 @@ local httpserver = require'handler.http.server'
 local ev = require'ev'
 local loop = ev.Loop.default
 bamboo.internal.loop = loop
-local tremove = table.remove
+
 local ctx = zmq.init(loop, 1)
 
 
@@ -114,6 +115,7 @@ bamboo.registerModule(childenv)
 
 -- hook the disconnect handler
 config.disconnect = childenv.disconnect
+config.commandDispatcher = childenv.commandDispatcher
 --config.clusterSubHandler = childenv.clusterSubHandler
 --
 --local cluster_listener = function ()
@@ -398,10 +400,22 @@ local webserver_request = function (zsock, data)
   end
 end
 
-
-
-
-
+-- data is a table
+-- {
+--    cmd = 'clear_view_cache'
+-- }
+local cmd_dispatcher = function (sub_sock, data)
+  local dispatcher = config.commandDispatcher
+  if dispatcher and type(config.commandDispatcher) == 'function' and bamboo.ch_cmd_pub then
+    if type(data) == 'table' and data.cmd == 'clear_view_cache' then
+      -- clear view cache
+      bamboo.compiled_views = {}
+      bamboo.compiled_views_tmpls = {}
+    else
+      dispatcher(bamboo.ch_cmd_pub, data)
+    end
+  end
+end
 
 ------------------------------------------------------------------------
 -- Bamboo's main loop for every bamboo process
@@ -418,6 +432,7 @@ local function run()
     print('Enter main loop.')
     assert(config.pull_addr, 'missing pull_addr in settings.lua')
     assert(config.pub_addr, 'missing pub_addr in settings.lua')
+    -- create pull and pub channels
     local zpull = ctx:pull(webserver_request)
     zpull:connect(config.pull_addr)
 
@@ -428,6 +443,22 @@ local function run()
     bamboo.ch_send = zpub
     print('ch_recv', bamboo.ch_recv)
     print('ch_send', bamboo.ch_send)
+    
+    
+    -- if set cmd channel, create it
+    if bamboo.config.cmd_sub_addr 
+    and bamboo.config.cmd_pub_addr
+    then
+      local cmd_pub = ctx:pub()
+      cmd_pub:connect(bamboo.config.cmd_pub_addr)
+      bamboo.ch_cmd_pub = cmd_pub
+    
+      local cmd_sub = ctx:sub(cmd_dispatcher)
+      cmd_sub:sub("")
+      cmd_sub:connect(bamboo.config.cmd_sub_addr)
+      bamboo.ch_cmd_sub = cmd_sub
+      
+    end
     -- libev default main loop
     loop:loop()
     print('Bamboo main loop aborted!')
