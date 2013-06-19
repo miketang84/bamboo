@@ -70,8 +70,6 @@ config.route = config.route or '/'
 
 _G['View'] = require 'bamboo.view'
 _G['Form'] = require 'bamboo.form'
-_G['Model'] = require 'bamboo.model'
-_G['Session'] = require 'bamboo.session'
 local Web = require 'bamboo.web'
 
 -- ==============================================================
@@ -343,7 +341,6 @@ end
 local webserver_request = function (zsock, data)
   local disconnect = config.disconnect
   local req, path
-  local makeSessionId = Session.identRequest
 
   -- Get a message from the webserver, if have no, block to wait
   --req = webserver_conn:recv()
@@ -376,15 +373,9 @@ local webserver_request = function (zsock, data)
         web:notFound();
       
       else
-        if BAMBOO_DB and not config.disable_default_session_management then
-          -- generate req.session_id
-          makeSessionId(req)
-          -- record session
-          Session:set(req)
-        end
         
-        print(("req %s: %s"):format(config.route, req.meta.conn_id), os.date(), req.path, req.method, req.session_id or '')
-        bamboo.logger:info(("req %s: %s\t%s\t%s\t%s"):format(config.route, req.meta.conn_id, req.path, req.method, req.session_id or ''))
+        print(("req %s: %s"):format(config.route, req.meta.conn_id), os.date(), req.path, req.method)
+        bamboo.logger:info(("req %s: %s\t%s\t%s"):format(config.route, req.meta.conn_id, req.path, req.method))
         -- add some other attributes
         preprocessRequest(req)
         -- inject req.GET, req.POST, req.PARAMS
