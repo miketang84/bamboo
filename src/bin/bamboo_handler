@@ -474,8 +474,6 @@ bamboo.EXPORT_FOR_TESTING = {
   run = run,
   updateConfig = updateConfig,
   DEFAULT_ALLOWED_METHODS = DEFAULT_ALLOWED_METHODS,
-  ident = Session.identRequest,
-  parseSessionId = Session.parseSessionId,
 --	getState = getState,
 }
 
