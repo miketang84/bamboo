@@ -287,7 +287,7 @@ host = "%s"
    		local config = readSettings(config)
 		local bamboo_dir = config.bamboo_dir
 
-		local shell_file = bamboo_dir + '/src/bin/shell.lua'
+		local shell_file = bamboo_dir + '/bin/shell.lua'
 		local host = settings.db_host or config.DB_HOST or '127.0.0.1'
         local port = settings.db_port or config.DB_PORT or 6379
         local which = settings.which_db or config.WHICH_DB or 0

@@ -165,7 +165,7 @@ local Session
 Session = Object:extend {
   -- nothing to do
   init = function (self, req) 
-    req.session_id = makeSessionId()
+    self:identRequest(req)
     self:set(req)
 
     return self 
@@ -299,11 +299,12 @@ Session = Object:extend {
     --- calculate the session id of a coming request
     -- @return: session id
     identRequest = function (req)
-        if req.headers.METHOD == "JSON" then
-            return manuSessionIdJson(req)
-        else
-            return manuSessionIdHttp(req)
-        end
+      return manuSessionIdHttp(req)
+--        if req.headers.METHOD == "JSON" then
+--            return manuSessionIdJson(req)
+--        else
+--            return manuSessionIdHttp(req)
+--        end
     end;
 
     parseSessionId = parseSessionId;
