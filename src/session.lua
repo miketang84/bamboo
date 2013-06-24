@@ -298,7 +298,7 @@ Session = Object:extend {
 
     --- calculate the session id of a coming request
     -- @return: session id
-    identRequest = function (req)
+    identRequest = function (self, req)
       return manuSessionIdHttp(req)
 --        if req.headers.METHOD == "JSON" then
 --            return manuSessionIdJson(req)
