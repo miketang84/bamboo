@@ -5,6 +5,7 @@ require 'bamboo.queryset'
 
 local tinsert, tremove = table.insert, table.remove
 local format = string.format
+local socket = require 'socket'
 
 local db = BAMBOO_DB
 
