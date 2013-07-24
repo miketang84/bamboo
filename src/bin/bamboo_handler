@@ -7,6 +7,8 @@ require 'posix'
 require 'lglib'
 require 'bamboo'
 local tremove = table.remove
+-- import coxpcall function
+require 'coxpcall'
 local socket = require 'socket'
 local utils = require 'bamboo.utils'
 local normalizePath = require('lglib.path').normalize
@@ -319,14 +321,15 @@ local function execute(main, req)
   
  -- bamboo.logger:info( 'handler func start time: '..socket.gettime())
 
-  local good, err, extra = xpcall(function () 
+  local good, err, extra = coxpcall(function () 
     -- this is a coroutine
-    --return coroutine.resume(web.controller, web, req)
-    main(web, req)
+    return coroutine.resume(web.controller, web, req)
+    --main(web, req)
   end, function (errmsg) 
     -- XXX: why can't print info here?
-    print(debug.traceback(errmsg, 2))
-    bamboo.logger:error(errmsg)
+    --print(debug.traceback(errmsg, 2))
+    print(debug.traceback())
+    --bamboo.logger:error(errmsg)
     
   end)
 

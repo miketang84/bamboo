@@ -1381,6 +1381,21 @@ Model = Object:extend {
 	-- @param 
 	-- @param 
 	-- @return
+  
+  --
+  
+  -- filter(query_args, start, stop, is_rev)
+  -- 需要提供 从哪里开始找，$start
+  -- 找多长，$length
+  -- 是不是反向找，$find_rev
+  -- 按什么排序
+  
+  -- 在query_args中。
+  -- query_args = { 'and'|'or', ''
+  --   fieldA = eq('xxx'),
+  --   fieldB = eq('xxx'),
+  -- }
+  
 	filter = function (self, query_args, ...)
 		I_AM_CLASS_OR_QUERY_SET(self)
 		assert(type(query_args) == 'table' or type(query_args) == 'function', 
