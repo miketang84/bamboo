@@ -124,13 +124,14 @@ local isUsingFulltextIndex = function (self)
 	end
 end
 
-local isUsingRuleIndex = function ()
-	if bamboo.config.rule_index_support == false then
-		return false
-	end
-	return true
-end
-
+--
+--local isUsingRuleIndex = function ()
+--	if bamboo.config.rule_index_support == false then
+--		return false
+--	end
+--	return true
+--end
+--
 
 
 
@@ -448,9 +449,9 @@ local delFromRedis = function (self, id)
 	if isUsingFulltextIndex(self) and self.id then
 		bamboo.internal.clearFtIndexesOnDeletion(self)
 	end
-	if isUsingRuleIndex(self) and self.id then
-		updateIndexByRules(self, 'del')
-	end
+--	if isUsingRuleIndex(self) and self.id then
+--		updateIndexByRules(self, 'del')
+--	end
 
 	-- release the lua object
 	self = nil
@@ -494,9 +495,9 @@ local fakedelFromRedis = function (self, id)
 	if isUsingFulltextIndex(self) and self.id then
 		bamboo.internal.clearFtIndexesOnDeletion(self)
 	end
-	if isUsingRuleIndex(self) and self.id then
-		updateIndexByRules(self, 'del')
-	end
+--	if isUsingRuleIndex(self) and self.id then
+--		updateIndexByRules(self, 'del')
+--	end
 
 	-- release the lua object
 	self = nil
@@ -593,12 +594,6 @@ local checkLogicRelation = function (obj, query_args, logic_choice, model)
 end
 bamboo.internal.checkLogicRelation = checkLogicRelation
 
----------------------------------------------------------------------------------
--- RULE INDEX CODE
----------------------------------------------------------------------------------
-local specifiedRulePrefix = function ()
-	return rule_manager_prefix, rule_query_result_pattern
-end
 
 function luasplit(str, pat)
    local t = {}
@@ -617,497 +612,6 @@ function luasplit(str, pat)
       table.insert(t, cap)
    end
    return t
-end
-
-
-local upvalue_collector = {}
-
-local collectRuleFunctionUpvalues = function (query_args)
-	local upvalues = upvalue_collector
-	for i=1, math.huge do
-		local name, v = debug.getupvalue(query_args, i)
-		if not name then break end
-		local ctype = type(v)
-		local table_has_metatable = false
-		if ctype == 'table' then
-			table_has_metatable = getmetatable(v) and true or false
-		end
-		-- because we could not collect the upvalues whose type is 'table', print warning here
-		if type(v) == 'function' or table_has_metatable then
-			print"[Warning] @collectRuleFunctionUpvalues of filter - bamboo has no ability to collect the function upvalue whose type is 'function' or 'table' with metatable."
-			return false
-		end
-
-		if ctype == 'table' then
-			upvalues[#upvalues + 1] = { name, serialize(v), type(v) }
-		else
-			upvalues[#upvalues + 1] = { name, tostring(v), type(v) }
-		end
-	end
-
-	return true, upvalues
-end
-
-
-local compressQueryArgs = function (query_args)
-	local out = {}
-	local qtype = type(query_args)
-	if qtype == 'table' then
-		if table.isEmpty(query_args) then return '' end
-
-		if query_args[1] == 'or' then tinsert(out, 'or')
-		else tinsert(out, 'and')
-		end
-		query_args[1] = nil
-		tinsert(out, '|')
-
-		local queryfs = {}
-		for kf in pairs(query_args) do
-			tinsert(queryfs, kf)
-		end
-		table.sort(queryfs)
-
-		for _, k in ipairs(queryfs) do
-			v = query_args[k]
-			tinsert(out, k)
-			if type(v) ~= 'function' then
-				tinsert(out, tostring(v))
-				tinsert(out, type(v))
-			else
-				local _, func_name, cmp_obj = v(uglystr)
-				local queryt_iden
-				local _args = {}
-				if type(cmp_obj) == 'table' then
-					for _, v in ipairs(cmp_obj) do
-						tinsert(_args, tostring(v), type(v))
-					end
-					queryt_iden = {func_name, unpack(_args)}
-				else
-					queryt_iden = {func_name, tostring(cmp_obj), type(cmp_obj)}
-				end
-				-- XXX: here, queryt_iden[2] may be nil, this will not be stored now
-              for _, item in ipairs(queryt_iden) do
-					tinsert(out, item)
-				end
-			end
-			tinsert(out, '|')
-		end
-
-		-- restore the first element, avoiding side effect
-		query_args[1] = out[1]
-
-	elseif qtype == 'function' then
-		tinsert(out, 'function')
-		tinsert(out, '|')
-		tinsert(out, string.dump(query_args))
-		tinsert(out, '|')
-		for _, pair in ipairs(upvalue_collector) do
-			tinsert(out, pair[1])	-- key
-			tinsert(out, pair[2])	-- value
-			tinsert(out, pair[3])	-- value type
-		end
-
-		-- clear the upvalue_collector
-		upvalue_collector = {}
-	end
-
-	-- use a delemeter to seperate obviously
-	return table.concat(out, rule_index_divider)
-end
-
-local extractQueryArgs = function (qstr)
-	local query_args
-
-	--DEBUG(string.len(qstr))
-	if qstr:startsWith('function') then
-		local startpoint = qstr:find('|') or 1
-		local endpoint = qstr:rfind('|') or -1
-		fpart = qstr:sub(startpoint + 6, endpoint - 6) -- :trim()
-		apart = qstr:sub(endpoint + 6, -1) -- :trim()
-		-- now fpart is the function binary string
-		query_args = loadstring(fpart)
-		-- now query_args is query function
-		if not isFalse(apart) then
-			-- item 1 is key, item 2 is value, item 3 is value type, item 4 is key ....
-			local flat_upvalues = apart:split(rule_index_divider)
-			for i=1, #flat_upvalues / 3 do
-				local vtype = flat_upvalues[3*i]
-				local key = flat_upvalues[3*i - 2]
-				local value = flat_upvalues[3*i - 1]
-				if vtype == 'table' then
-					value = deserialize(value)
-				elseif vtype == 'number' then
-					value = tonumber(value)
-				elseif vtype == 'boolean' then
-					value = loadstring('return ' .. value)()
-				elseif vtype == 'nil' then
-					value = nil
-				end
-				-- set upvalues
-				debug.setupvalue(query_args, i, value)
-			end
-		end
-	else
-
-		local endpoint = -1
-		qstr = qstr:sub(1, endpoint - 1)
-		local _qqstr = qstr:split('|')
-		local logic = _qqstr[1]:sub(1, -6)
-		query_args = {logic}
-		for i=2, #_qqstr do
-			local str = _qqstr[i]
-			local kt = str:splittrim(rule_index_divider):slice(2, -2)
-			-- kt[1] is 'key', [2] is 'closure', [3] .. are closure's parameters
-			local key = kt[1]
-			local closure = kt[2]
-			if #kt > 3 then
-				-- here, all args are string type
-				local flat_args = {}
-				for j=3, #kt do
-					tinsert(flat_args, kt[j])
-				end
-				local _args = {}
-				for i=1, #flat_args, 2 do
-					local ctype = flat_args[i+1]
-					if ctype == 'number' then
-						tinsert(_args, tonumber(flat_args[i]))
-					elseif ctype == 'boolean' then
-						tinsert(_args, flat_args[i] == 'true')
-					elseif ctype == 'nil' then
-						-- XXX: won't workable
-						tinsert(_args, nil)
-						
-					end
-
-				end
-				-- compute closure now
-				query_args[key] = _G[closure]( #_args > 0 and unpack(_args) or nil)
-			else
-					local ctype = kt[3]
-					local val = closure
-					if ctype == 'number' then
-						val = tonumber(val)
-					elseif ctype == 'boolean' then
-						val = val == 'true'
-					end
-				
-				-- no args, means this 'closure' is a string, here, we only store string type?
-				query_args[key] = val
-			end
-		end
-	end
-
-	return query_args
-end
-
--- query_str_iden is at least ''
-local compressSortByArgs = function (sortby_args)
-	local strs = {}
-	for i = 1, #sortby_args do
-       		local v = sortby_args[i]
-		local ctype = type(v)
-		if ctype == 'string' then
-            		tinsert(strs, v)
-        	-- may don't appear
-        	elseif ctype == 'nil' then
-            		tinsert(strs, 'nil')
-        	elseif ctype == 'function' then
-			tinsert(strs, string.dump(v))
-		end
-	end
-
-	return table.concat(strs, rule_index_divider)
-end
-
-local compressTwoPartArgs = function (query_str_iden, sortby_str_iden)
-	return query_str_iden .. rule_index_query_sortby_divider .. sortby_str_iden	
-end
-
-
-local extractSortByArgs = function (sortby_str_iden)
-	assert(sortby_str_iden ~= '', "[Error] @extractSortByArgs - sortby_str_iden should not be emply!")
-	local sortby_args = luasplit(sortby_str_iden, rule_index_divider)
-	--local sortby_args = sortby_str_iden:split(rule_index_divider)
-	-- [1] is string or function, [2] is nil or string, 
-	local first_arg = sortby_args[1]
-	local first_arg_compile = loadstring(first_arg)
-	if type(first_arg_compile) == 'function' then
-		return first_arg_compile
-	elseif not first_arg_compile then
-		-- if type(first_arg_compile) ~= 'function', first_arg_compile is a nil
-		if #first_arg > 0 then
-			local key = first_arg
-			local dir = (sortby_args[2] == 'desc' and 'desc' or 'asc')
-			return function (a, b)
-				local af = a[key]
-				local bf = b[key]
-				if af and bf then
-					if dir == 'asc' then
-						return af < bf
-					elseif dir == 'desc' then
-						return af > bf
-					end
-				else
-					return nil
-				end
-			end
-		end
-	else
-		return nil
-	end
-end
-
-local function divideQueryPartAndSortbyPart (combine_str_iden)
-	local query_str_iden, sortby_str_iden
-	local divider_start, divider_stop = combine_str_iden:find(rule_index_query_sortby_divider)
-	if divider_start then
-		query_str_iden = combine_str_iden:sub(1, divider_start - 1)
-		sortby_str_iden = combine_str_iden:sub(divider_stop + 1, -1)
-	else
-		query_str_iden = combine_str_iden
-		sortby_str_iden = nil
-	end
-	
-	return query_str_iden, sortby_str_iden	
-end
-
-local canInstanceFitQueryRule = function (self, qstr)
-	local query_args = extractQueryArgs(qstr)
-	--DEBUG(query_args)
-	local logic_choice = true
-	if type(query_args) == 'table' then logic_choice = (query_args[1] == 'and'); query_args[1]=nil end
-	return checkLogicRelation(self, query_args, logic_choice)
-end
-
-local canInstanceFitQueryRuleAndFindProperPosition = function (self, combine_str_iden)
-	local p = 0
---[[	local divider_start, divider_stop = combine_str_iden:find(rule_index_query_sortby_divider)
-	if divider_start then
-		query_str_iden = combine_str_iden:sub(1, divider_start - 1)
-		sortby_str_iden = combine_str_iden:sub(divider_stop + 1, -1)
-	else
-		query_str_iden = combine_str_iden
-		sortby_str_iden = nil
-	end
---]]
-
-	local query_str_iden, sortby_str_iden = divideQueryPartAndSortbyPart(combine_str_iden)
-	local flag = true
-
-	if query_str_iden ~= '' then
-		flag = canInstanceFitQueryRule (self, query_str_iden)
-		-- if no sortby part, return directly
-		if isFalse(sortby_str_iden) then
-			return flag, self.id, -1
-		end
-	end
-
-	local id_list = {}
-	if flag then
-		local manager_key = rule_manager_prefix .. self.__name
-		local score = db:zscore(manager_key, combine_str_iden)
-		local item_key = rule_query_result_pattern:format(self.__name, math.floor(score))
-		id_list = db:lrange(item_key, 0, -1)
-		local length = #id_list
-		local model = self:getClass()
-		local func = extractSortByArgs(sortby_str_iden)
-
-		local l, r = 1, #id_list
-		local left_obj
-		local right_obj
-		local bflag, left_flag, right_flag, pflag
-
-		left_obj = model:getById(id_list[l])
-		right_obj = model:getById(id_list[r])
-		if left_obj == nil or right_obj == nil then
-			return nil, id_list[#id_list], #id_list
-		end
-		bflag = func(left_obj, right_obj)
-
-		p = l
-		while (r ~= l) do
-
-			left_flag = func(left_obj, self)
-			right_flag = func(self, right_obj)
-			if bflag == left_flag and bflag == right_flag then
-			-- between
-				p = math.floor((l + r)/2)
-			elseif bflag == left_flag then
-			-- and unequal to right_flag
-			-- on the right hand
-				p = r
-				break
-			elseif bflag == right_flag then
-			-- and unequal to left_flag
-			-- on the left hand
-				p = l - 1
-				break
-			end
-
-			local mobj = model:getById(id_list[p])
-			if mobj == nil then
-				return nil, id_list[#id_list], #id_list
-			end
-
-			pflag = func(mobj, self)
-			if pflag == bflag then
-				l = p + 1
-			else
-				r = p - 1
-			end
-
-			left_obj = model:getById(id_list[l])
-			right_obj = model:getById(id_list[r])
-			if left_obj == nil or right_obj == nil then
-				return nil, id_list[#id_list], #id_list
-			end
-		end
-	end
-
-	return flag, id_list[p], p
-end
-
--------------------------------------------------------------------------
---  
---
-local updateInstanceToIndexOnRule = function (self, qstr)
-	local rule_manager_prefix, rule_result_pattern = specifiedRulePrefix()
-
-	local manager_key = rule_manager_prefix .. self.__name
-	local score = db:zscore(manager_key, qstr)
-	local item_key = rule_result_pattern:format(self.__name, score)
-
-	local flag, cmpid, p = canInstanceFitQueryRuleAndFindProperPosition(self, qstr)
-	local success
-	local options = { watch = item_key, retry = 2 }
-	db:transaction(function(db)
-		if flag then
-			-- consider the left end case
-			if cmpid == nil and p < 1 then
-				db:lrem(item_key, 1, self.id)
-				db:lpush(item_key, self.id)
-			else			
-				if cmpid ~= self.id then
-					-- delete old self first, insert self to proper position
-					db:lrem(item_key, 1, self.id)
-					success = db:linsert(item_key, 'AFTER', cmpid, self.id)
-				else
-					-- cmpid == self.id, means use query rule only, keep the old position
-					success = db:linsert(item_key, 'AFTER', cmpid, self.id)
-					db:lrem(item_key, 1, self.id)
-				end
-
-				db:multi()
-				-- no this id in index before
-				if success == -1 then
-					db:rpush(item_key, self.id)
-				end
-				db:exec()
-			end
---[[		else
-			if db:exists(item_key) then
-				-- delete the old one id
-				db:lrem(item_key, 1, self.id)
-			end
---]]
-		end
-
-		-- db:expire(item_key, bamboo.config.rule_expiration or bamboo.RULE_LIFE)
-	end, options)
-	return self
-end
-
-local delInstanceToIndexOnRule = function (self, qstr)
-	local rule_manager_prefix, rule_result_pattern = specifiedRulePrefix()
-
-	local manager_key = rule_manager_prefix .. self.__name
-	local score = db:zscore(manager_key, qstr)
-	local item_key = rule_result_pattern:format(self.__name, score)
-
-	local options = { watch = item_key, retry = 2 }
-	db:transaction(function(db)
-		if db:exists(item_key) then
-			db:lrem(item_key, 0, self.id)
-		end
-		-- db:expire(item_key, bamboo.config.rule_expiration or bamboo.RULE_LIFE)
-	end, options)
-
-	return self
-end
-
-local INDEX_ACTIONS = {
-	['update'] = updateInstanceToIndexOnRule,
-	['del'] = delInstanceToIndexOnRule
-}
-
-updateIndexByRules = function (self, action)
-	local rule_manager_prefix, rule_result_pattern = specifiedRulePrefix()
-
-	local manager_key = rule_manager_prefix .. self.__name
-	local qstr_list = db:zrange(manager_key, 0, -1)
-	local action_func = INDEX_ACTIONS[action]
-	for _, qstr in ipairs(qstr_list) do
-		action_func(self, qstr)
-	end
-end
-
--- can be reentry
-local addIndexToManager = function (self, str_iden, obj_list)
-	local rule_manager_prefix, rule_result_pattern = specifiedRulePrefix()
-	local manager_key = rule_manager_prefix .. self.__name
-	-- add to index manager
-	local score = db:zscore(manager_key, str_iden)
-	-- if score then return end
-	local new_score
-	if not score then
-		-- when it is a new rule
-		new_score = db:zcard(manager_key) + 1
-		db:zadd(manager_key, new_score, str_iden)
-	else
-		-- when rule result is expired, re enter this function
-		new_score = score
-	end
-	if #obj_list == 0 then return end
-
-	local item_key = rule_result_pattern:format(self.__name, new_score)
-	local options = { watch = item_key, retry = 2 }
-	db:transaction(function(db)
-		if not db:exists(item_key) then
-			-- generate the index item, use list
-			db:rpush(item_key, unpack(obj_list))
-		end
-		-- set expiration to each index item
-		-- db:expire(item_key, bamboo.config.rule_expiration or bamboo.RULE_LIFE)
-	end, options)
-end
-
-local getIndexFromManager = function (self, str_iden, getnum)
-	local rule_manager_prefix, rule_result_pattern = specifiedRulePrefix()
-
-	local manager_key = rule_manager_prefix .. self.__name
-	-- get this rule's score
-	local score = db:zscore(manager_key, str_iden)
-	-- if has no score, means it is not rule indexed,
-	-- return nil directly
-	if not score then
-		return nil
-	end
-
-	local item_key = rule_result_pattern:format(self.__name, score)
-	if not db:exists(item_key) then
-		return List()
-	end
-
-	-- update expiration
-	-- db:expire(item_key, bamboo.config.rule_expiration or bamboo.RULE_LIFE)
-	-- rule result is not empty, and not expired, retrieve them
-	if getnum then
-		-- return the number of this list
-		return db:llen(item_key)
-	else
-		-- return a list
-		return List(db:lrange(item_key, 0, -1))
-	end
 end
 
 
@@ -1382,50 +886,12 @@ Model = Object:extend {
 	-- @param 
 	-- @return
   
-  --
+
   
-  -- filter(query_args, start, stop, is_rev)
-  -- 需要提供 从哪里开始找，$start
-  -- 找多长，$length
-  -- 是不是反向找，$find_rev
-  -- 按什么排序
-  
-  -- 在query_args中。
-  -- query_args = { 'and'|'or', ''
-  --   fieldA = eq('xxx'),
-  --   fieldB = eq('xxx'),
-  -- }
-  
-	filter = function (self, query_args, ...)
-		I_AM_CLASS_OR_QUERY_SET(self)
+	filter = function (self, query_args, start, stop, is_rev)
+		I_AM_CLASS(self)
 		assert(type(query_args) == 'table' or type(query_args) == 'function', 
 			'[Error] the query_args passed to filter must be table or function.')
-		local no_sort_rule = true
-		-- regular the args
-		local sort_field, sort_dir, sort_func, start, stop, is_rev, no_cache
-		local first_arg = select(1, ...)
-		if type(first_arg) == 'function' then
-			sort_func = first_arg
-			start = select(2, ...)
-			stop = select(3, ...)
-			is_rev = select(4, ...)
-			no_cache = select(5, ...)
-			no_sort_rule = false
-		elseif type(first_arg) == 'string' then
-			sort_field = first_arg
-			sort_dir = select(2, ...)
-			start = select(3, ...)
-			stop = select(4, ...)
-			is_rev = select(5, ...)
-			no_cache = select(6, ...)
-			no_sort_rule = false
-		elseif type(first_arg) == 'number' then
-			start = first_arg
-			stop = select(2, ...)
-			is_rev = select(3, ...)
-			no_cache = select(4, ...)
-			no_sort_rule = true
-		end
         
 		if start then assert(type(start) == 'number', '[Error] @filter - start must be number.') end
 		if stop then assert(type(stop) == 'number', '[Error] @filter - stop must be number.') end
@@ -1433,46 +899,6 @@ Model = Object:extend {
 
 		local is_args_table = (type(query_args) == 'table')
 		local logic = 'and'
-
-		------------------------------------------------------------------------------
-		-- do rule index lookup
-		local query_str_iden, is_capable_press_rule = '', true
-		local do_rule_index_cache = isUsingRuleIndex() and (no_cache ~= 'nocache')
-		if do_rule_index_cache then
-			if type(query_args) == 'function' then
-				is_capable_press_rule = collectRuleFunctionUpvalues(query_args)
-			end
-
-			if is_capable_press_rule then
-				-- make query identification string
-				query_str_iden = compressQueryArgs(query_args)
-				if not no_sort_rule then
-					local sortby_str_iden = compressSortByArgs({sort_field or sort_func, sort_dir})
-					query_str_iden = compressTwoPartArgs(query_str_iden, sortby_str_iden)
-				end
-				if #query_str_iden > 0 then
-					-- check index
-					-- XXX: Only support class now, don't support query set, maybe query set doesn't need this feature
-					local id_list = getIndexFromManager(self, query_str_iden)
-					if type(id_list) == 'table' then
-						if #id_list == 0 then
-							return QuerySet(), 0
-						else
-							if start or stop then
-								-- now id_list is a list containing all id of instances fit to this query_args rule, so need to slice
-								id_list = id_list:slice(start, stop, is_rev)
-							end
-
-							-- if have this list, return objects directly
-							if #id_list > 0 then
-								return getFromRedisPipeline(self, id_list), #id_list
-							end
-						end
-					end
-				end
-				-- else go ahead
-			end
-		end
 
 		------------------------------------------------------------------------------
 		-- start do real filter
@@ -1505,7 +931,7 @@ Model = Object:extend {
 		end
 
 		local logic_choice = (logic == 'and')
-		local partially_got = false
+--		local partially_got = false
 		local fields = self.__fields
 		
 		-- walkcheck can process full object and partial object
@@ -1521,114 +947,36 @@ Model = Object:extend {
 			end
 		end
 
-		local hash_index_query_args = {};
-		local hash_index_flag = false;
-		local raw_filter_flag = false;
+    all_ids = self:allIds()
 
-		if type(query_args) == 'function' then
-			hash_index_flag = false;
-			raw_filter_flag = true;
-		elseif bamboo.config.index_hash then
-			for field, value in pairs(query_args) do
-				-- very odd, flags are assinged many times
-				if fields[field].hash_index then
-					hash_index_query_args[field] = value;
-					query_args[field] = nil;
-					hash_index_flag = true;
-				else
-					raw_filter_flag = true;
-				end
-			end
-                end
+    local objs, nils = getFromRedisPipeline(self, all_ids)
+    walkcheck(objs, self)
 
-
-		if hash_index_flag then
-			all_ids = mih.filter(self,hash_index_query_args,logic);
-		else
-    			all_ids = self:allIds()
-		end
-
-		-- if not nessesary to use raw filter, retrieve objects immediately
-		if not raw_filter_flag then
-			query_set = getFromRedisPipeline(self, all_ids)
-		else
-			if #query_set == 0 then
-				local qfs = {}
-				if is_args_table then
-					for k, _ in pairs(query_args) do
-						tinsert(qfs, k)
-					end
-					table.sort(qfs)
-				end
-
-				local objs, nils
-				if #qfs == 0 then
-					-- collect nothing, use 'hgetall' to retrieve, partially_got is false
-					-- when query_args is function, do this
-					objs, nils = getFromRedisPipeline(self, all_ids)
-				else
-					-- use hmget to retrieve, now the objs are partial objects
-					-- qfs here must have key-value pair
-					-- here, objs are not real objects, only ordinary table
-					objs = getPartialFromRedisPipeline(self, all_ids, qfs)
-					partially_got = true
-				end
-				walkcheck(objs, self)
-
-				if bamboo.config.auto_clear_index_when_get_failed then
-					-- clear model main index
-					if not isFalse(nils) then
-						local index_key = getIndexKey(self)
-						-- each element in nils is the id pattern string, when clear, remove them directly
-						for _, v in ipairs(nils) do
-							db:zremrangebyscore(index_key, v, v)
-						end
-					end
-				end
-			end
-		end
+--				if bamboo.config.auto_clear_index_when_get_failed then
+--					-- clear model main index
+--					if not isFalse(nils) then
+--						local index_key = getIndexKey(self)
+--						-- each element in nils is the id pattern string, when clear, remove them directly
+--						for _, v in ipairs(nils) do
+--							db:zremrangebyscore(index_key, v, v)
+--						end
+--					end
+--				end
 
 		------------------------------------------------------------------------------
 		-- do later process
 		local total_length = #query_set
 		-- here, _t_query_set is the all instance fit to query_args now
 		local _t_query_set = query_set
-		-- check if it is empty
-		if #query_set == 0 and do_rule_index_cache and is_capable_press_rule and #query_str_iden > 0 then
-			addIndexToManager(self, query_str_iden, {})
-			return QuerySet(), 0
-		end
-		-- do sort
-		if not no_sort_rule then
-			query_set = query_set:sortBy(sort_field or sort_func, sort_dir)
-			_t_query_set = query_set
-		end
+
 		-- slice
 		if start or stop then
 			-- now id_list is a list containing all id of instances fit to this query_args rule, so need to slice
 			query_set = _t_query_set:slice(start, stop, is_rev)
 		end
 
-		-- add to index, here, we index all instances fit to query_args, rather than results applied extra limitation conditions
-		if do_rule_index_cache and is_capable_press_rule and #query_str_iden > 0 then
-			local id_list = {}
-			for _, v in ipairs(_t_query_set) do
-				tinsert(id_list, v.id)
-			end
-			addIndexToManager(self, query_str_iden, id_list)
-		end
-
-		if partially_got then
-			local id_list = {}
-			-- retrieve needed objects' id
-			for _, v in ipairs(query_set) do
-				tinsert(id_list, v.id)
-			end
-			query_set = getFromRedisPipeline(self, id_list)
-		end
-
 		-- return results
-		return query_set, total_length
+		return query_set
 	end;
 
 
@@ -1777,9 +1125,9 @@ Model = Object:extend {
 		if isUsingFulltextIndex(self) then
 			bamboo.internal.makeFulltextIndexes(self)
 		end
-		if isUsingRuleIndex(self) then
-			updateIndexByRules(self, 'update')
-		end
+--		if isUsingRuleIndex(self) then
+--			updateIndexByRules(self, 'update')
+--		end
 
 		return self
 	end;
@@ -1841,9 +1189,9 @@ Model = Object:extend {
 		if fld.fulltext_index and isUsingFulltextIndex(self) then
 			bamboo.internal.makeFulltextIndexes(self)
 		end
-		if isUsingRuleIndex(self) then
-			updateIndexByRules(self, 'update')
-		end
+--		if isUsingRuleIndex(self) then
+--			updateIndexByRules(self, 'update')
+--		end
 
 
 		return self
@@ -1943,9 +1291,9 @@ Model = Object:extend {
 			-- but use getForeign, we retrieve them from high to low, so newest is at left of result
 		end
 
-		if isUsingRuleIndex() then
-			updateIndexByRules(self, 'update')
-		end
+--		if isUsingRuleIndex() then
+--			updateIndexByRules(self, 'update')
+--		end
 
 		-- update the lastmodified_time
 		self.lastmodified_time = socket.gettime()
@@ -2140,9 +1488,9 @@ Model = Object:extend {
 			store_module.remove(key, new_id)
 		end
 
-		if isUsingRuleIndex() then
-			updateIndexByRules(self, 'update')
-		end
+--		if isUsingRuleIndex() then
+--			updateIndexByRules(self, 'update')
+--		end
 
 		-- update the lastmodified_time
 		self.lastmodified_time = socket.gettime()
@@ -2170,9 +1518,9 @@ Model = Object:extend {
 			db:del(key)
 		end
 
-		if isUsingRuleIndex() then
-			updateIndexByRules(self, 'update')
-		end
+--		if isUsingRuleIndex() then
+--			updateIndexByRules(self, 'update')
+--		end
 
 		-- update the lastmodified_time
 		self.lastmodified_time = socket.gettime()
@@ -2203,9 +1551,9 @@ Model = Object:extend {
 			db:del(key)
 		end
 
-		if isUsingRuleIndex() then
-			updateIndexByRules(self, 'update')
-		end
+--		if isUsingRuleIndex() then
+--			updateIndexByRules(self, 'update')
+--		end
 
 		-- update the lastmodified_time
 		self.lastmodified_time = socket.gettime()

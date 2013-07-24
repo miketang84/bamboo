@@ -9,6 +9,11 @@ local normalizePath = require('lglib.path').normalize
 local Model = require 'bamboo.model'
 local Form = require 'bamboo.form'
 
+local function rename_func(oldname)
+  return os.time() .. math.random(1000000, 9999999) .. oldname:match('^.+(%.%w+)$')
+end
+
+
 local function calcNewFilename(dir, oldname)
 	-- separate the base name and extense name of a filename
 	local main, ext = oldname:match('^(.+)(%.%w+)$')
@@ -49,7 +54,7 @@ local function savefile(t)
 	local postfix = t.postfix or ''
 	local filename = ''
 	local body = ''
-	local rename_func = t.rename_func or nil
+	local rename_func = t.rename_func or rename_func
 	
 	-- if upload in html5 way
 	if req.headers['x-requested-with'] then
