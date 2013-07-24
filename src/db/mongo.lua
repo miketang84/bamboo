@@ -45,6 +45,11 @@ function connect(mongo_config)
     conn = mongol(config.host, config.port)
   end
   assert(conn, '[Error] connect to mongodb failed.')
+  if config.user and config.password then
+	local db = conn:use('admin')
+	db:auth(config.user, config.password)
+  end
+
   local db = conn:use(config.db)
   
   return db
