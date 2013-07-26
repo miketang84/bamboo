@@ -680,7 +680,7 @@ Model = Object:extend {
 	    ['lastmodified_time'] = { type="number" },
 
 	};
-	__primarykey = "id";
+--	__primarykey = "id";
 
 	-- make every object creatation from here: 
 	-- every object has the 'id', 'created_time' and 'lastmodified_time' fields
@@ -709,56 +709,56 @@ Model = Object:extend {
 	-- Class Functions. Called by class object.
 	--------------------------------------------------------------------
 	
-	-- return the location of 'name' in index
-	getRankByPrimaryKey = function (self, name)
-		I_AM_CLASS(self)
-
-		local index_key = getIndexKey(self)
-		-- id is the score of that index value
-		local rank = db:zrank(index_key, tostring(name))
-		return tonumber(rank) + 1 
-	end;
-
-	getIdByPrimaryKey = function (self, name)
-		I_AM_CLASS(self)
-		local index_key = getIndexKey(self)
-		-- id is the score of that index value
-		return db:zscore(index_key, tostring(name))
-	end;
-
-	getPrimaryKeyById = function (self, id)
-		I_AM_CLASS(self)
-		if type(tonumber(id)) ~= 'number' then return nil end
-
-		local flag, name = checkExistanceById(self, id)
-		if isFalse(flag) or isFalse(name) then return nil end
-
-		return name
-	end;
-
-	-- return instance object by primary key value
-	--
-	getByPrimaryKey = function (self, name)
-		I_AM_CLASS(self)
-		local id = self:getIdByPrimaryKey(name)
-		if not id then return nil end
-
-		return self:getById (id)
-	end;
-
-	-- return the location of 'name' in index
-	getByRank = function (self, rank_index)
-		I_AM_CLASS(self)
-		
-		if rank_index > 0 then 
-			rank_index = rank_index - 1
-		end
-		
-		local index_key = getIndexKey(self)
-		-- id is the score of that index value
-		local _, ids = db:zrange(index_key, rank_index, rank_index, 'withscores')
-		return self:getById(ids[1])
-	end;
+--	-- return the location of 'name' in index
+--	getRankByPrimaryKey = function (self, name)
+--		I_AM_CLASS(self)
+--
+--		local index_key = getIndexKey(self)
+--		-- id is the score of that index value
+--		local rank = db:zrank(index_key, tostring(name))
+--		return tonumber(rank) + 1 
+--	end;
+--
+--	getIdByPrimaryKey = function (self, name)
+--		I_AM_CLASS(self)
+--		local index_key = getIndexKey(self)
+--		-- id is the score of that index value
+--		return db:zscore(index_key, tostring(name))
+--	end;
+--
+--	getPrimaryKeyById = function (self, id)
+--		I_AM_CLASS(self)
+--		if type(tonumber(id)) ~= 'number' then return nil end
+--
+--		local flag, name = checkExistanceById(self, id)
+--		if isFalse(flag) or isFalse(name) then return nil end
+--
+--		return name
+--	end;
+--
+--	-- return instance object by primary key value
+--	--
+--	getByPrimaryKey = function (self, name)
+--		I_AM_CLASS(self)
+--		local id = self:getIdByPrimaryKey(name)
+--		if not id then return nil end
+--
+--		return self:getById (id)
+--	end;
+--
+--	-- return the location of 'name' in index
+--	getByRank = function (self, rank_index)
+--		I_AM_CLASS(self)
+--		
+--		if rank_index > 0 then 
+--			rank_index = rank_index - 1
+--		end
+--		
+--		local index_key = getIndexKey(self)
+--		-- id is the score of that index value
+--		local _, ids = db:zrange(index_key, rank_index, rank_index, 'withscores')
+--		return self:getById(ids[1])
+--	end;
 
 	getById = function (self, id)
 		I_AM_CLASS(self)
@@ -1403,7 +1403,7 @@ Model = Object:extend {
 	end;
 
 	-- rearrange the foreign index by input list
-	rearrangeForeign = function (self, field, inlist)
+	rearrangeForeignMembers = function (self, field, inlist)
 		I_AM_INSTANCE(self)
 		assert(type(field) == 'string' and type(inlist) == 'table', '[Error] @ rearrangeForeign - parameters type error.' )
 		local fld = self.__fields[field]
@@ -1444,7 +1444,7 @@ Model = Object:extend {
 
 	-- delelte a foreign member
 	-- obj can be instance object, also can be object's id, also can be anystring.
-	delForeign = function (self, field, obj)
+	removeForeignMember = function (self, field, obj)
 		I_AM_INSTANCE(self)
 		checkType(field, 'string')
 		local fld = self.__fields[field]
@@ -1498,7 +1498,7 @@ Model = Object:extend {
 		return self
 	end;
 
-	clearForeign = function (self, field)
+	delForeign = function (self, field)
 		I_AM_INSTANCE(self)
 		checkType(field, 'string')
 		local fld = self.__fields[field]
@@ -1528,7 +1528,7 @@ Model = Object:extend {
 		return self
 	end;
 
-	deepClearForeign = function (self, field)
+	deepDelForeign = function (self, field)
 		I_AM_INSTANCE(self)
 		checkType(field, 'string')
 		local fld = self.__fields[field]
@@ -1563,7 +1563,7 @@ Model = Object:extend {
 
 	-- check whether some obj is already in foreign list
 	-- instance:inForeign('some_field', obj)
-	hasForeign = function (self, field, obj)
+	hasForeignMember = function (self, field, obj)
 		I_AM_INSTANCE(self)
 		checkType(field, 'string')
 		local fld = self.__fields[field]
@@ -1635,10 +1635,7 @@ Model = Object:extend {
 	------------------------------------------------------------------------
 	-- misc APIs
 	------------------------------------------------------------------------
-	--- deprecated
-	classname = function (self)
-		return getClassName(self)
-	end;
+
 	
 	getClassName = getClassName;
 
@@ -1658,12 +1655,20 @@ Model = Object:extend {
 
 
 -- keep compatable with old version
-Model.__indexfd = Model.__primarykey
+--Model.__indexfd = Model.__primarykey
 Model.__tag = Model.__name
-Model.getRankByIndex = Model.getRankByPrimaryKey
-Model.getIdByIndex = Model.getIdByPrimaryKey
-Model.getIndexById = Model.getPrimaryKeyById
-Model.getByIndex = Model.getByPrimaryKey
+--Model.getRankByIndex = Model.getRankByPrimaryKey
+--Model.getIdByIndex = Model.getIdByPrimaryKey
+--Model.getIndexById = Model.getPrimaryKeyById
+--Model.getByIndex = Model.getByPrimaryKey
+Model.classname = Model.getClassName
+
+
+Model.clearForeign = Model.delForeign
+Model.deepClearForeign = Model.deepDelForeign
+Model.hasForeign = Model.hasForeignMember
+Model.rearrangeForeign = Model.rearrangeForeignMembers
+
 
 
 return Model
