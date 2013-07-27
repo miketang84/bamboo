@@ -41,7 +41,7 @@ local getById = function (self, id, fields)
   return obj
 end
 
-local getByIds = function (ids, fields)
+local getByIds = function (self, ids, fields)
   local objs = self.db:find(self.collection, {_id = {
     ['$in'] = ids
   }}, fields)
@@ -238,14 +238,115 @@ local getForeignIds = function (self, ffield, force)
     local obj = self.db:findOne(self.collection, {_id=self._id}, {[ffield] = true})
     return obj[ffield]
   else
-    return self[ffield]
+    if not self[ffield] then
+      local obj = self.db:findOne(self.collection, {_id=self._id}, {[ffield] = true})
+      return obj[ffield]
+    else
+      return self[ffield]
+    end
   end
 end
 
-local getForeign = function (self, ffield, start, stop, is_rev)
-
+local getForeign = function (self, ffield, fields, start, stop, is_rev)
+  local fcname = self.__fields[ffield].foreign
+  if fcname == 'ANYOBJ' or fcname == 'ANYSTRING' then
+    return getForeignIds(self, ffield)
+  
+  else
+    -- for normal model cases
+    local ids = getForeignIds(self, ffield)
+    local this = {db=self.db, collection=self.collection}
+    local objs = getByIds(this, ids, fields)
+    return objs
+  end
 
 end
+
+-- carefull
+local rearrangeForeignMembers = function (self, ffield, neworder_ids)
+  -- check neworder_ids' length
+  
+  -- check each is matched
+  
+  -- replace
+  self.db:update(self.collection, {_id=self._id}, {
+    ['$set'] = {
+      [ffield] = neworder_ids
+    }
+  })
+  
+  return self
+end
+
+local removeForeignMember = function (self, ffield, id)
+  self.db:update(self.collection, {_id=self._id}, {
+    ['$pull'] = {
+      [ffield] = id
+    }
+  })
+  
+  return self
+end
+
+local delForeign = function (self, ffield)
+  self.db:update(self.collection, {_id=self._id}, {
+    ['$set'] = {
+      [ffield] = {}
+    }
+  })
+  
+  return self
+end
+
+local deepDelForeign = function (self, ffield)
+  local ids = getForeignIds(self, ffield)
+  local fcname = self.__fields[ffield].foreign
+  if fcname == 'ANYOBJ' or fcname == 'ANYSTRING' then
+    -- nothing to do
+  else
+    self.db:remove(fcname, {
+      ['$in'] = ids
+    })
+  end
+  
+  self.db:update(self.collection, {_id=self._id}, {
+    ['$set'] = {
+      [ffield] = {}
+    }
+  })
+  
+  return self
+end
+
+
+local hasForeignMember = function (self, ffield, id)
+  local ids = getForeignIds(self, ffield)
+  local rids = {}
+  for i, id in ipairs(ids) do
+    rids[id] = true
+  end
+  
+  if rids[id] then
+    return true
+  else
+    return false
+  end
+  
+end
+
+local numForeign = function (self, ffield)
+  local ids = getForeignIds(self, ffield)
+  return #ids
+end
+
+-- NOTE: here, we check instance's foreign key field, not the model's
+-- model's filed check is in __fields[field]
+local hasForeignKey = function (self, ffield)
+  local obj = self.db:findOne(self.collection, {_id = self._id, [ffield] = { ['$exists'] = true }})
+  
+  return obj and true or false
+end
+
 
 --[[
 -------- CLASS

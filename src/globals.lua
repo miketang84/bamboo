@@ -98,6 +98,123 @@ end
 -- Query Function Set
 -- for convienent, import them into _G directly
 ------------------------------------------------------------------------
+
+_G['eq'] = function ( cmp )
+	return cmp
+end
+
+_G['uneq'] = function ( cmp )
+	return {
+    ['$ne'] = cmp
+  }
+end
+
+_G['lt'] = function (limitation)
+	return {
+    ['$lt'] = limitation
+  }
+end
+
+_G['gt'] = function (limitation)
+	return {
+    ['$gt'] = limitation
+  }
+  
+end
+
+_G['lte'] = function (limitation)
+	return {
+    ['$lte'] = limitation
+  }
+end
+
+_G['gte'] = function (limitation)
+	return {
+    ['$gte'] = limitation
+  }
+end
+
+_G['bt'] = function (small, big)
+	return {
+    ['$gt'] = small,
+    ['$lt'] = big
+  }
+end
+
+_G['be'] = function (small, big)
+	return {
+    ['$gte'] = small,
+    ['$lte'] = big
+  }
+end
+
+_G['outside'] = function (small, big)
+	return {
+    ['$or'] = {
+      ['$lt'] = small,
+      ['$gt'] = big,
+    }
+  }
+end
+
+_G['contains'] = function (substr)
+	return { 
+    ['$regex'] = substr 
+  }
+end
+
+_G['uncontains'] = function (substr)
+	return {
+    ['$not'] = {
+      ['$regex'] = substr 
+    }
+  }
+end
+
+_G['startsWith'] = function (substr)
+	return { 
+    ['$regex'] = '^'..substr 
+  }
+end
+
+_G['unstartsWith'] = function (substr)
+	return {
+    ['$not'] = {
+      ['$regex'] = '^'..substr  
+    }
+  }
+end
+
+
+_G['endsWith'] = function (substr)
+	return { 
+    ['$regex'] = substr .. '$'
+  }
+end
+
+_G['unendsWith'] = function (substr)
+	return {
+    ['$not'] = {
+      ['$regex'] = substr .. '$'
+    }
+  }
+end
+
+_G['inset'] = function (set)
+  return {
+    ['$in'] = set
+  }
+end
+
+_G['uninset'] = function (set)
+	return {
+    ['$nin'] = set
+  }
+end
+
+
+
+--[[
 local uglystr = '___hashindex^*_#@[]-+~~!$$$$'
 
 _G['eq'] = function ( cmp_obj )
@@ -322,3 +439,4 @@ _G['uninset'] = function (...)
 	end
 	return t
 end
+--]]

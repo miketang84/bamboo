@@ -322,6 +322,8 @@ registerModel = function (model)
 			
 			local decoratorSet = Set{'update', 'save', 'del', 'addForeign', 'delForeign', 'getById'}
 			
+      -- here, we really need register recursive?
+      --[[
 			local p = model
 			repeat
 				p = p._parent
@@ -329,7 +331,8 @@ registerModel = function (model)
 					registerModel(p)
 				end
 			until p.__name == 'Model' or not p
-
+      --]]
+      
 			for k, v in pairs(rawget(model, '__decorators') or {}) do
 				if decoratorSet:has(k) then
 					-- add decorator wrapper function to model self
