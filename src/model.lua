@@ -1306,7 +1306,7 @@ Model = Object:extend {
 	--
 	--
 	--
-	getForeign = function (self, field, start, stop, is_rev)
+	getForeign = function (self, field, fields, start, stop, is_rev)
 		I_AM_INSTANCE(self)
 		checkType(field, 'string')
 		local fld = self.__fields[field]

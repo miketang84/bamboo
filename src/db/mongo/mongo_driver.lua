@@ -225,27 +225,28 @@ local trueDel = del
 -- it will contains another Model type ids
 local addForeign = function (self, ffield, foreignid)
   local fld = self.__fields[ffield]
-  if fld.st == 'ONE' then
+  local storetype = fld.st
+  if storetype == 'ONE' then
     self.db:update(self.collection, {_id=self._id}, {
       ['$set'] = {
         ffield = foreignid
       }
     })
-  elseif fld.st == 'MANY' then
+  elseif storetype == 'MANY' then
     self.db:update(self.collection, {_id=self._id}, {
       ['$addToSet'] = {
         ffield = foreignid
       }
     })
     
-  elseif fld.st == 'LIST' then
+  elseif storetype == 'LIST' then
     self.db:update(self.collection, {_id=self._id}, {
       ['$push'] = {
         ffield = foreignid
       }
     })
     
-  elseif fld.st == 'FIFO' then
+  elseif storetype == 'FIFO' then
     local fifolen = fld.fifolen or 100
     local fgobj = self[ffield]
     self.db:update(self.collection, {_id=self._id}, {
@@ -264,7 +265,7 @@ local addForeign = function (self, ffield, foreignid)
       })
       tremove(fgobj, 1)
     end
-  elseif fld.st == 'ZFIFO' then
+  elseif storetype == 'ZFIFO' then
     local fifolen = fld.fifolen or 100
     local fgobj = self[ffield]
     
@@ -293,30 +294,50 @@ local addForeign = function (self, ffield, foreignid)
   return self
 end
 
-local getForeignIds = function (self, ffield, force)
-  local obj
-  if force then
-    obj = self.db:findOne(self.collection, {_id=self._id}, {[ffield] = true})
+local getForeignIds = function (self, ffield, start, stop, is_rev)
+  local obj = self
+  if obj[ffield] then
+    if start then
+      return obj[ffield]:slice(start, stop, is_rev)
+    else
+      return obj[ffield]
+    end
   else
-    obj = self
+    if start then
+      obj = self.db:findOne(self.collection, {_id=self._id}, {[ffield] = {
+      ['$slice'] = {start-1, stop-start+1}
+      }})
+    else
+      obj = self.db:findOne(self.collection, {_id=self._id}, {[ffield] = true})
+    end
+    
+    return obj[ffield]
   end
   
-  if not obj[ffield] then
-    obj = self.db:findOne(self.collection, {_id=self._id}, {[ffield] = true})
-  end
-  
-  return obj and obj[ffield]
 end
 
 local getForeign = function (self, ffield, fields, start, stop, is_rev)
-  local fcname = self.__fields[ffield].foreign
+  local fld = self.__fields[ffield]
+  local storetype = fld.st
+  local fcname = fld.foreign
   if fcname == 'ANYOBJ' or fcname == 'ANYSTRING' then
     return getForeignIds(self, ffield)
+  end
   
+  local ids = getForeignIds(self, ffield, start, stop, is_rev)
+  if not ids then return nil end
+  
+  local this = {db=self.db, collection=self.collection}
+  if storetype == 'ONE' then
+    local id = ids
+    local obj = getById(this, id, fields)
+    
+    return obj
   else
-    -- for normal model cases
+    -- for normal model cases, MANY|LIST|FIFO|ZFIFO
     local ids = getForeignIds(self, ffield)
-    local this = {db=self.db, collection=self.collection}
+    ids = ids:slice(start, stop, is_rev)
+    
     local objs = getByIds(this, ids, fields)
     return objs
   end
