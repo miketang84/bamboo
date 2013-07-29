@@ -1,9 +1,10 @@
 
 local tinsert = table.insert
+local tremove = table.remove
 local tupdate = table.update
 
-local db = BAMBOO_MDB
-assert(db, '[ERROR] no mongodb connection!')
+--local db = BAMBOO_MDB
+--assert(db, '[ERROR] no mongodb connection!')
 
 -------------------------------------------------------
 -- helpers
@@ -223,28 +224,88 @@ local trueDel = del
 -- foreign ids should belong the same Model, but next case, 
 -- it will contains another Model type ids
 local addForeign = function (self, ffield, foreignid)
-
-  self.db:update(self.collection, {_id=self._id}, {
-    ['$push'] = {
-      ffield = foreignid
-    }
-  })
+  local fld = self.__fields[ffield]
+  if fld.st == 'ONE' then
+    self.db:update(self.collection, {_id=self._id}, {
+      ['$set'] = {
+        ffield = foreignid
+      }
+    })
+  elseif fld.st == 'MANY' then
+    self.db:update(self.collection, {_id=self._id}, {
+      ['$addToSet'] = {
+        ffield = foreignid
+      }
+    })
+    
+  elseif fld.st == 'LIST' then
+    self.db:update(self.collection, {_id=self._id}, {
+      ['$push'] = {
+        ffield = foreignid
+      }
+    })
+    
+  elseif fld.st == 'FIFO' then
+    local fifolen = fld.fifolen or 100
+    local fgobj = self[ffield]
+    self.db:update(self.collection, {_id=self._id}, {
+      ['$push'] = {
+        ffield = foreignid
+      }
+    })
+    tinsert(fgobj, foreignid)
+    
+    if type(fgobj) == 'table' and #fgobj > fifolen then
+      -- remove one
+      self.db:update(self.collection, {_id=self._id}, {
+        ['$pop'] = {
+          ffield = -1
+        }
+      })
+      tremove(fgobj, 1)
+    end
+  elseif fld.st == 'ZFIFO' then
+    local fifolen = fld.fifolen or 100
+    local fgobj = self[ffield]
+    
+    self.db:update(self.collection, {_id=self._id}, {
+      ['$addToSet'] = {
+        ffield = foreignid
+      }
+    })
+    local newObj = self.db:findOne(self.collection, {_id=self._id}, {
+      [ffield] = true
+    })
+    fgobj = newObj[ffield]
+    
+    if type(fgobj) == 'table' and #fgobj > fifolen then
+      -- remove one
+      self.db:update(self.collection, {_id=self._id}, {
+        ['$pop'] = {
+          ffield = -1
+        }
+      })
+      tremove(fgobj, 1)
+    end
+    self[ffield] = fgobj
+  end
 
   return self
 end
 
 local getForeignIds = function (self, ffield, force)
+  local obj
   if force then
-    local obj = self.db:findOne(self.collection, {_id=self._id}, {[ffield] = true})
-    return obj[ffield]
+    obj = self.db:findOne(self.collection, {_id=self._id}, {[ffield] = true})
   else
-    if not self[ffield] then
-      local obj = self.db:findOne(self.collection, {_id=self._id}, {[ffield] = true})
-      return obj[ffield]
-    else
-      return self[ffield]
-    end
+    obj = self
   end
+  
+  if not obj[ffield] then
+    obj = self.db:findOne(self.collection, {_id=self._id}, {[ffield] = true})
+  end
+  
+  return obj and obj[ffield]
 end
 
 local getForeign = function (self, ffield, fields, start, stop, is_rev)
@@ -263,7 +324,7 @@ local getForeign = function (self, ffield, fields, start, stop, is_rev)
 end
 
 -- carefull
-local rearrangeForeignMembers = function (self, ffield, neworder_ids)
+local reorderForeignMembers = function (self, ffield, neworder_ids)
   -- check neworder_ids' length
   
   -- check each is matched
@@ -290,8 +351,8 @@ end
 
 local delForeign = function (self, ffield)
   self.db:update(self.collection, {_id=self._id}, {
-    ['$set'] = {
-      [ffield] = {}
+    ['$unset'] = {
+      [ffield] = "" -- this value doesn't matter
     }
   })
   
@@ -390,10 +451,37 @@ hasForeignKey
 
 
 
-
-
-
-
 return {
-  
+
+  getById = getById,
+  getByIds = getByIds,
+  allIds = allIds,
+  sliceIds = sliceIds,
+  all = all,
+  slice = slice,
+  numbers = numbers,
+  get = get,
+  filter = filter,
+  count = count,
+  delById = delById,
+  trueDelById = trueDelById,
+
+  save = trueDelById,
+  update = update,
+  del = del,
+  trueDel = trueDel,
+
+  addForeign = addForeign,
+  getForeign = getForeign,
+  getForeignIds = getForeignIds,
+  rearrangeForeignMembers = rearrangeForeignMembers,
+
+  removeForeignMember = removeForeignMember,
+  delForeign = delForeign,
+  deepDelForeign = deepDelForeign,
+
+  hasForeignMember = hasForeignMember,
+  numForeign = numForeign,
+  hasForeignKey = hasForeignKey
+
 }

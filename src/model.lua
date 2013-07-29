@@ -1,11 +1,13 @@
 module(..., package.seeall)
 
-local mih = require 'bamboo.model-indexhash'
-require 'bamboo.queryset'
 
 local tinsert, tremove = table.insert, table.remove
 local format = string.format
 local socket = require 'socket'
+
+local driver = require 'bamboo.db.drver'
+--local mih = require 'bamboo.model-indexhash'
+require 'bamboo.queryset'
 
 local db = BAMBOO_DB
 
