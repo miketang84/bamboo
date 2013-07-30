@@ -1,5 +1,71 @@
+local rdstring = require 'bamboo.db.redis.string'
+local rdlist = require 'bamboo.db.redis.list'
+local rdset = require 'bamboo.db.redis.set'
+local rdzset = require 'bamboo.db.redis.zset'
+local rdfifo = require 'bamboo.db.redis.fifo'
+local rdzfifo = require 'bamboo.db.redis.zfifo'
+local rdhash = require 'bamboo.db.redis.hash'
 
-local db = BAMBOO_DB
+-----------------------------------------------------------------
+local rdactions = {
+	['string'] = {},
+	['list'] = {},
+	['set'] = {},
+	['zset'] = {},
+	['hash'] = {},
+	['fifo'] = {},
+	['zfifo'] = {},
+  
+}
+
+rdactions['string'].save = rdstring.save
+rdactions['string'].update = rdstring.update
+rdactions['string'].retrieve = rdstring.retrieve
+rdactions['string'].remove = rdstring.remove
+rdactions['string'].add = rdstring.add
+rdactions['string'].has = rdstring.has
+rdactions['string'].num = rdstring.num
+
+rdactions['list'].save = rdlist.save
+rdactions['list'].update = rdlist.update
+rdactions['list'].retrieve = rdlist.retrieve
+rdactions['list'].remove = rdlist.remove
+--rdactions['list'].add = rdlist.add
+rdactions['list'].add = rdlist.append
+rdactions['list'].has = rdlist.has
+--rdactions['list'].num = rdlist.num
+rdactions['list'].num = rdlist.len
+
+rdactions['set'].save = rdset.save
+rdactions['set'].update = rdset.update
+rdactions['set'].retrieve = rdset.retrieve
+rdactions['set'].remove = rdset.remove
+rdactions['set'].add = rdset.add
+rdactions['set'].has = rdset.has
+rdactions['set'].num = rdset.num
+
+rdactions['zset'].save = rdzset.save
+rdactions['zset'].update = rdzset.update
+--rdactions['zset'].retrieve = rdzset.retrieve
+rdactions['zset'].retrieve = rdzset.retrieveWithScores
+rdactions['zset'].remove = rdzset.remove
+rdactions['zset'].add = rdzset.add
+rdactions['zset'].has = rdzset.has
+rdactions['zset'].num = rdzset.num
+
+rdactions['hash'].save = rdhash.save
+rdactions['hash'].update = rdhash.update
+rdactions['hash'].retrieve = rdhash.retrieve
+rdactions['hash'].remove = rdhash.remove
+rdactions['hash'].add = rdhash.add
+rdactions['hash'].has = rdhash.has
+rdactions['hash'].num = rdhash.num
+
+local getStoreModule = function (store_type)
+	local store_module = rdactions[store_type]
+	assert( store_module, "[Error] store type must be one of 'string', 'list', 'set', 'zset' or 'hash'.")
+	return store_module
+end
 
 local getStoreModule = bamboo.internal.getStoreModule
 
@@ -52,7 +118,7 @@ return function ()
 			I_AM_CLASS_OR_INSTANCE(self)
 			checkType(key, 'string')
 			local custom_key = makeCustomKey(self, key)
-			db:incrby(custom_key,step or 1)
+			self.__db:incrby(custom_key,step or 1)
 			
 			return self
 		end;
@@ -61,14 +127,13 @@ return function ()
 			I_AM_CLASS_OR_INSTANCE(self)
 			checkType(key, 'string')
 			local custom_key = makeCustomKey(self, key)
-			db:decrby(custom_key,step or 1);
+			self.__db:decrby(custom_key,step or 1);
 			
 			return self
 		end;
 
 		-- store customize key-value pair to db
 		-- now: it support string, list and so on
-		-- if fifo ,the scores is the length of the fifo
 		setCustom = function (self, key, val, st, scores)
 			I_AM_CLASS_OR_INSTANCE(self)
 			checkType(key, 'string')
@@ -115,17 +180,15 @@ return function ()
 			checkType(key, 'string')
 			local custom_key = makeCustomKey(self, key)
 
-			return custom_key, db:type(custom_key)
+			return custom_key, self.__db:type(custom_key)
 		end;
 
-		-- TODO: Need to modify
-		-- compitable to old version, start is start or atype
 		getCustom = function (self, key, start, stop, is_rev)
 			I_AM_CLASS_OR_INSTANCE(self)
 			checkType(key, 'string')
 			
 			local custom_key = makeCustomKey(self, key)
-			if not db:exists(custom_key) then
+			if not self.__db:exists(custom_key) then
 				local atype = start
 				-- print(("[Warning] @getCustom - Key %s doesn't exist!"):format(custom_key))
 				if not atype or atype == 'string' then return nil
@@ -138,10 +201,11 @@ return function ()
 			end
 
 			-- get the store type in redis
-			local store_type = db:type(custom_key)
+			local store_type = self.__db:type(custom_key)
 			local store_module = getStoreModule(store_type)
 			local ids, scores = store_module.retrieve(custom_key)
 
+      -- temporarily keep it now, is slow when list length is long
 			if type(ids) == 'table' and (type(start)=='number' or stop) then
 				ids = ids:slice(start, stop, is_rev)
 				if type(scores) == 'table' then
@@ -159,16 +223,7 @@ return function ()
 			if isFalse(query_set_ids) then
 				return QuerySet(), nil
 			else
-				local query_set, nils = getFromRedisPipeline(self, query_set_ids)
-
-				if bamboo.config.auto_clear_index_when_get_failed then
-					if not isFalse(nils) then
-						for _, v in ipairs(nils) do
-							self:removeCustomMember(key, v)
-						end
-					end
-				end
-
+				local query_set = self:getByIds(query_set_ids)
 				return query_set, scores
 			end
 		end;
@@ -178,7 +233,7 @@ return function ()
 			checkType(key, 'string')
 			local custom_key = makeCustomKey(self, key)
 
-			return db:del(custom_key)
+			return self.__db:del(custom_key)
 		end;
 
 		-- check whether exist custom key
@@ -187,34 +242,19 @@ return function ()
 			checkType(key, 'string')
 			local custom_key = makeCustomKey(self, key)
 
-			if not db:exists(custom_key) then
-				return false
-			else
+			if self.__db:exists(custom_key) then
 				return true
+			else
+				return false
 			end
 		end;
---[[
-		-- XXX: this is a odd api, useless
-		-- TODO: add score argument appending
-		updateCustom = function (self, key, val)
-			I_AM_CLASS_OR_INSTANCE(self)
-			checkType(key, 'string')
-			local custom_key = makeCustomKey(self, key)		
 
-			if not db:exists(custom_key) then print('[Warning] @updateCustom - This custom key does not exist.'); return nil end
-			local store_type = db:type(custom_key)
-			local store_module = getStoreModule(store_type)
-			return store_module.update(custom_key, val)
-
-		end;
---]]
 		removeCustomMember = function (self, key, val)
 			I_AM_CLASS_OR_INSTANCE(self)
 			checkType(key, 'string')
 			local custom_key = makeCustomKey(self, key)		
 
-			-- if not db:exists(custom_key) then print('[Warning] @removeCustomMember - This custom key does not exist.'); return nil end
-			local store_type = db:type(custom_key)
+			local store_type = self.__db:type(custom_key)
 			local store_module = getStoreModule(store_type)
 			return store_module.remove(custom_key, val)
 
@@ -225,8 +265,7 @@ return function ()
 			checkType(key, 'string')
 			local custom_key = makeCustomKey(self, key)		
 
-			-- if not db:exists(custom_key) then print('[Warning] @addCustomMember - This custom key does not exist.'); end
-			local store_type = db:type(custom_key) ~= 'none' and db:type(custom_key) or st
+			local store_type = self.__db:type(custom_key) ~= 'none' and self.__db:type(custom_key) or st
 			local store_module = getStoreModule(store_type)
 			return store_module.add(custom_key, val, score)
 
@@ -237,8 +276,8 @@ return function ()
 			checkType(key, 'string')
 			local custom_key = makeCustomKey(self, key)		
 
-			if not db:exists(custom_key) then print('[Warning] @hasCustomMember - This custom key does not exist.'); return nil end
-			local store_type = db:type(custom_key)
+			if not self.__db:exists(custom_key) then print('[Warning] @hasCustomMember - This custom key does not exist.'); return nil end
+			local store_type = self.__db:type(custom_key)
 			local store_module = getStoreModule(store_type)
 			return store_module.has(custom_key, mem)
 
@@ -249,8 +288,8 @@ return function ()
 			checkType(key, 'string')
 			local custom_key = makeCustomKey(self, key)		
 
-			if not db:exists(custom_key) then return 0 end
-			local store_type = db:type(custom_key)
+			if not self.__db:exists(custom_key) then return 0 end
+			local store_type = self.__db:type(custom_key)
 			local store_module = getStoreModule(store_type)
 			return store_module.num(custom_key)
 		end;

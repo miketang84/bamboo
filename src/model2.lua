@@ -134,7 +134,7 @@ local Model = Object:extend {
 		for field, fdt in pairs(fields) do
 			-- assign to default value if exsits
 			local initcb = t[field] or fdt.default
-			if type(tmp) == 'function' then
+			if type(initcb) == 'function' then
 				self[field] = initcb()
 			else
 				self[field] = initcb
