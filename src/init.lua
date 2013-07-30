@@ -9,6 +9,8 @@ require 'lglib'
 
 module('bamboo', package.seeall)
 
+local format = string.format
+
 local Set = require 'lglib.set'
 local List = require 'lglib.list'
 local FieldType = require 'bamboo.mvm.prototype'
@@ -271,83 +273,88 @@ end
 ------------------------------------------------------------------------
 MODEL_LIST = {}
 
-registerModel = function (model)
+-- @param model : model definition
+-- @param mdb   : mongo db object 
+-- @param db    : redis db object
+registerModel = function (model, mdb, db)
 	checkType(model, 'table')
-	assert( model.__name, 'Registered model __name must not be missing.' )
+	assert( model.__name, '[Error] @registerModel - model\'s __name missed.' )
 	local model_name = model.__name
 
-	if MODEL_LIST[model_name] then
-		print('[Warning] The same __name model had been registered.')
-		return
-	else
-		MODEL_LIST[model_name] = model
+  assert(not MODEL_LIST[model_name], format('[Error] @registerModel - The model name: %s has been registered.', model_name))
+
+  -- register
+  MODEL_LIST[model_name] = model
+  
+  -- bind dbs
+  model.__mdb = mdb or BAMBOO_MDB
+  model.__collection = model_name
+  model.__db = db or BAMBOO_DB
 
 		-- set metatable for each field
-		for field, fdt in pairs(model.__fields) do
-			setmetatable(fdt, {__index = FieldType[fdt.widget_type or 'text']})
-			fdt:init()
-		end
-		
-		-- check if ask fulltext index
-		model['__fulltext_index_fields'] = {}
-		for key, field_dt in pairs(model.__fields) do
-			if field_dt.fulltext_index == true then
-				model['__use_fulltext_index'] = true
-				table.insert(model.__fulltext_index_fields, key)
-			end			
-		end
+--		for field, fdt in pairs(model.__fields) do
+--			setmetatable(fdt, {__index = FieldType[fdt.widget_type or 'text']})
+--			fdt:init()
+--		end
+--		
+--		-- check if ask fulltext index
+--		model['__fulltext_index_fields'] = {}
+--		for key, field_dt in pairs(model.__fields) do
+--			if field_dt.fulltext_index == true then
+--				model['__use_fulltext_index'] = true
+--				table.insert(model.__fulltext_index_fields, key)
+--			end			
+--		end
 		
 
 		-- decorators
-		if not isFalse(model.__decorators) then
-			if not rawget(model, '__decorators') then
-				model.__decorators={}
-			end
-			model.__decorators.__foontprint={}
-			-- Counter to avoid endless recursion
-			local function footprintfunc(func, k)
-				return
-				function(self, ...)
-					local fp = model.__decorators.__foontprint
-					local key = tostring(self.id or select(1, ...)) .. tostring(k) --tostring(func)
-					local ret
-					if not fp[key] then
-						fp[key] = true
-						ret = func(self, ...)
-					end
-					fp[key] = nil
-					return ret
-				end
-			end
-			
-			local decoratorSet = Set{'update', 'save', 'del', 'addForeign', 'delForeign', 'getById'}
-			
-      -- here, we really need register recursive?
-      --[[
-			local p = model
-			repeat
-				p = p._parent
-				if p.__name ~= 'Model' then
-					registerModel(p)
-				end
-			until p.__name == 'Model' or not p
-      --]]
-      
-			for k, v in pairs(rawget(model, '__decorators') or {}) do
-				if decoratorSet:has(k) then
-					-- add decorator wrapper function to model self
-					model[k] = footprintfunc(v(model[k]), k)
-				end
-			end
-			
-		end
-	
-	end
+--		if not isFalse(model.__decorators) then
+--			if not rawget(model, '__decorators') then
+--				model.__decorators={}
+--			end
+--			model.__decorators.__foontprint={}
+--			-- Counter to avoid endless recursion
+--			local function footprintfunc(func, k)
+--				return
+--				function(self, ...)
+--					local fp = model.__decorators.__foontprint
+--					local key = tostring(self.id or select(1, ...)) .. tostring(k) --tostring(func)
+--					local ret
+--					if not fp[key] then
+--						fp[key] = true
+--						ret = func(self, ...)
+--					end
+--					fp[key] = nil
+--					return ret
+--				end
+--			end
+--			
+--			local decoratorSet = Set{'update', 'save', 'del', 'addForeign', 'delForeign', 'getById'}
+--			
+--      -- here, we really need register recursive?
+--      --[[
+--			local p = model
+--			repeat
+--				p = p._parent
+--				if p.__name ~= 'Model' then
+--					registerModel(p)
+--				end
+--			until p.__name == 'Model' or not p
+--      --]]
+--      
+--			for k, v in pairs(rawget(model, '__decorators') or {}) do
+--				if decoratorSet:has(k) then
+--					-- add decorator wrapper function to model self
+--					model[k] = footprintfunc(v(model[k]), k)
+--				end
+--			end
+--			
+--		end
 end
 
 getModelByName = function (name)
 	checkType(name, 'string')
-	assert(MODEL_LIST[name], ('[ERROR] This model %s is not registered!'):format(name))
+	assert(MODEL_LIST[name], ('[ERROR] model %s is not registered!'):format(name))
 	return MODEL_LIST[name]
 end
 

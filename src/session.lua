@@ -1,5 +1,6 @@
 
 module(..., package.seeall)
+
 require 'md5'
 require 'posix'
 
@@ -9,14 +10,7 @@ local HOSTID = posix.hostid()
 local RNG_BYTES = 8 						-- 64 bits of randomness should be good
 local RNG_DEVICE = '/dev/urandom'
 
-local rdlist = require 'bamboo.db.redis.list'
-local rdset = require 'bamboo.db.redis.set'
-local rdzset = require 'bamboo.db.redis.zset'
-local rdfifo = require 'bamboo.db.redis.fifo'
-local rdzfifo = require 'bamboo.db.redis.zfifo'
-local rdhash = require 'bamboo.db.redis.hash'
 
-local db = BAMBOO_DB
 -- Thouge Session is not a model, but we use model way to process it
 local PREFIX = 'Session:'
 
@@ -124,190 +118,116 @@ local manuSessionIdHttp = function (req)
     return ident
 end
 
-local setStructure = function (session_key, k, v, st)
-  local ext_key = ("%s:%s:%s"):format(session_key, k, st)
 
-  if st == 'list' then
-    rdlist.save(ext_key, v)
-    db:hset(session_key, k, "__list__")
-  elseif st == 'set' then
-    rdset.save(ext_key, v)
-    db:hset(session_key, k, "__set__")
-  elseif st == 'zset' then
-    rdzset.save(ext_key, v)
-    db:hset(session_key, k, "__zset__")
-  else
-    error("[Error] @Session:setKey - st must be one of 'string', 'list', 'set' or 'zset'")
-  end
-
+local expireit = function (self, session_key)
+  local expiration = self.db:hget(session_key, 'expiration') or bamboo.config.expiration or bamboo.SESSION_LIFE
+  self.db:expire(session_key, expiration)
 end
 
--- get the structure value according to string agent
-local getStructure = function (session_key, k, v)
-  local ext_key
-  local ext_val = v
-  if v == "__list__" then
-    ext_key = ("%s:%s:list"):format(session_key, k)
-    ext_val = rdlist.retrieve(ext_key)
-  elseif v == "__set__" then
-    ext_key = ("%s:%s:set"):format(session_key, k)
-    ext_val = rdset.retrieve(ext_key)
-  elseif v == "__zset__" then
-    ext_key = ("%s:%s:zset"):format(session_key, k)
-    ext_val = rdzset.retrieve(ext_key)
-  end
-  
-  return ext_val
-end
 
+-- to add session support, we add 
+--     Session(redis_db, web, req) 
+-- in handler_entry.lua' init function
+-- later, can use web.session:setKey(...), web.session:getKey(...)
+-- and use req.user, req.session to access session content
 
 local Session 
 Session = Object:extend {
-  -- nothing to do
-  init = function (self, req) 
-    self:identRequest(req)
-    self:set(req)
+  init = function (self, db, web, req) 
+    -- contains a db connector for each instance
+    self.db = db
+    self.req = req
+    
+    self:identRequest()
+    self:set()
 
+    web.session = self
     return self 
   end;
 
   set = function (self)
-    local session_key = PREFIX + req.session_id
-    if not db:hexists(session_key, 'session_id') then
-        db:hset(session_key, 'session_id', req.session_id)
+    local session_key = PREFIX + self.req.session_id
+    if not self.db:hexists(session_key, 'session_id') then
+        self.db:hset(session_key, 'session_id', self.req.session_id)
     end
 
-    local session = db:hgetall(session_key)
-    for k, v in pairs(session) do
-        session[k] = getStructure(session_key, k, v)
-    end
+    local session = self.db:hgetall(session_key)
+    
+    -- attach user object 
     -- in session, we could not use User model to record something,
-      -- because session is lower api, and shouldn't be limited as User model
+    -- because session is lower api, and shouldn't be limited as User model
     if session['user_id'] then
         local user_id = session['user_id']
         local model_name, id = user_id:match('^(%w+):(%d+)$')
         assert(model_name and id, "[ERROR] Session user_id format is not right.")
         local model = bamboo.getModelByName(model_name)
         assert(model, "[ERROR] This user model doesn't registerd.")
-        -- get the real user instance, assign it to req.user
-        req['user'] = model:getById(id)
+        -- get the real user instance, assign it to self.req.user
+        self.req['user'] = model:getById(id)
         
     end
       
-      local expiration = session.expiration or bamboo.config.expiration or bamboo.SESSION_LIFE
-    db:expire(session_key, expiration)
-    req['session'] = session
+    expireit(session_key)
+    self.req['session'] = session
 
     return true
   end;
 
   get = function (self, session_id)
-    local session_key = PREFIX + (session_id or req.session_id)
-    local session_t = db:hgetall(session_key)
+    local session_key = PREFIX + (session_id or self.req.session_id)
+    local session_t = self.db:hgetall(session_key)
 
-    for k, v in pairs(session_t) do
-        session_t[k] = getStructure(session_key, k, v)
-    end
-
-      if bamboo.config.relative_expiration then
-        db:expire(session_key, session_t.expiration or bamboo.config.expiration or bamboo.SESSION_LIFE)
-    end
+    expireit(session_key)
     return session_t
   end;
-
-  userHash = function (self, user, session_id)
-    local user_id = format("%s:%s", user:classname(), user.id)
-    -- if open user single login limitation
-    if bamboo.config.user_single_login then
-      local sid = db:hget('_users_sessions', user_id)
-      -- if logined before, force to logout it 
-      if sid and sid ~= session_id then
-        Session:del(sid)
-      end
-    end
-    
-    db:hset('_users_sessions', user_id, session_id)
-  end;
   
-  getUserHash = function (self, user)
-    local user = user or req.uesr
-    assert(user, '[Error] @Session getUserHash - user is nil.')
-    local user_id = format("%s:%s", user:classname(), user.id)
-    return db:hget('_users_sessions', user_id)
+  setKey = function (self, key, value)
+    checkType(key, 'string')
+    local session_key = PREFIX + (session_id or self.req.session_id)
+
+    self.db:hset(session_key, key, tostring(value))
+
+    expireit(session_key)
+    -- update the in memory value
+    self.req.session[key] = value
+
+    return true
   end;
 
-  delUserHash= function (self, user)
-    local user_id = format("%s:%s", user:classname(), user.id)
-    db:hdel('_users_sessions', user_id)
-  end;
-  
-    setKey = function (self, key, value, st, session_id)
-        checkType(key, 'string')
-        local session_key = PREFIX + (session_id or req.session_id)
-        local st = st or 'string'
+  getKey = function (self, key, session_id)
+    checkType(key, 'string')
+    local session_key = PREFIX + (session_id or self.req.session_id)
 
-    if st == 'string' then
-      assert( isNumOrStr(value),
-        "[Error] @Session:setKey - Value should be string or number.")
-      db:hset(session_key, key, value)
-    else
-      setStructure(session_key, key, value, st)
-    end
-
-    if bamboo.config.relative_expiration then
-      local expiration = db:hget(session_key, 'expiration') or bamboo.config.expiration or bamboo.SESSION_LIFE
-      db:expire(session_key, expiration)
-        end
-
-        return true
-    end;
-
-    getKey = function (self, key, session_id)
-        checkType(key, 'string')
-        local session_key = PREFIX + (session_id or req.session_id)
-
-    local ovalue = db:hget(session_key, key)
-    local nvalue = getStructure(session_key, key, ovalue)
-
-    if bamboo.config.relative_expiration then
-      local expiration = db:hget(session_key, 'expiration') or bamboo.config.expiration or bamboo.SESSION_LIFE
-      db:expire(session_key, expiration)
-        end
+    local value = self.db:hget(session_key, key)
+    expireit(session_key)
     
-    return nvalue
-    end;
+    return value
+  end;
 
-    delKey = function (self, key, session_id)
-        checkType(key, 'string')
-        local session_key = PREFIX + (session_id or req.session_id)
-        req.session[key] = nil
+  delKey = function (self, key, session_id)
+    checkType(key, 'string')
+    self.req.session[key] = nil
+    
+    local session_key = PREFIX + (session_id or self.req.session_id)
+    expireit(session_key)
+    
+    return self.db:hdel(session_key, key)
+  end;
 
-    if bamboo.config.relative_expiration then
-      local expiration = db:hget(session_key, 'expiration') or bamboo.config.expiration or bamboo.SESSION_LIFE
-      db:expire(session_key, expiration)
-        end
-        return db:hdel(session_key, key)
-    end;
+  del = function (self, session_id)
+    checkType(session_id, 'string')
+    local session_key = PREFIX + (session_id or self.req.session_id)
 
-    del = function (self, session_id)
-        checkType(session_id, 'string')
-        local session_key = PREFIX + (session_id or req.session_id)
+    return self.db:del(session_key)
+  end;
 
-        return db:del(session_key)
-    end;
+  --- calculate the session id of a coming request
+  -- @return: session id
+  identRequest = function (self)
+    return manuSessionIdHttp(self.req)
+  end;
 
-    --- calculate the session id of a coming request
-    -- @return: session id
-    identRequest = function (self, req)
-      return manuSessionIdHttp(req)
---        if req.headers.METHOD == "JSON" then
---            return manuSessionIdJson(req)
---        else
---            return manuSessionIdHttp(req)
---        end
-    end;
-
-    parseSessionId = parseSessionId;
+  parseSessionId = parseSessionId;
   makeSessionCookie = makeSessionCookie;
 
   -- redefine global expiration parameter
@@ -321,23 +241,11 @@ Session = Object:extend {
     assert(bamboo.config.open_custom_expiration, 
       "[Error] @ setExpiration - for using this function, you must set 'open_custom_expiration=true' in settings.lua firstly!")
     assert(seconds, "[Error] missing params seconds.")
-    local session_key = PREFIX + (session_id or req.session_id)
+    local session_key = PREFIX + (session_id or self.req.session_id)
     
-    db:hset(session_key, 'expiration', seconds)
-    db:expire(session_key, seconds)
-    end;
+    self.db:hset(session_key, 'expiration', seconds)
+    self.db:expire(session_key, seconds)
+  end;
 }
 
-
 return Session
-
-
---[[
-        if BAMBOO_DB and not config.disable_default_session_management then
-          -- generate req.session_id
-          makeSessionId(req)
-          -- record session
-          Session:set(req)
-        end
-
-]]
