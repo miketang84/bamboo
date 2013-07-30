@@ -11,45 +11,34 @@ module('bamboo', package.seeall)
 
 local format = string.format
 
-local Set = require 'lglib.set'
-local List = require 'lglib.list'
-local FieldType = require 'bamboo.mvm.prototype'
+--local FieldType = require 'bamboo.mvm.prototype'
 require 'bamboo.globals'
-local cmsgpack = require 'cmsgpack'
 
 config = {}
 -- for global rendering usage
 context = {}
-dbs = {}
-userdata = {}
-plugindata = {}
 internal = {}
 compiled_views_tmpls = {}
 compiled_views = {}
 compiled_views_locals = {}
 
-WIDGETS = {}
-require 'bamboo.widget'
+--WIDGETS = {}
+--require 'bamboo.widget'
 
 -- for session life time
 SESSION_LIFE = 3600 * 24
 -- for cache life time
 CACHE_LIFE = 1800
 -- for rule index life time
-RULE_LIFE = 1800
+--RULE_LIFE = 1800
 -- for plugin args life time
-PLUGIN_ARGS_LIFE = 3600
+--PLUGIN_ARGS_LIFE = 3600
 
 -- global URLS definition
 URLS = {}
 PATTERN_URLS = {}
 ------------------------------------------------------------------------
 
---pubToCluster = function (msg_obj)
---	bamboo.cluster_channel_pub:send(cmsgpack.pack(msg_obj))
---end
-
-------------------------------------------------------------------------
 PLUGIN_LIST = {}
 PLUGIN_CALLBACKS = {}
 
@@ -84,20 +73,20 @@ end
 --	return PLUGIN_CALLBACKS[name]
 --end
 
+
+--local function parseFilterName( filter_name )
+--	local name_part, args_part = filter_name:trim():match("^([%w_]+):? *([%w_ /%-%.]*)")
+--	local args_list = {}
+--	if args_part and args_part ~= '' then
+--		args_list = args_part:trim():split(' +')
+--	end
+--	
+--	filter = getFilterByName(name_part)
+--	return filter, args_list
+--end
+
+
 ------------------------------------------------------------------------
-
-local function parseFilterName( filter_name )
-	local name_part, args_part = filter_name:trim():match("^([%w_]+):? *([%w_ /%-%.]*)")
-	local args_list = {}
-	if args_part and args_part ~= '' then
-		args_list = args_part:trim():split(' +')
-	end
-	
-	filter = getFilterByName(name_part)
-	return filter, args_list
-end
-
-
 
 MODULE_LIST = {}
 -- 
