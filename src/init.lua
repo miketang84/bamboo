@@ -263,9 +263,9 @@ end
 MODEL_LIST = {}
 
 -- @param model : model definition
--- @param mdb   : mongo db object 
--- @param db    : redis db object
-registerModel = function (model, mdb, db)
+-- @param db   : mongo db object 
+-- @param redis    : redis object
+registerModel = function (model, db, redis)
 	checkType(model, 'table')
 	assert( model.__name, '[Error] @registerModel - model\'s __name missed.' )
 	local model_name = model.__name
@@ -276,9 +276,9 @@ registerModel = function (model, mdb, db)
   MODEL_LIST[model_name] = model
   
   -- bind dbs
-  model.__mdb = mdb or BAMBOO_MDB
+  model.__db = db or BAMBOO_MDB
   model.__collection = model_name
-  model.__db = db or BAMBOO_DB
+  model.__redis = db or BAMBOO_DB
 
 		-- set metatable for each field
 --		for field, fdt in pairs(model.__fields) do

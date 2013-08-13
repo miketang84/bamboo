@@ -32,7 +32,7 @@ end
 --   field_b = true
 -- }
 local getById = function (self, id, fields)
-  local obj = self.__mdb:findOne(self.__collection, {_id = id}, fields)
+  local obj = self.__db:findOne(self.__collection, {_id = id}, fields)
   
   if obj then
     -- keep compitable
@@ -43,7 +43,7 @@ local getById = function (self, id, fields)
 end
 
 local getByIds = function (self, ids, fields)
-  local objs = self.__mdb:find(self.__collection, {_id = {
+  local objs = self.__db:find(self.__collection, {_id = {
     ['$in'] = ids
   }}, fields)
   
@@ -62,7 +62,7 @@ local getByIds = function (self, ids, fields)
 end
 
 local allIds = function (self, is_rev)
-  local idobjs = self.__mdb:find(self.__collection, {}, {_id=true})
+  local idobjs = self.__db:find(self.__collection, {}, {_id=true})
   
   local ids = List()
   if is_rev == 'rev' then
@@ -81,12 +81,12 @@ end
 
 local sliceIds = function (self, start, stop, is_rev)
   if start < 0 and stop < 0 then
-    local total = self.__mdb:count(self.__collection)
+    local total = self.__db:count(self.__collection)
     start = total + start + 1
     stop = total + stop + 1
   end
   
-  local idobjs = self.__mdb:find(self.__collection, {
+  local idobjs = self.__db:find(self.__collection, {
     ['$query'] = {},
     ['$maxScan'] = stop - start + 1,
     
@@ -109,7 +109,7 @@ local sliceIds = function (self, start, stop, is_rev)
 end
 
 local all = function (self, fields, is_rev)
-  local objs = self.__mdb:find(self.__collection, {}, fields)
+  local objs = self.__db:find(self.__collection, {}, fields)
  
   if is_rev == 'rev' then
     return List(objs):reverse()
@@ -120,12 +120,12 @@ end
 
 local slice = function (self, fields, start, stop, is_rev)
   if start < 0 and stop < 0 then
-    local total = self.__mdb:count(self.__collection)
+    local total = self.__db:count(self.__collection)
     start = total + start + 1
     stop = total + stop + 1
   end
 
-  local objs = self.__mdb:find(self.__collection, {
+  local objs = self.__db:find(self.__collection, {
     ['$query'] = {},
     ['$maxScan'] = stop - start + 1,
   }, fields, start-1)
@@ -139,34 +139,34 @@ local slice = function (self, fields, start, stop, is_rev)
 end
 
 local numbers = function (self)
-  return self.__mdb:count(self.__collection)
+  return self.__db:count(self.__collection)
 
 end
 
 local get = function (self, query_args, fields, skip)
-  local obj = self.__mdb:findOne(self.__collection, query_args, fields, skip)
+  local obj = self.__db:findOne(self.__collection, query_args, fields, skip)
   
   return obj
 end
 
 local filter = function (self, query_args, fields, skip)
-  --local objs = self.__mdb:findMany(self.__collection, query_args, fields, skip)
-  local objs = self.__mdb:find(self.__collection, query_args, fields, skip):all()
+  --local objs = self.__db:findMany(self.__collection, query_args, fields, skip)
+  local objs = self.__db:find(self.__collection, query_args, fields, skip):all()
   
   return objs
 end
 
 local count = function (self, query_args)
-  return self.__mdb:count(self.__collection, query_args)
+  return self.__db:count(self.__collection, query_args)
 end
 
 local delById = function (self, id)
   local idtype = type(id)
   
   if idtype == 'string' then
-    self.__mdb:remove(self.__collection, {_id=id})
+    self.__db:remove(self.__collection, {_id=id})
   elseif idtype == 'table' then
-    self.__mdb:remove(self.__collection, {
+    self.__db:remove(self.__collection, {
       _id = {
         ['$in'] = id
       }
@@ -186,20 +186,20 @@ local save = function (self, params)
   if self.id and self._id then
   
     -- here, may save extra fields, because we don' check the validance of each field
-    self.__mdb:update(self.__collection, {_id = self._id}, {
+    self.__db:update(self.__collection, {_id = self._id}, {
       ['$set'] = params
     })
   else
     tupdate(self, params)
     -- here, mongo will generate _id for us, but self will not contain _id now
-    self.__mdb:insert(self.__collection, {self})
+    self.__db:insert(self.__collection, {self})
   end
   
   return self
 end
 
 local update = function (self, field, value)
-  self.__mdb:update(self.__collection, {_id = self._id}, {
+  self.__db:update(self.__collection, {_id = self._id}, {
       ['$set'] = { field = value}
     })
     
@@ -207,7 +207,7 @@ local update = function (self, field, value)
 end
 
 local del = function (self)
-  self.__mdb:remove(self.__collection, {_id=self._id})
+  self.__db:remove(self.__collection, {_id=self._id})
 
   return self
 end
@@ -227,20 +227,20 @@ local addForeign = function (self, ffield, foreignid)
   local fld = self.__fields[ffield]
   local storetype = fld.st
   if storetype == 'ONE' then
-    self.__mdb:update(self.__collection, {_id=self._id}, {
+    self.__db:update(self.__collection, {_id=self._id}, {
       ['$set'] = {
         ffield = foreignid
       }
     })
   elseif storetype == 'MANY' then
-    self.__mdb:update(self.__collection, {_id=self._id}, {
+    self.__db:update(self.__collection, {_id=self._id}, {
       ['$addToSet'] = {
         ffield = foreignid
       }
     })
     
   elseif storetype == 'LIST' then
-    self.__mdb:update(self.__collection, {_id=self._id}, {
+    self.__db:update(self.__collection, {_id=self._id}, {
       ['$push'] = {
         ffield = foreignid
       }
@@ -249,7 +249,7 @@ local addForeign = function (self, ffield, foreignid)
   elseif storetype == 'FIFO' then
     local fifolen = fld.fifolen or 100
     local fgobj = self[ffield]
-    self.__mdb:update(self.__collection, {_id=self._id}, {
+    self.__db:update(self.__collection, {_id=self._id}, {
       ['$push'] = {
         ffield = foreignid
       }
@@ -258,7 +258,7 @@ local addForeign = function (self, ffield, foreignid)
     
     if type(fgobj) == 'table' and #fgobj > fifolen then
       -- remove one
-      self.__mdb:update(self.__collection, {_id=self._id}, {
+      self.__db:update(self.__collection, {_id=self._id}, {
         ['$pop'] = {
           ffield = -1
         }
@@ -269,19 +269,19 @@ local addForeign = function (self, ffield, foreignid)
     local fifolen = fld.fifolen or 100
     local fgobj = self[ffield]
     
-    self.__mdb:update(self.__collection, {_id=self._id}, {
+    self.__db:update(self.__collection, {_id=self._id}, {
       ['$addToSet'] = {
         ffield = foreignid
       }
     })
-    local newObj = self.__mdb:findOne(self.__collection, {_id=self._id}, {
+    local newObj = self.__db:findOne(self.__collection, {_id=self._id}, {
       [ffield] = true
     })
     fgobj = newObj[ffield]
     
     if type(fgobj) == 'table' and #fgobj > fifolen then
       -- remove one
-      self.__mdb:update(self.__collection, {_id=self._id}, {
+      self.__db:update(self.__collection, {_id=self._id}, {
         ['$pop'] = {
           ffield = -1
         }
@@ -304,11 +304,11 @@ local getForeignIds = function (self, ffield, start, stop, is_rev)
     end
   else
     if start then
-      obj = self.__mdb:findOne(self.__collection, {_id=self._id}, {[ffield] = {
+      obj = self.__db:findOne(self.__collection, {_id=self._id}, {[ffield] = {
       ['$slice'] = {start-1, stop-start+1}
       }})
     else
-      obj = self.__mdb:findOne(self.__collection, {_id=self._id}, {[ffield] = true})
+      obj = self.__db:findOne(self.__collection, {_id=self._id}, {[ffield] = true})
     end
     
     if is_rev == 'rev' then
@@ -332,7 +332,7 @@ local getForeign = function (self, ffield, fields, start, stop, is_rev)
   local ids = getForeignIds(self, ffield, start, stop, is_rev)
   if not ids then return nil end
   
-  local this = {__mdb=self.__mdb, __collection=self.__collection}
+  local this = {__mdb=self.__db, __collection=self.__collection}
   if storetype == 'ONE' then
     local id = ids
     local obj = getById(this, id, fields)
@@ -356,7 +356,7 @@ local reorderForeignMembers = function (self, ffield, neworder_ids)
   -- check each is matched
   
   -- replace
-  self.__mdb:update(self.__collection, {_id=self._id}, {
+  self.__db:update(self.__collection, {_id=self._id}, {
     ['$set'] = {
       [ffield] = neworder_ids
     }
@@ -366,7 +366,7 @@ local reorderForeignMembers = function (self, ffield, neworder_ids)
 end
 
 local removeForeignMember = function (self, ffield, id)
-  self.__mdb:update(self.__collection, {_id=self._id}, {
+  self.__db:update(self.__collection, {_id=self._id}, {
     ['$pull'] = {
       [ffield] = id
     }
@@ -376,7 +376,7 @@ local removeForeignMember = function (self, ffield, id)
 end
 
 local delForeign = function (self, ffield)
-  self.__mdb:update(self.__collection, {_id=self._id}, {
+  self.__db:update(self.__collection, {_id=self._id}, {
     ['$unset'] = {
       [ffield] = "" -- this value doesn't matter
     }
@@ -392,16 +392,16 @@ local deepDelForeign = function (self, ffield)
     -- nothing to do
   else
     if type(ids) == 'table' then
-      self.__mdb:remove(fname, { _id = {
+      self.__db:remove(fname, { _id = {
           ['$in'] = ids
         }
       })
     else 
-      self.__mdb:remove(fname, { _id = ids })
+      self.__db:remove(fname, { _id = ids })
     end
   end
   
-  self.__mdb:update(self.__collection, {_id=self._id}, {
+  self.__db:update(self.__collection, {_id=self._id}, {
     ['$unset'] = {
       [ffield] = ""
     }
@@ -442,7 +442,7 @@ end
 -- NOTE: here, we check instance's foreign key field, not the model's
 -- model's filed check is in __fields[field]
 local hasForeignKey = function (self, ffield)
-  local obj = self.__mdb:findOne(self.__collection, {_id = self._id, [ffield] = { ['$exists'] = true }})
+  local obj = self.__db:findOne(self.__collection, {_id = self._id, [ffield] = { ['$exists'] = true }})
   
   return obj and true or false
 end

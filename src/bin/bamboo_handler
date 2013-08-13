@@ -18,8 +18,7 @@ local cmsgpack = require 'cmsgpack'
 --local poller = zmq.poller(64)
 --bamboo.poller = poller
 
-local zmq = require'handler.zmq'
-local httpserver = require'handler.http.server'
+local zmq = require'bamboo.lib.zmqev'
 local ev = require'ev'
 local loop = ev.Loop.default
 bamboo.internal.loop = loop

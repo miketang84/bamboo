@@ -49,7 +49,7 @@ function RDS.connectAll (config)
   end
   
   -- keep compatible with old version
-  _G['BAMBOO_DB'] = master
+  -- _G['BAMBOO_DB'] = master
   return master
 end
 
