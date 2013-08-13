@@ -2,6 +2,7 @@
 local tinsert = table.insert
 local tremove = table.remove
 local tupdate = table.update
+local ObjectId = ObjectId
 
 --local db = BAMBOO_MDB
 --assert(db, '[ERROR] no mongodb connection!')
@@ -9,21 +10,40 @@ local tupdate = table.update
 -------------------------------------------------------
 -- helpers
 -------------------------------------------------------
+local function checkObjectId (id)
+  return #tostring(id) == 24
+end
+
 local function attachId(obj)
-  if obj then
-    obj.id = obj._id
-    return obj
-  else
-    return obj
+  if obj and obj._id then
+    obj.id = tostring(obj._id)
   end
 end
 
 local function attachIds(objs)
   for i, obj in ipairs(objs) do
-    obj.id = obj._id
+    attachId(obj)
   end
   
   return objs
+end
+
+
+local function transId(id)
+  if checkObjectId(id) then
+    return ObjectId(id)
+  else
+    return id
+  end
+end
+
+local function transIds(ids)
+  local nids = {}
+  for i, id in ipairs(ids) do
+    nids[i] = transId(id)
+  end
+  
+  return nids
 end
 
 
@@ -32,20 +52,20 @@ end
 --   field_b = true
 -- }
 local getById = function (self, id, fields)
+  id = transId(id)
   local obj = self.__db:findOne(self.__collection, {_id = id}, fields)
   
-  if obj then
-    -- keep compitable
-    obj.id = obj._id
-  end
+  attachId(obj)
 
   return obj
 end
 
 local getByIds = function (self, ids, fields)
+  ids = transIds(ids)
+  
   local objs = self.__db:find(self.__collection, {_id = {
     ['$in'] = ids
-  }}, fields)
+  }}, fields):all()
   
   -- rearrange objs by ids' element order
   local robjs = {}
@@ -58,22 +78,23 @@ local getByIds = function (self, ids, fields)
     tinsert(orderedObjs, robjs[tostring(id)])
   end
   
+  attachIds(orderedObjs)
   return orderedObjs
 end
 
 local allIds = function (self, is_rev)
-  local idobjs = self.__db:find(self.__collection, {}, {_id=true})
+  local idobjs = self.__db:find(self.__collection, {}, {_id=true}):all()
   
   local ids = List()
   if is_rev == 'rev' then
     local idobj
     for i=#idobjs, 1, -1 do
       idobj = idobjs[i]
-      tinsert(ids, idobj._id)
+      tinsert(ids, tostring(idobj._id))
     end
   else
     for i, idobj in ipairs(idobjs) do
-      tinsert(ids, idobj._id)
+      tinsert(ids, tostring(idobj._id))
     end
   end
   return ids
@@ -90,7 +111,7 @@ local sliceIds = function (self, start, stop, is_rev)
     ['$query'] = {},
     ['$maxScan'] = stop - start + 1,
     
-  }, {_id=true}, start-1)
+  }, {_id=true}, start-1):all()
   
   local ids = List()
   if is_rev == 'rev' then
@@ -109,8 +130,9 @@ local sliceIds = function (self, start, stop, is_rev)
 end
 
 local all = function (self, fields, is_rev)
-  local objs = self.__db:find(self.__collection, {}, fields)
+  local objs = self.__db:find(self.__collection, {}, fields):all()
  
+  attachIds(objs)
   if is_rev == 'rev' then
     return List(objs):reverse()
   else
@@ -128,8 +150,9 @@ local slice = function (self, fields, start, stop, is_rev)
   local objs = self.__db:find(self.__collection, {
     ['$query'] = {},
     ['$maxScan'] = stop - start + 1,
-  }, fields, start-1)
+  }, fields, start-1):all()
   
+  attachIds(objs)
   if is_rev == 'rev' then
     return List(objs):reverse()
   else
@@ -146,6 +169,7 @@ end
 local get = function (self, query_args, fields, skip)
   local obj = self.__db:findOne(self.__collection, query_args, fields, skip)
   
+  attachId(obj)
   return obj
 end
 
@@ -153,6 +177,7 @@ local filter = function (self, query_args, fields, skip)
   --local objs = self.__db:findMany(self.__collection, query_args, fields, skip)
   local objs = self.__db:find(self.__collection, query_args, fields, skip):all()
   
+  attachIds(objs)
   return objs
 end
 
@@ -161,16 +186,16 @@ local count = function (self, query_args)
 end
 
 local delById = function (self, id)
-  local idtype = type(id)
+  id = transId(id)  
   
   if idtype == 'string' then
     self.__db:remove(self.__collection, {_id=id})
-  elseif idtype == 'table' then
-    self.__db:remove(self.__collection, {
-      _id = {
-        ['$in'] = id
-      }
-    })
+--  elseif idtype == 'table' then
+--    self.__db:remove(self.__collection, {
+--      _id = {
+--        ['$in'] = id
+--      }
+--    })
   end
 
   return self
@@ -183,7 +208,8 @@ local trueDelById = delById
 -------------------------------------------------------
 
 local save = function (self, params)
-  if self.id and self._id then
+  params = params or {}
+  if self.id or self._id then
   
     -- here, may save extra fields, because we don' check the validance of each field
     self.__db:update(self.__collection, {_id = self._id}, {
@@ -332,7 +358,7 @@ local getForeign = function (self, ffield, fields, start, stop, is_rev)
   local ids = getForeignIds(self, ffield, start, stop, is_rev)
   if not ids then return nil end
   
-  local this = {__mdb=self.__db, __collection=self.__collection}
+  local this = {__db=self.__db, __collection=self.__collection}
   if storetype == 'ONE' then
     local id = ids
     local obj = getById(this, id, fields)
@@ -392,11 +418,13 @@ local deepDelForeign = function (self, ffield)
     -- nothing to do
   else
     if type(ids) == 'table' then
+      ids = transIds(ids)
       self.__db:remove(fname, { _id = {
           ['$in'] = ids
         }
       })
     else 
+      ids = transId(ids)
       self.__db:remove(fname, { _id = ids })
     end
   end
@@ -412,6 +440,7 @@ end
 
 
 local hasForeignMember = function (self, ffield, id)
+  id = transId(id)
   local ids = getForeignIds(self, ffield)
   local rids = {}
   if type(ids) == 'table' then
@@ -505,7 +534,7 @@ return {
   delById = delById,
   trueDelById = trueDelById,
 
-  save = trueDelById,
+  save = save,
   update = update,
   del = del,
   trueDel = trueDel,
@@ -513,7 +542,7 @@ return {
   addForeign = addForeign,
   getForeign = getForeign,
   getForeignIds = getForeignIds,
-  rearrangeForeignMembers = rearrangeForeignMembers,
+  reorderForeignMembers = reorderForeignMembers,
 
   removeForeignMember = removeForeignMember,
   delForeign = delForeign,

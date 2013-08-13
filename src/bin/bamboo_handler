@@ -8,15 +8,12 @@ require 'lglib'
 require 'bamboo'
 local tremove = table.remove
 -- import coxpcall function
-require 'coxpcall'
+-- require 'coxpcall'
 local socket = require 'socket'
 local utils = require 'bamboo.utils'
 local normalizePath = require('lglib.path').normalize
 
 local cmsgpack = require 'cmsgpack'
---require 'zmq.poller'
---local poller = zmq.poller(64)
---bamboo.poller = poller
 
 local zmq = require'bamboo.lib.zmqev'
 local ev = require'ev'
@@ -72,28 +69,6 @@ config.route = config.route or '/'
 _G['View'] = require 'bamboo.view'
 _G['Form'] = require 'bamboo.form'
 local Web = require 'bamboo.web'
-
--- ==============================================================
--- write some attributes to config
--- 
---config.APP_DIR = APP_DIR
---config.config_file = config.config_file or "config.lua"
---if config.webserver_dir then
---  -- format full directory of config_file, to find webserver's configuration
---  config.config_file = config.webserver_dir + '/' + config.config_file
---end
-
---
---local driver = require 'bamboo.webserver_driver'
---driver.loadConfig(config)
-
-
-
---local webserver_conn = assert(driver.connect(config), "Failed to connect to webserver.")
-
---bamboo.webserver_conn = webserver_conn
---config.webserver_conn = webserver_conn
---bamboo.cluster_channel_pub = webserver_conn.cluster_channel_pub
 
 -- ==============================================================
 -- load handler_entry file
@@ -291,8 +266,6 @@ local function preParseReq(req)
     req.PARAMS = req.GET and req.POST and table.update(req.GET, req.POST) or {}
   end
   
-  
-  
 end
 
 
@@ -318,22 +291,12 @@ local function execute(main, req)
   -- XXX, global scope variable is not good idea
   --_G['web'] = web
   
- -- bamboo.logger:info( 'handler func start time: '..socket.gettime())
+  -- bamboo.logger:info( 'handler func start time: '..socket.gettime())
 
-  local good, err, extra = coxpcall(function () 
-    -- this is a coroutine
-    return coroutine.resume(web.controller, web, req)
-    --main(web, req)
-  end, function (errmsg) 
-    -- XXX: why can't print info here?
-    --print(debug.traceback(errmsg, 2))
-    print(debug.traceback())
-    --bamboo.logger:error(errmsg)
-    
-  end)
-
+  -- resume run in protected mode itself
+  local good, err = coroutine.resume(web.controller, web, req)
   if not good then
-    print(good, err, extra)
+    print(debug.traceback(err))
     return web:error('handler error.')
   end
 end

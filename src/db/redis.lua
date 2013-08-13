@@ -10,6 +10,8 @@ function RDS.connect(config_t)
 	local db = config_t.db or 0
 
 	local redis_db = redis.connect(host, port)
+  assert(redis_db, '[Error] Redis database connect failed.')
+  
 	if config_t.auth then
 		redis_db:auth(config_t.auth)
 	end

@@ -278,7 +278,7 @@ registerModel = function (model, db, redis)
   -- bind dbs
   model.__db = db or BAMBOO_MDB
   model.__collection = model_name
-  model.__redis = db or BAMBOO_DB
+  model.__redis = redis or BAMBOO_DB
 
 		-- set metatable for each field
 --		for field, fdt in pairs(model.__fields) do
