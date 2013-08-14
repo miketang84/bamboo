@@ -7,7 +7,7 @@ local cmsgpack = require 'cmsgpack'
 
 local function rawwrap(data, meta)
   local ret = {
-    data = data or '',  			-- body string to reply
+    data = data or '',  		-- body string to reply
     meta = meta or {}				-- some other info to webserver
   }
 
@@ -84,9 +84,20 @@ local Web = Object:extend {
         headers['content-type'] = nil
     end
 
-    local meta = self.req.meta
-    meta.conns = conns
-    bamboo.ch_send:send(wrap(data, code, status, headers, meta))
+    if bamboo.is_testing then
+      -- for bamboo automatic test
+      local msg = {
+        body = data,
+        code = code or 200,
+        status = status or 'OK',
+        headers = headers or {}
+      }
+      bamboo.conn:send(self.req, msg)
+    else
+      local meta = self.req.meta
+      meta.conns = conns
+      bamboo.ch_send:send(wrap(data, code, status, headers, meta))
+    end
     
     return false
   end;
@@ -108,7 +119,16 @@ local Web = Object:extend {
   badRequest = function (self, msg) return self:error(msg or 'Bad Request', 400, 'Bad Request') end;
 
   send = function (self, data, meta)
-    bamboo.ch_send:send(rawwrap(data, meta))
+    if bamboo.is_testing then
+      -- for bamboo automatic test
+      local msg = {
+        data = data,
+        meta = meta
+      }
+      bamboo.conn:send(self.req, msg)
+    else
+      bamboo.ch_send:send(rawwrap(data, meta))
+    end
   end,
   
   close = function (self)

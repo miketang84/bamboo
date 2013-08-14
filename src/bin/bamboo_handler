@@ -37,6 +37,7 @@ local is_testing = false
 local APP_DIR = './'
 if arg[1] == '-f' and arg[2]:startsWith('tests/') then
   is_testing = true
+  bamboo.is_testing = true
 else
   APP_DIR = arg[1] or './'
 end
@@ -254,7 +255,7 @@ end
 
 
 
-local function preParseReq(req)
+local function preparseRequest(req)
   if req.method == 'GET' then
     req.GET = Form:parseQuery(req)
     req.POST = {}
@@ -307,10 +308,19 @@ local webserver_request = function (zsock, data)
   local disconnect = config.disconnect
   local req, path
 
-  -- Get a message from the webserver, if have no, block to wait
-  --req = webserver_conn:recv()
-  -- update the latest request object to global request reference
-  req = cmsgpack.unpack(data)
+  -- for test 
+  if is_testing then
+    -- zsock is fake conn, data is nil
+    local conn = zsock
+    req = conn:recv()
+
+  else
+    -- Get a message from the webserver, if have no, block to wait
+    --req = webserver_conn:recv()
+    -- update the latest request object to global request reference
+    req = cmsgpack.unpack(data)
+    
+  end
 
   if req and req.meta then
     _G['req'] = req
@@ -344,7 +354,7 @@ local webserver_request = function (zsock, data)
         -- add some other attributes
         preprocessRequest(req)
         -- inject req.GET, req.POST, req.PARAMS
-        preParseReq(req)
+        preparseRequest(req)
         
         -- call process handler to work
         execute(main, req)
@@ -379,10 +389,11 @@ end
 -- @param config:		config table from external
 -- @return:				none
 ------------------------------------------------------------------------
-local function run()
+local function run(config)
  
   if is_testing then
-    while true do webserver_request() end
+    local conn = config.conn
+    while true do webserver_request(conn) end
   else
 
     print('Enter main loop.')
@@ -429,15 +440,15 @@ end
 -- @param config:	configuration table from application
 -- @return:			none
 ------------------------------------------------------------------------
-local function start()
+local function start(config)
     -- boot main loop
-    run()
+    run(config)
 end
 
 bamboo.EXPORT_FOR_TESTING = {
   config = config,
   run = run,
-  updateConfig = updateConfig,
+--  updateConfig = updateConfig,
   DEFAULT_ALLOWED_METHODS = DEFAULT_ALLOWED_METHODS,
 --	getState = getState,
 }

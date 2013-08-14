@@ -1,7 +1,9 @@
--- execute the bootup file
+-- prepare predefined structure
 dofile('/usr/local/bin/bamboo_handler')
 
 module(..., package.seeall)
+
+local json = require 'cjson'
 
 local Form = require 'bamboo.form'
 local borrowed = bamboo.EXPORT_FOR_TESTING
@@ -10,7 +12,6 @@ local CONFIG_FILE = "settings.lua"
 local TEMPLATES = "views/"
 
 -- These globals are used to implement fake state for requests.
-local SENDER_ID = "3ddfbc58-a249-45c9-9446-00b73de18f7c"
 local SESSION_ID = "d257873dfdc254ff6ff930a1c44aa6a9"
 
 local CONN_ID = 1
@@ -33,75 +34,14 @@ local function makeFakeConnect(config)
         return req
     end
 
-    function conn:send(uuid, conn_id, msg)
+    function conn:send(req, msg)
         RESPONSES[#RESPONSES + 1] = {
             type = "send",
-            conn_id = conn_id,
-            msg = msg
-        }
-    end
-
-    function conn:reply(req, msg)
-        RESPONSES[#RESPONSES + 1] = {
-            type = "reply",
             req = req,
             msg = msg
         }
     end
-
-    function conn:reply_json(req, data)
-        RESPONSES[#RESPONSES + 1] = {
-            type = "reply_json",
-            req = req,
-            data = data
-        }
-    end
-
-    function conn:reply_http(req, body, code, status, headers)
-        RESPONSES[#RESPONSES + 1] = {
-            type = "reply_http",
-            req = req,
-            body = body,
-            code = code or 200,
-            status = status or 'OK',
-            headers = headers or {}
-        }
-    end
-
-    function conn:deliver(uuid, idents, data)
-        RESPONSES[#RESPONSES + 1] = {
-            type = "deliver",
-            idents = idents,
-            data = data
-        }
-    end
-
-    function conn:deliver_json(uuid, idents, data)
-        RESPONSES[#RESPONSES + 1] = {
-            type = "deliver_json",
-            idents = idents,
-            data = data
-        }
-    end
-
-    function conn:deliver_http(uuid, idents, body, code, status, headers)
-        RESPONSES[#RESPONSES + 1] = {
-            type = "deliver_http",
-            idents = idents,
-            body = body,
-            code = code or 200,
-            status = status or 'OK',
-            headers = headers
-        }
-    end
-
-    function conn:deliver_close(uuid, idents)
-        RESPONSES[#RESPONSES + 1] = {
-            type = "deliver_close",
-            idents = idents
-        }
-    end
-
+    
     function conn:close()
         CONN_ID = CONN_ID + 1
     end
@@ -111,16 +51,17 @@ end
 
 -- Replaces the base start with one that creates a fake m2 connection.
 local start = function(config)
-	local config = config or borrowed.updateConfig(config, CONFIG_FILE)
+    --config.methods = config.methods or borrowed.DEFAULT_ALLOWED_METHODS
 
-    config.methods = config.methods or borrowed.DEFAULT_ALLOWED_METHODS
-
-    config.ident = config.ident or borrowed.default_ident
+    --config.ident = config.ident or borrowed.default_ident
 
     local conn = makeFakeConnect(config)
-
+    config.conn = conn
+    bamboo.conn = conn
+    
     local runner = coroutine.wrap(borrowed.run)
-    runner(conn, config)
+    -- runner(conn, config)
+    runner(config)
 
     -- This runner is used later to feed fake requests to the run loop.
     RUNNERS[config.route] = runner
@@ -129,16 +70,10 @@ end
 -- Makes fake requests with all the right stuff in them.
 function makeFakeRequest(session, method, path, query, body, headers, data)
     local req = {
-        conn_id = CONN_ID,
-        sender = SENDER_ID,
         path = path,
         body = body or "",
         data = data or {},
     }
-
-    if method == "JSON" then
-        req.data.session_id = session.SESSION_ID
-    end
 
     req.headers  = {
         PATTERN = path,
@@ -152,9 +87,14 @@ function makeFakeRequest(session, method, path, query, body, headers, data)
         cookie = session.COOKIE,
         URI = query and (path .. '?' .. query) or path,
     }
-
+    
     table.update(req.headers, headers or {})
-
+    
+    -- add meta table for bamboo logic
+    req.meta = {
+      conn_id = CONN_ID
+    }
+    
     return req
 end
 
@@ -243,7 +183,7 @@ function browser(name, session_id, conn_id)
     Browser.get = Browser.click
 
     function Browser:submit(path, form, expect, headers)
-		local form = form or {}
+        local form = form or {}
         local body = Form:encode(form)
         headers = headers or {}
 
