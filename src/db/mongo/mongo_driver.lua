@@ -47,6 +47,16 @@ local function transIds(ids)
 end
 
 
+local function normalizeEdge (start, stop, total)
+  if not start then start = 1 end
+  if not stop then stop = total end
+  if start < 0 then start = total + start + 1 end
+  if stop < 0 then stop = total + stop + 1 end
+  
+  return start, stop, total
+end
+
+
 -- fields form:  {
 --   field_a = true,
 --   field_b = true
@@ -101,11 +111,8 @@ local allIds = function (self, is_rev)
 end
 
 local sliceIds = function (self, start, stop, is_rev)
-  if start < 0 and stop < 0 then
-    local total = self.__db:count(self.__collection)
-    start = total + start + 1
-    stop = total + stop + 1
-  end
+  local total = self.__db:count(self.__collection)
+  start, stop = normalizeEdge(start, stop, total)
   
   local idobjs = self.__db:find(self.__collection, {
     ['$query'] = {},
@@ -141,11 +148,8 @@ local all = function (self, fields, is_rev)
 end
 
 local slice = function (self, fields, start, stop, is_rev)
-  if start < 0 and stop < 0 then
-    local total = self.__db:count(self.__collection)
-    start = total + start + 1
-    stop = total + stop + 1
-  end
+  local total = self.__db:count(self.__collection)
+  start, stop = normalizeEdge(start, stop, total)
 
   local objs = self.__db:find(self.__collection, {
     ['$query'] = {},
@@ -190,44 +194,56 @@ local delById = function (self, id)
   
   if idtype == 'string' then
     self.__db:remove(self.__collection, {_id=id})
---  elseif idtype == 'table' then
---    self.__db:remove(self.__collection, {
---      _id = {
---        ['$in'] = id
---      }
---    })
   end
 
   return self
 end
 
-local trueDelById = delById
+-- local trueDelById = delById
 
 -------------------------------------------------------
 -- instance api
 -------------------------------------------------------
 
-local save = function (self, params)
-  params = params or {}
-  if self.id or self._id then
+local save = function (self)
   
+  if self.id or self._id then
+    local _id = self._id
+    self._id = nil
     -- here, may save extra fields, because we don' check the validance of each field
-    self.__db:update(self.__collection, {_id = self._id}, {
-      ['$set'] = params
+    self.__db:update(self.__collection, {_id = _id}, {
+      ['$set'] = self
     })
   else
-    tupdate(self, params)
     -- here, mongo will generate _id for us, but self will not contain _id now
     self.__db:insert(self.__collection, {self})
+    -- retrieve _id from mongo.
+    -- _id is already ordered, so this is very rapid
+    local obj = self.__db:findOne({
+      ['$query'] = {},
+      ['$orderby'] = {_id = -1},
+      ['$maxScan'] = 1
+    }, {_id=true})
+    
+    self._id = obj._id
   end
   
+  attachId(self)
   return self
 end
 
 local update = function (self, field, value)
-  self.__db:update(self.__collection, {_id = self._id}, {
+  if not value then
+    self.__db:update(self.__collection, {_id = self._id}, {
+      ['$unset'] = { field = ''}
+    })
+  else
+    self.__db:update(self.__collection, {_id = self._id}, {
       ['$set'] = { field = value}
     })
+  end
+  -- update to memory
+  self[field] = value
     
   return self
 end
@@ -238,7 +254,7 @@ local del = function (self)
   return self
 end
 
-local trueDel = del
+--local trueDel = del
 
 
 -------------------------------------------------------
@@ -274,7 +290,10 @@ local addForeign = function (self, ffield, foreignid)
     
   elseif storetype == 'FIFO' then
     local fifolen = fld.fifolen or 100
-    local fgobj = self[ffield]
+    local fgobj = self.__db:findOne(self.__collection, {_id=self._id}, {[ffield]=true})[ffield]
+    if not fgobj then fgobj = {} end
+    
+    -- add it
     self.__db:update(self.__collection, {_id=self._id}, {
       ['$push'] = {
         ffield = foreignid
@@ -291,19 +310,18 @@ local addForeign = function (self, ffield, foreignid)
       })
       tremove(fgobj, 1)
     end
+    
   elseif storetype == 'ZFIFO' then
     local fifolen = fld.fifolen or 100
-    local fgobj = self[ffield]
     
     self.__db:update(self.__collection, {_id=self._id}, {
       ['$addToSet'] = {
         ffield = foreignid
       }
     })
-    local newObj = self.__db:findOne(self.__collection, {_id=self._id}, {
+    local fgobj = self.__db:findOne(self.__collection, {_id=self._id}, {
       [ffield] = true
-    })
-    fgobj = newObj[ffield]
+    })[ffield]
     
     if type(fgobj) == 'table' and #fgobj > fifolen then
       -- remove one
@@ -314,36 +332,44 @@ local addForeign = function (self, ffield, foreignid)
       })
       tremove(fgobj, 1)
     end
-    self[ffield] = fgobj
+  
   end
 
   return self
 end
 
 local getForeignIds = function (self, ffield, start, stop, is_rev)
-  local obj = self
-  if obj[ffield] then
+    local fdt = self.__fields[ffield]
+    local st = fdt.st
+
+    local obj
     if start then
-      return List(obj[ffield]):slice(start, stop, is_rev)
-    else
-      return List(obj[ffield])
-    end
-  else
-    if start then
+      -- no 'ONE' mode
       obj = self.__db:findOne(self.__collection, {_id=self._id}, {[ffield] = {
       ['$slice'] = {start-1, stop-start+1}
       }})
     else
+      -- retreive all (string, or array)
       obj = self.__db:findOne(self.__collection, {_id=self._id}, {[ffield] = true})
     end
-    
-    if is_rev == 'rev' then
-      return List(obj[ffield]):reverse()
+
+    if st == 'ONE' then
+      if not obj[ffield] then 
+        return nil 
+      else
+        return obj[ffield]
+      end
     else
-      return List(obj[ffield])
+      if not obj[ffield] then
+        return List() 
+      else
+        if is_rev == 'rev' then
+          return List(obj[ffield]):reverse()
+        else
+          return List(obj[ffield])
+        end
+      end
     end
-    
-  end
   
 end
 
@@ -366,8 +392,8 @@ local getForeign = function (self, ffield, fields, start, stop, is_rev)
     return obj
   else
     -- for normal model cases, MANY|LIST|FIFO|ZFIFO
-    local ids = getForeignIds(self, ffield)
-    ids = ids:slice(start, stop, is_rev)
+    --local ids = getForeignIds(self, ffield, start, stop, is_rev)
+    --ids = ids:slice(start, stop, is_rev)
     
     local objs = getByIds(this, ids, fields)
     return objs
@@ -392,11 +418,21 @@ local reorderForeignMembers = function (self, ffield, neworder_ids)
 end
 
 local removeForeignMember = function (self, ffield, id)
-  self.__db:update(self.__collection, {_id=self._id}, {
-    ['$pull'] = {
-      [ffield] = id
-    }
-  })
+  local fld = self.__fields[ffield]
+  local st = fld.st
+  if st == 'ONE' then
+    self.__db:update(self.__collection, {_id=self._id}, {
+      ['$unset'] = {
+        [ffield] = ''
+      }
+    })
+  else
+    self.__db:update(self.__collection, {_id=self._id}, {
+      ['$pull'] = {
+        [ffield] = id
+      }
+    })
+  end
   
   return self
 end
@@ -412,11 +448,14 @@ local delForeign = function (self, ffield)
 end
 
 local deepDelForeign = function (self, ffield)
+  -- ids is string, or array
   local ids = getForeignIds(self, ffield)
+  -- foreign model's name
   local fname = self.__fields[ffield].foreign
   if fname == 'ANYOBJ' or fname == 'ANYSTRING' then
     -- nothing to do
   else
+    -- for none 'ONE' case
     if type(ids) == 'table' then
       ids = transIds(ids)
       self.__db:remove(fname, { _id = {
@@ -424,11 +463,13 @@ local deepDelForeign = function (self, ffield)
         }
       })
     else 
+      -- for 'ONE' case
       ids = transId(ids)
       self.__db:remove(fname, { _id = ids })
     end
   end
   
+  -- remove this field
   self.__db:update(self.__collection, {_id=self._id}, {
     ['$unset'] = {
       [ffield] = ""
@@ -438,24 +479,58 @@ local deepDelForeign = function (self, ffield)
   return self
 end
 
-
+-- XXX: this algorithm need to be optimized
+-- and for ANYOBJ, is inefficent
 local hasForeignMember = function (self, ffield, id)
-  id = transId(id)
-  local ids = getForeignIds(self, ffield)
-  local rids = {}
-  if type(ids) == 'table' then
-    for i, id in ipairs(ids) do
-      rids[id] = true
+  local fdt = self.__fields[ffield]
+  local foreign = fdt.foreign
+  if foreign == 'ANYSTRING' then
+    local ids = getForeignIds(self, ffield)
+    for i, v in ipairs(ids) do
+      if v == id then return true end
     end
-    
-    if rids[id] then
-      return true
-    else
+    return false
+  elseif foreign == 'ANYOBJ' then
+    local ids = getForeignIds(self, ffield)
+    local ttype = type(id)
+    if ttype == 'string' then
+      for i, v in ipairs(ids) do
+        if tostring(v) == id then return true end
+      end
       return false
+    elseif ttype == 'table' then
+      local findone = false
+      for i, v in ipairs(ids) do
+        local itemequal = true
+        for k, t in pairs(v) do
+          if id[k] ~= t then
+            itemequal = false
+            break
+          end
+        end
+        if itemequal then 
+          findone = true
+          break
+        end
+      end
+      if findone then
+        return true
+      else
+        return false
+      end
     end
   else
-    return id == ids
-  end  
+  
+    local ids = getForeignIds(self, ffield)
+    if type(ids) == 'table' then
+      for i, v in ipairs(ids) do
+        if id == v then return true end
+      end
+      return false
+    else
+      return id == ids
+    end  
+  end
   
 end
 
@@ -471,6 +546,9 @@ end
 -- NOTE: here, we check instance's foreign key field, not the model's
 -- model's filed check is in __fields[field]
 local hasForeignKey = function (self, ffield)
+  local fdt = self.__fields[ffield]
+  if not fdt.foreign then return false end
+
   local obj = self.__db:findOne(self.__collection, {_id = self._id, [ffield] = { ['$exists'] = true }})
   
   return obj and true or false
@@ -532,7 +610,7 @@ return {
   filter = filter,
   count = count,
   delById = delById,
-  trueDelById = trueDelById,
+--  trueDelById = trueDelById,
 
   save = save,
   update = update,

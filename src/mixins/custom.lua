@@ -118,7 +118,7 @@ return function ()
 			I_AM_CLASS_OR_INSTANCE(self)
 			checkType(key, 'string')
 			local custom_key = makeCustomKey(self, key)
-			self.__db:incrby(custom_key,step or 1)
+			self.__redis:incrby(custom_key,step or 1)
 			
 			return self
 		end;
@@ -127,7 +127,7 @@ return function ()
 			I_AM_CLASS_OR_INSTANCE(self)
 			checkType(key, 'string')
 			local custom_key = makeCustomKey(self, key)
-			self.__db:decrby(custom_key,step or 1);
+			self.__redis:decrby(custom_key,step or 1);
 			
 			return self
 		end;
@@ -180,7 +180,7 @@ return function ()
 			checkType(key, 'string')
 			local custom_key = makeCustomKey(self, key)
 
-			return custom_key, self.__db:type(custom_key)
+			return custom_key, self.__redis:type(custom_key)
 		end;
 
 		getCustom = function (self, key, start, stop, is_rev)
@@ -188,7 +188,7 @@ return function ()
 			checkType(key, 'string')
 			
 			local custom_key = makeCustomKey(self, key)
-			if not self.__db:exists(custom_key) then
+			if not self.__redis:exists(custom_key) then
 				local atype = start
 				-- print(("[Warning] @getCustom - Key %s doesn't exist!"):format(custom_key))
 				if not atype or atype == 'string' then return nil
@@ -201,7 +201,7 @@ return function ()
 			end
 
 			-- get the store type in redis
-			local store_type = self.__db:type(custom_key)
+			local store_type = self.__redis:type(custom_key)
 			local store_module = getStoreModule(store_type)
 			local ids, scores = store_module.retrieve(custom_key)
 
@@ -233,7 +233,7 @@ return function ()
 			checkType(key, 'string')
 			local custom_key = makeCustomKey(self, key)
 
-			return self.__db:del(custom_key)
+			return self.__redis:del(custom_key)
 		end;
 
 		-- check whether exist custom key
@@ -242,7 +242,7 @@ return function ()
 			checkType(key, 'string')
 			local custom_key = makeCustomKey(self, key)
 
-			if self.__db:exists(custom_key) then
+			if self.__redis:exists(custom_key) then
 				return true
 			else
 				return false
@@ -254,7 +254,7 @@ return function ()
 			checkType(key, 'string')
 			local custom_key = makeCustomKey(self, key)		
 
-			local store_type = self.__db:type(custom_key)
+			local store_type = self.__redis:type(custom_key)
 			local store_module = getStoreModule(store_type)
 			return store_module.remove(custom_key, val)
 
@@ -265,7 +265,7 @@ return function ()
 			checkType(key, 'string')
 			local custom_key = makeCustomKey(self, key)		
 
-			local store_type = self.__db:type(custom_key) ~= 'none' and self.__db:type(custom_key) or st
+			local store_type = self.__redis:type(custom_key) ~= 'none' and self.__redis:type(custom_key) or st
 			local store_module = getStoreModule(store_type)
 			return store_module.add(custom_key, val, score)
 
@@ -276,8 +276,8 @@ return function ()
 			checkType(key, 'string')
 			local custom_key = makeCustomKey(self, key)		
 
-			if not self.__db:exists(custom_key) then print('[Warning] @hasCustomMember - This custom key does not exist.'); return nil end
-			local store_type = self.__db:type(custom_key)
+			if not self.__redis:exists(custom_key) then print('[Warning] @hasCustomMember - This custom key does not exist.'); return nil end
+			local store_type = self.__redis:type(custom_key)
 			local store_module = getStoreModule(store_type)
 			return store_module.has(custom_key, mem)
 
@@ -288,8 +288,8 @@ return function ()
 			checkType(key, 'string')
 			local custom_key = makeCustomKey(self, key)		
 
-			if not self.__db:exists(custom_key) then return 0 end
-			local store_type = self.__db:type(custom_key)
+			if not self.__redis:exists(custom_key) then return 0 end
+			local store_type = self.__redis:type(custom_key)
 			local store_module = getStoreModule(store_type)
 			return store_module.num(custom_key)
 		end;

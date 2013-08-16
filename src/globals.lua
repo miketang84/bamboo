@@ -37,20 +37,20 @@ end
 -- judge if it is an empty object.
 -- the empty rules are defined by ourselves, see follows.
 --
-_G['isValidInstance'] = function (obj)
-	if isFalse(obj) then return false end
-	checkType(obj, 'table')
-
-	for k, v in pairs(obj) do
-		if type(k) == 'string' then
-			if k ~= 'id' then
-				return true
-			end
-		end
-	end
-
-	return false
-end;
+--_G['isValidInstance'] = function (obj)
+--	if isFalse(obj) then return false end
+--	checkType(obj, 'table')
+--
+--	for k, v in pairs(obj) do
+--		if type(k) == 'string' then
+--			if k ~= 'id' then
+--				return true
+--			end
+--		end
+--	end
+--
+--	return false
+--end;
 
 
 _G['isQuerySet'] = function (self)

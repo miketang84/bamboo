@@ -52,7 +52,7 @@ local makeObject = function (self, data)
 end
 
 local makeObjects = function (self, data_list)
-  local objs = List()
+  local objs = QuerySet()
   for i, data in ipairs(data_list) do
     tinsert(objs, makeObject(self, data))
   end
@@ -175,7 +175,10 @@ local Model = Object:extend {
 		return makeObjects(self, objs)
 	end;
 
-	
+	getByIndex = function (self, index, fields)
+    return self:slice(fields, index, index)[1]
+  end;
+  
 	-- return a list containing all ids of all instances of this Model
 	--
 	allIds = function (self, is_rev)
@@ -213,7 +216,7 @@ local Model = Object:extend {
     local objs = driver.slice(self, fields, start, stop, is_rev)
 		return makeObjects(self, objs)
 	end;
-
+  
 	-- return the actual number of the instances
 	--
 	numbers = function (self)
@@ -261,11 +264,11 @@ local Model = Object:extend {
 	end;
 	
   
-  trueDelById = function (self, id)
-    I_AM_CLASS(self)
-    
-    return driver.trueDelById(self, id)
-  end;
+--  trueDelById = function (self, id)
+--    I_AM_CLASS(self)
+--    
+--    return driver.trueDelById(self, id)
+--  end;
   -----------------------------------------------------------------
 	-- validate form parameters by model defination
 	-- usually, params = Form:parse(req)
@@ -297,8 +300,9 @@ local Model = Object:extend {
 	-- before save, the instance has no id
 	save = function (self, params)
 		I_AM_INSTANCE(self)
-
-		return driver.save(self, params)
+    tupdate(self, params)
+    
+		return driver.save(self)
 	end;
 
 	-- partially update function, once one field
@@ -312,9 +316,9 @@ local Model = Object:extend {
 
 	-- delete self instance object
 	-- self can be instance or query set
-	trueDel = function (self)
-		return driver.trueDel(self)
-	end;
+--	trueDel = function (self)
+--		return driver.trueDel(self)
+--	end;
 
 
 	-- delete self instance object
@@ -328,6 +332,7 @@ local Model = Object:extend {
 	-----------------------------------------------------------------------------------
 	---
 	-- add a foreign object's id to this foreign field
+  -- obj must be an object, when in normal foreign mode
 	-- return self
 	addForeign = function (self, field, obj)
 		I_AM_INSTANCE(self)
@@ -349,16 +354,25 @@ local Model = Object:extend {
 	--
 	--
 	--
-	getForeign = function (self, ffield, start, stop, is_rev)
+	getForeign = function (self, ffield, fields, start, stop, is_rev)
 		I_AM_INSTANCE(self)
 		
+    if start then
+      assert(start and stop and start > 0 and stop > 0 and start < stop, '[Error] @model.lua getForeign - start and stop must be positive numbers.')
+    end
+    
     return driver.getForeign(self, ffield, fields, start, stop, is_rev)
     
 	end;
 
 	getForeignIds = function (self, ffield, start, stop, is_rev)
 		I_AM_INSTANCE(self)
-
+    
+    if start then
+      assert(start and stop and start > 0 and stop > 0 and start < stop, '[Error] @model.lua getForeignIds - start and stop must be positive numbers.')
+    end
+    
+    
 		return driver.getForeignIds(self, ffield, start, stop, is_rev)
 
 	end;
@@ -375,11 +389,19 @@ local Model = Object:extend {
 	removeForeignMember = function (self, field, obj)
 		I_AM_INSTANCE(self)
 		checkType(field, 'string')
-		local fld = self.__fields[field]
+		local fdt = self.__fields[field]
 		
+    local ftype = fdt.foreign
+		local nobj = ''
     
+		if ftype == 'ANYOBJ' or ftype == 'ANYSTRING' or type(obj) == 'string' then
+			nobj = obj
+		else
+			assert(obj.id, '[Error] @model.lua removeForeignMember - #3 obj has no id.')
+      nobj = obj.id
+		end
     
-		return self
+		return driver.removeForeignMember(field, nobj)
 	end;
 
 	delForeign = function (self, field)
