@@ -141,9 +141,7 @@ return function ()
 			local custom_key = makeCustomKey(self, key)		
 
 			if not st or st == 'string' then
-				assert( type(val) == 'string' or type(val) == 'number',
-						"[Error] @setCustom - In the string mode of setCustom, val should be string or number.")
-				rdstring.save(custom_key, val)
+				rdstring.save(custom_key, tostring(val))
 			else
 				local store_module = getStoreModule(st)
 				store_module.save(custom_key, val, scores)

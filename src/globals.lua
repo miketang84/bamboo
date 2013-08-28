@@ -141,21 +141,21 @@ _G['bt'] = function (small, big)
   }
 end
 
-_G['be'] = function (small, big)
+_G['bte'] = function (small, big)
 	return {
     ['$gte'] = small,
     ['$lte'] = big
   }
 end
 
-_G['outside'] = function (small, big)
-	return {
-    ['$or'] = {
-      ['$lt'] = small,
-      ['$gt'] = big,
-    }
-  }
-end
+--_G['outside'] = function (small, big)
+--	return {
+--    --['$or'] = {
+--      ['$lt'] = small,
+--      ['$gt'] = big,
+--    --}
+--  }
+--end
 
 _G['contains'] = function (substr)
 	return { 
@@ -163,13 +163,13 @@ _G['contains'] = function (substr)
   }
 end
 
-_G['uncontains'] = function (substr)
-	return {
-    ['$not'] = {
-      ['$regex'] = substr 
-    }
-  }
-end
+--_G['uncontains'] = function (substr)
+--	return {
+--    ['$not'] = {
+--      ['$regex'] = substr 
+--    }
+--  }
+--end
 
 _G['startsWith'] = function (substr)
 	return { 
@@ -177,13 +177,13 @@ _G['startsWith'] = function (substr)
   }
 end
 
-_G['unstartsWith'] = function (substr)
-	return {
-    ['$not'] = {
-      ['$regex'] = '^'..substr  
-    }
-  }
-end
+--_G['unstartsWith'] = function (substr)
+--	return {
+--    ['$not'] = {
+--      ['$regex'] = '^'..substr  
+--    }
+--  }
+--end
 
 
 _G['endsWith'] = function (substr)
@@ -192,13 +192,13 @@ _G['endsWith'] = function (substr)
   }
 end
 
-_G['unendsWith'] = function (substr)
-	return {
-    ['$not'] = {
-      ['$regex'] = substr .. '$'
-    }
-  }
-end
+--_G['unendsWith'] = function (substr)
+--	return {
+--    ['$not'] = {
+--      ['$regex'] = substr .. '$'
+--    }
+--  }
+--end
 
 _G['inset'] = function (set)
   return {

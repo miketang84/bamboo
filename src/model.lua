@@ -162,7 +162,7 @@ local Model = Object:extend {
       return nil
     end
 
-    local obj = self, driver.getById(self, id, fields)
+    local obj = driver.getById(self, id, fields)
     return makeObject(self, obj)
 	end;
 
@@ -238,10 +238,10 @@ local Model = Object:extend {
 	-- @param query_args: query arguments in a table
 	-- @param 
 	-- @return
-	filter = function (self, query_args, fields, skip)
+	filter = function (self, query_args, fields, skip, ntr)
 		I_AM_CLASS(self)
 		
-    local objs = driver.filter(self, query_args, fields, skip)
+    local objs = driver.filter(self, query_args, fields, skip, ntr)
     
     return makeObjects(self, objs)
 	end;
@@ -300,6 +300,7 @@ local Model = Object:extend {
 	-- before save, the instance has no id
 	save = function (self, params)
 		I_AM_INSTANCE(self)
+		local params = params or {}
     tupdate(self, params)
     
 		return driver.save(self)
@@ -337,8 +338,8 @@ local Model = Object:extend {
 	addForeign = function (self, field, obj)
 		I_AM_INSTANCE(self)
 
-    local fld = self.__fields[field]
-    local ftype = fld.foreign
+    local fdt = self.__fields[field]
+    local ftype = fdt.foreign
 		local nobj
     
 		if ftype == 'ANYOBJ' or ftype == 'ANYSTRING' then
@@ -389,19 +390,20 @@ local Model = Object:extend {
 	removeForeignMember = function (self, field, obj)
 		I_AM_INSTANCE(self)
 		checkType(field, 'string')
+    assert(obj, '[Error] @model.lua removeForeignMember - #3 obj missing.')
 		local fdt = self.__fields[field]
 		
     local ftype = fdt.foreign
 		local nobj = ''
     
-		if ftype == 'ANYOBJ' or ftype == 'ANYSTRING' or type(obj) == 'string' then
+		if ftype == 'ANYSTRING' or type(obj) == 'string' then
 			nobj = obj
 		else
 			assert(obj.id, '[Error] @model.lua removeForeignMember - #3 obj has no id.')
       nobj = obj.id
 		end
     
-		return driver.removeForeignMember(field, nobj)
+		return driver.removeForeignMember(self, field, nobj)
 	end;
 
 	delForeign = function (self, field)
@@ -424,7 +426,15 @@ local Model = Object:extend {
 	hasForeignMember = function (self, field, obj)
 		I_AM_INSTANCE(self)
 		
-		return driver.hasForeignMember(self, field, obj)
+    local id
+    if type(obj) == 'string' then
+      id = obj
+    else
+      id = obj.id
+      assert(id, '[Error] @model.lua hasForeignMember - #3 has no id.')
+    end
+    
+		return driver.hasForeignMember(self, field, id)
 	end;
 
 	-- return the number of elements in the foreign list
