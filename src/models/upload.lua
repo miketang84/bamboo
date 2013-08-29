@@ -54,7 +54,7 @@ local function savefile(t)
 	local postfix = t.postfix or ''
 	local filename = ''
 	local body = ''
-	local rename_func = t.rename_func or rename_func
+	local rename_func = t.rename_func == 'default' and rename_func or t.rename_func
 	
 	-- if upload in html5 way
 	if req.headers['x-requested-with'] then

@@ -459,7 +459,9 @@ local Model = Object:extend {
 	------------------------------------------------------------------------
 
 	
-	getClassName = getClassName;
+	getClassName = function (self)
+		return self.__name
+	end;
 
 
 	getFDT = function (self, field)
