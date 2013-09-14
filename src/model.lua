@@ -66,8 +66,6 @@ end
 
 
 ----------------------------------------------------------------------
---- save process
--- called by save
 -- self is instance
 local processBeforeSave = function (self, params)
 	local fields = self.__fields
@@ -170,10 +168,10 @@ local Model = Object:extend {
 
 	-- return all instance objects belong to this Model
 	--
-	all = function (self, fields, is_rev)
+	all = function (self, is_rev, fields)
 		I_AM_CLASS(self)
 		
-    local objs = driver.all(self, fields, is_rev)
+    local objs = driver.all(self, is_rev, fields)
     return makeObjects(self, objs)
 	end;
 

@@ -136,7 +136,7 @@ local sliceIds = function (self, start, stop, is_rev)
   return ids
 end
 
-local all = function (self, fields, is_rev)
+local all = function (self, is_rev, fields)
   local objs = self.__db:find(self.__collection, {}, fields):all()
  
   attachIds(objs)
@@ -199,7 +199,22 @@ local delById = function (self, id)
   return self
 end
 
--- local trueDelById = delById
+local trueDelById = delById
+
+local fakeDelById = function (self, id)
+  id = transId(id)  
+  
+  if idtype == 'string' then
+    local obj = self:getById(id)
+    -- insert to *_DELETED collection
+    self.__db:insert(self.__collection..'_DELETED', {obj})
+    -- remove from original collection
+    self.__db:remove(self.__collection, {_id=id})
+  end
+
+  return self
+end
+
 
 -------------------------------------------------------
 -- instance api
@@ -256,7 +271,18 @@ local del = function (self)
   return self
 end
 
---local trueDel = del
+local trueDel = del
+
+
+local fakeDel = function (self)
+  self.id = nil
+  -- insert to *_DELETED collection
+  self.__db:insert(self.__collection..'_DELETED', {self})
+  -- remove from original collection
+  self.__db:remove(self.__collection, {_id=self._id})
+
+  return self
+end
 
 
 -------------------------------------------------------
@@ -640,12 +666,14 @@ return {
   filter = filter,
   count = count,
   delById = delById,
---  trueDelById = trueDelById,
+  trueDelById = trueDelById,
+  fakeDelById = fakeDelById,
 
   save = save,
   update = update,
   del = del,
   trueDel = trueDel,
+  fakeDel = fakeDel,
 
   addForeign = addForeign,
   getForeign = getForeign,
