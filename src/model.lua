@@ -10,6 +10,10 @@ local driver = require 'bamboo.db.driver'
 require 'bamboo.queryset'
 
 
+local now = function ()
+  return socket.gettime()
+end
+
 
 function luasplit(str, pat)
    local t = {}
@@ -66,13 +70,7 @@ end
 -- called by save
 -- self is instance
 local processBeforeSave = function (self, params)
-	local primarykey = self.__primarykey
 	local fields = self.__fields
-	local store_kv = {}
-	--- save an hash object
-	-- 'id' are essential in an object instance
-	tinsert(store_kv, 'id')
-	tinsert(store_kv, self.id)
 
 	-- if parameters exist, update it
 	if params and type(params) == 'table' then
@@ -83,35 +81,7 @@ local processBeforeSave = function (self, params)
 		end
 	end
 
-	assert(not isFalse(self[primarykey]) ,
-		format("[Error] instance's index field %s's value must not be nil. Please check your model defination.", primarykey))
-
-	-- check required field
-	-- TODO: later we should update this to validate most attributes for each field
-	for field, fdt in pairs(fields) do
-		if fdt.required then
-			assert(self[field], format("[Error] @processBeforeSave - this field '%s' is required but its' value is nil.", field))
-		end
-	end
-
-	for k, v in pairs(self) do
-		-- when save, need to check something
-		-- 1. only save fields defined in model defination
-		-- 2. don't save the functional member, and _parent
-		-- 3. don't save those fields not defined in model defination
-		-- 4. don't save those except ONE foreign fields, which are defined in model defination
-		local fdt = fields[k]
-		-- if v is nil, pairs will not iterate it, key will and should not be 'id'
-		if fdt then
-			if not fdt['foreign'] or ( fdt['foreign'] and fdt['st'] == 'ONE') then
-				-- save
-				tinsert(store_kv, k)
-				tinsert(store_kv, tostring(v))
-			end
-		end
-	end
-
-	return self, store_kv
+	return self
 end
 
 ------------------------------------------------------------------------
@@ -122,8 +92,8 @@ local Model = Object:extend {
 	__name = 'Model';
 	__fields = {
 	    -- here, we don't put 'id' as a field
---	    ['created_time'] = { type="number" },
---	    ['lastmodified_time'] = { type="number" },
+	    ['created_time'] = { type="number" },
+	    ['lastmodified_time'] = { type="number" },
 
 	};
 
@@ -143,8 +113,8 @@ local Model = Object:extend {
 			end
 		end
 
---		self.created_time = socket.gettime()
---		self.lastmodified_time = self.created_time
+		self.created_time = now()
+		self.lastmodified_time = self.created_time
 
 		return self
 	end;
@@ -209,11 +179,11 @@ local Model = Object:extend {
 
 	-- slice instance object list, support negative index (-1)
 	--
-	slice = function (self, fields, start, stop, is_rev)
+	slice = function (self, start, stop, is_rev, fields)
 		-- !slice method won't be open to query set, because List has slice method too.
 		I_AM_CLASS(self)
 		
-    local objs = driver.slice(self, fields, start, stop, is_rev)
+    local objs = driver.slice(self, start, stop, is_rev, fields)
 		return makeObjects(self, objs)
 	end;
   
@@ -300,9 +270,9 @@ local Model = Object:extend {
 	-- before save, the instance has no id
 	save = function (self, params)
 		I_AM_INSTANCE(self)
-		local params = params or {}
-    tupdate(self, params)
+    processBeforeSave(self, params)
     
+    self.lastmodified_time = now()
 		return driver.save(self)
 	end;
 
@@ -311,6 +281,7 @@ local Model = Object:extend {
 	update = function (self, field, new_value)
 		I_AM_INSTANCE(self)
 
+    self.lastmodified_time = now()
 		return driver.update(self, field, new_value)
 	end;
 
@@ -348,6 +319,7 @@ local Model = Object:extend {
 			nobj = obj.id
 		end
 
+    self.lastmodified_time = now()
 		driver.addForeign(self, field, nobj)
 		return self
 	end;
@@ -355,14 +327,14 @@ local Model = Object:extend {
 	--
 	--
 	--
-	getForeign = function (self, ffield, fields, start, stop, is_rev)
+	getForeign = function (self, ffield, start, stop, is_rev, fields)
 		I_AM_INSTANCE(self)
 		
     if start then
       assert(start and stop and start > 0 and stop > 0 and start < stop, '[Error] @model.lua getForeign - start and stop must be positive numbers.')
     end
     
-    return driver.getForeign(self, ffield, fields, start, stop, is_rev)
+    return driver.getForeign(self, ffield, start, stop, is_rev, fields)
     
 	end;
 
@@ -382,6 +354,7 @@ local Model = Object:extend {
 	reorderForeignMembers = function (self, ffield, neworder_ids)
 		I_AM_INSTANCE(self)
 		
+    self.lastmodified_time = now()
     return reorderForeignMembers(self, ffield, neworder_ids)
 	end;
 
@@ -403,6 +376,7 @@ local Model = Object:extend {
       nobj = obj.id
 		end
     
+    self.lastmodified_time = now()
 		return driver.removeForeignMember(self, field, nobj)
 	end;
 
@@ -411,13 +385,14 @@ local Model = Object:extend {
 		checkType(field, 'string')
 		local fld = self.__fields[field]
 		
-    
+    self.lastmodified_time = now()
 		return driver.delForeign(self, field)
 	end;
 
 	deepDelForeign = function (self, field)
 		I_AM_INSTANCE(self)
 		
+    self.lastmodified_time = now()
     return driver.deepDelForeign(self, field)
 	end;
 

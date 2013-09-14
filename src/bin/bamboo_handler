@@ -294,11 +294,15 @@ local function execute(main, req)
   
   -- bamboo.logger:info( 'handler func start time: '..socket.gettime())
 
+  if bamboo.config.development then
+  	main(web, req)
+  else
   -- resume run in protected mode itself
-  local good, err = coroutine.resume(web.controller, web, req)
-  if not good then
-    print(debug.traceback(err))
-    return web:error('handler error.')
+  	local good, err = coroutine.resume(web.controller, web, req)
+  	if not good then
+    		print(debug.traceback(err))
+    		return web:error('handler error.')
+  	end
   end
 end
 

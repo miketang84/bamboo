@@ -147,7 +147,7 @@ local all = function (self, fields, is_rev)
   end
 end
 
-local slice = function (self, fields, start, stop, is_rev)
+local slice = function (self, start, stop, is_rev, fields)
   local total = self.__db:count(self.__collection)
   start, stop = normalizeEdge(start, stop, total)
 
@@ -210,6 +210,8 @@ local save = function (self)
   if self.id or self._id then
     local _id = self._id
     self._id = nil
+    self.id = nil
+    
     -- here, may save extra fields, because we don' check the validance of each field
     self.__db:update(self.__collection, {_id = _id}, {
       ['$set'] = self
@@ -352,13 +354,13 @@ local getForeignIds = function (self, ffield, start, stop, is_rev)
     end
 
     if st == 'ONE' then
-      if not obj[ffield] then 
+      if not obj or not obj[ffield] then 
         return nil 
       else
         return obj[ffield]
       end
     else
-      if not obj[ffield] then
+      if not obj or not obj[ffield] then
         return List() 
       else
         if is_rev == 'rev' then
@@ -371,7 +373,7 @@ local getForeignIds = function (self, ffield, start, stop, is_rev)
   
 end
 
-local getForeign = function (self, ffield, fields, start, stop, is_rev)
+local getForeign = function (self, ffield, start, stop, is_rev, fields)
   local fld = self.__fields[ffield]
   local storetype = fld.st
   local fname = fld.foreign
