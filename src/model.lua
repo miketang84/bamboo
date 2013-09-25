@@ -92,6 +92,9 @@ local Model = Object:extend {
 	    -- here, we don't put 'id' as a field
 	    ['created_time'] = { type="number" },
 	    ['lastmodified_time'] = { type="number" },
+	    -- used to custom instances' orders
+	    ['order'] = { type="number" },
+	    ['cate'] = {},
 
 	};
 
