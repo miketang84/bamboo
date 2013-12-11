@@ -18,6 +18,7 @@ config = {}
 -- for global rendering usage
 context = {}
 internal = {}
+dbs = {}
 compiled_views_tmpls = {}
 compiled_views = {}
 compiled_views_locals = {}
