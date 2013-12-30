@@ -1,6 +1,6 @@
 module(..., package.seeall)
 local lgstring = require "lgstring"
-
+local i18n = require 'bamboo.i18n'
 
 local function getlocals(context, depth)
   local i = 1
@@ -110,7 +110,7 @@ local VIEW_ACTIONS = {
     end,
     
     ['{-'] = function (code)
-    return ""
+      return ""
     end,
     
     ['{<'] = function (code)
@@ -131,6 +131,22 @@ local VIEW_ACTIONS = {
         assert(bamboo.WIDGETS[widget_name], ('[Error] widget %s was not implemented.'):format(widget_name))
         return ("_result[#_result+1] = bamboo.WIDGETS['%s'](%s)"):format(widget_name, param_str)
 
+    end,
+    
+    ['{t'] = function (code)
+      local code = code:trim()
+      -- here, we like req is a local variable
+      -- get the language specified
+      local accept_language = req.headers['accept-language'] or req.headers['Accept-Language']
+      if not accept_language then return "" end
+      
+      -- first_lang, such as  zh-cn, en-us, zh-tw, zh-hk
+      local first_lang = accept_language:match('(%a%a%-%a%a)'):lower();
+      if first_lang and #first_lang > 0 then
+        return i18n.translate(code, first_lang)
+      end
+      
+      return ""
     end,
     
 
