@@ -174,8 +174,8 @@ local Model = Object:extend {
 	all = function (self, is_rev, fields)
 		I_AM_CLASS(self)
 		
-    local objs = driver.all(self, is_rev, fields)
-    return makeObjects(self, objs)
+		local objs = driver.all(self, is_rev, fields)
+		return makeObjects(self, objs)
 	end;
 
 	-- slice instance object list, support negative index (-1)
@@ -184,7 +184,7 @@ local Model = Object:extend {
 		-- !slice method won't be open to query set, because List has slice method too.
 		I_AM_CLASS(self)
 		
-    local objs = driver.slice(self, start, stop, is_rev, fields)
+		local objs = driver.slice(self, start, stop, is_rev, fields)
 		return makeObjects(self, objs)
 	end;
   
@@ -199,9 +199,9 @@ local Model = Object:extend {
 	--
 	get = function (self, query_args, fields, skip)
 		I_AM_CLASS(self)
-		
-    local obj = driver.get(self, query_args, fields, skip)
-    
+
+		local obj = driver.get(self, query_args, fields, skip)
+
 		return makeObject(self, obj)
 	end;
 
@@ -212,9 +212,9 @@ local Model = Object:extend {
 	filter = function (self, query_args, fields, skip, ntr)
 		I_AM_CLASS(self)
 		
-    local objs = driver.filter(self, query_args, fields, skip, ntr)
-    
-    return makeObjects(self, objs)
+		local objs = driver.filter(self, query_args, fields, skip, ntr)
+
+		return makeObjects(self, objs)
 	end;
 
 
@@ -231,16 +231,11 @@ local Model = Object:extend {
 	delById = function (self, id)
 		I_AM_CLASS(self)
 		
-    return driver.delById(self, id)
+		return driver.delById(self, id)
 	end;
 	
-  
---  trueDelById = function (self, id)
---    I_AM_CLASS(self)
---    
---    return driver.trueDelById(self, id)
---  end;
-  -----------------------------------------------------------------
+
+	-----------------------------------------------------------------
 	-- validate form parameters by model defination
 	-- usually, params = Form:parse(req)
 	-- TODO: should perfect 
@@ -271,9 +266,9 @@ local Model = Object:extend {
 	-- before save, the instance has no id
 	save = function (self, params)
 		I_AM_INSTANCE(self)
-    processBeforeSave(self, params)
-    
-    self.lastmodified_time = now()
+		processBeforeSave(self, params)
+
+		self.lastmodified_time = now()
 		return driver.save(self)
 	end;
 
@@ -282,17 +277,9 @@ local Model = Object:extend {
 	update = function (self, field, new_value)
 		I_AM_INSTANCE(self)
 
-    self.lastmodified_time = now()
+		self.lastmodified_time = now()
 		return driver.update(self, field, new_value)
 	end;
-
-
-	-- delete self instance object
-	-- self can be instance or query set
---	trueDel = function (self)
---		return driver.trueDel(self)
---	end;
-
 
 	-- delete self instance object
 	-- self can be instance or query set
@@ -305,13 +292,13 @@ local Model = Object:extend {
 	-----------------------------------------------------------------------------------
 	---
 	-- add a foreign object's id to this foreign field
-  -- obj must be an object, when in normal foreign mode
+	-- obj must be an object, when in normal foreign mode
 	-- return self
 	addForeign = function (self, field, obj)
 		I_AM_INSTANCE(self)
 
-    local fdt = self.__fields[field]
-    local ftype = fdt.foreign
+		local fdt = self.__fields[field]
+		local ftype = fdt.foreign
 		local nobj
     
 		if ftype == 'ANYOBJ' or ftype == 'ANYSTRING' then
@@ -320,7 +307,7 @@ local Model = Object:extend {
 			nobj = obj.id
 		end
 
-    self.lastmodified_time = now()
+		self.lastmodified_time = now()
 		driver.addForeign(self, field, nobj)
 		return self
 	end;
@@ -331,20 +318,20 @@ local Model = Object:extend {
 	getForeign = function (self, ffield, start, stop, is_rev, fields)
 		I_AM_INSTANCE(self)
 		
-    if start then
-      assert(start and stop and start > 0 and stop > 0 and start < stop, '[Error] @model.lua getForeign - start and stop must be positive numbers.')
-    end
-    
-    return driver.getForeign(self, ffield, start, stop, is_rev, fields)
+		if start then
+		assert(start and stop and start > 0 and stop > 0 and start < stop, '[Error] @model.lua getForeign - start and stop must be positive numbers.')
+		end
+
+		return driver.getForeign(self, ffield, start, stop, is_rev, fields)
     
 	end;
 
 	getForeignIds = function (self, ffield, start, stop, is_rev)
 		I_AM_INSTANCE(self)
     
-    if start then
-      assert(start and stop and start > 0 and stop > 0 and start < stop, '[Error] @model.lua getForeignIds - start and stop must be positive numbers.')
-    end
+		if start then
+		assert(start and stop and start > 0 and stop > 0 and start < stop, '[Error] @model.lua getForeignIds - start and stop must be positive numbers.')
+		end
     
     
 		return driver.getForeignIds(self, ffield, start, stop, is_rev)
@@ -355,8 +342,8 @@ local Model = Object:extend {
 	reorderForeignMembers = function (self, ffield, neworder_ids)
 		I_AM_INSTANCE(self)
 		
-    self.lastmodified_time = now()
-    return reorderForeignMembers(self, ffield, neworder_ids)
+		self.lastmodified_time = now()
+		return reorderForeignMembers(self, ffield, neworder_ids)
 	end;
 
 	-- delelte a foreign member
@@ -364,20 +351,20 @@ local Model = Object:extend {
 	removeForeignMember = function (self, field, obj)
 		I_AM_INSTANCE(self)
 		checkType(field, 'string')
-    assert(obj, '[Error] @model.lua removeForeignMember - #3 obj missing.')
+		assert(obj, '[Error] @model.lua removeForeignMember - #3 obj missing.')
 		local fdt = self.__fields[field]
 		
-    local ftype = fdt.foreign
+		local ftype = fdt.foreign
 		local nobj = ''
     
 		if ftype == 'ANYSTRING' or type(obj) == 'string' then
 			nobj = obj
 		else
 			assert(obj.id, '[Error] @model.lua removeForeignMember - #3 obj has no id.')
-      nobj = obj.id
+			nobj = obj.id
 		end
     
-    self.lastmodified_time = now()
+		self.lastmodified_time = now()
 		return driver.removeForeignMember(self, field, nobj)
 	end;
 

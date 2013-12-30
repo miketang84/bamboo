@@ -133,7 +133,7 @@ local VIEW_ACTIONS = {
 
     end,
     
-    ['{t'] = function (code)
+    ['{_'] = function (code)
       local code = code:trim()
       -- here, we like req is a local variable
       -- get the language specified
