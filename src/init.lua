@@ -23,7 +23,7 @@ compiled_views = {}
 compiled_views_tmpls = {}
 compiled_views_locals = {}
 
-local i18n = {}	-- for international 
+i18n = {}	-- for international 
 
 --WIDGETS = {}
 --require 'bamboo.widget'
