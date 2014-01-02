@@ -135,13 +135,8 @@ local VIEW_ACTIONS = {
     
     ['{_'] = function (code)
       local code = code:trim()
-      -- here, we like req is a local variable
-      -- get the language specified
-      local accept_language = req.headers['accept-language'] or req.headers['Accept-Language']
-      if not accept_language then return "" end
-      
-      -- first_lang, such as  zh-cn, en-us, zh-tw, zh-hk
-      local first_lang = accept_language:match('(%a%a%-%a%a)'):lower();
+      -- get the language code of client evironment
+      local first_lang = i18n.langCode(req)
       if first_lang and #first_lang > 0 then
         return i18n.translate(code, first_lang)
       end
