@@ -229,6 +229,21 @@ local Upload = Model:extend {
     end
   end;
   
+  -- deprecated, compatible with old version.
+  process = function (self, web, req, dest_dir, prefix, postfix, rename_func)
+		I_AM_CLASS(self)
+		assert(web, '[Error] Upload input parameter: "web" must be not nil.')
+		assert(req, '[Error] Upload input parameter: "req" must be not nil.')
+
+    return self(req.PARAMS, {
+      ajax = req.ajax,
+      dest_dir = dest_dir, 
+      prefix = prefix, 
+      postfix = postfix, 
+      rename_func = rename_func
+    });
+	
+	end;
   
   calcNewFilename = function (self, dest_dir, oldname)
     return calcNewFilename(dest_dir, oldname)

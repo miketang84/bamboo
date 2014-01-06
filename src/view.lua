@@ -135,13 +135,14 @@ local VIEW_ACTIONS = {
     
     ['{_'] = function (code)
       local code = code:trim()
+      local ret = ""
       -- get the language code of client evironment
       local first_lang = i18n.langCode(req)
       if first_lang and #first_lang > 0 then
-        return i18n.translate(code, first_lang)
+          ret = i18n.translate(code, first_lang)
       end
       
-      return ""
+      return ('_result[#_result+1] = "%s"'):format(ret)
     end,
     
 
