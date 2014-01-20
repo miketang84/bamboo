@@ -192,7 +192,8 @@ local RESTFUL_NAMED_PARAMS = {}
 local MappingTableRestTmp = {}
 for k, v in pairs(MappingTableRest) do
   -- k now is the /xxx/:yyy/zzz format
-  local newkey = k:gsub(':%w+', '%(%[%%w_%-%]%+%)')
+  --local newkey = k:gsub(':%w+', '%(%[%%w_%-%]%+%)')
+  local newkey = k:gsub(':%w+', '%(%[^/%]%+%)')
   MappingTableRestTmp[newkey] = v
   RESTFUL_NAMED_PARAMS[newkey] = {}
   
