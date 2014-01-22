@@ -25,7 +25,7 @@ _M['langcode'] = function (req)
     local accept_language = req.headers['accept-language'] or req.headers['Accept-Language']
     if not accept_language then langenv = '' end
 
-    if langenv == '' then
+    if langenv == '' and accept_language then
     	-- such as  zh-cn, en-us, zh-tw, zh-hk
     	langenv = accept_language:match('(%a%a%-%a%a)'):lower();
     end
