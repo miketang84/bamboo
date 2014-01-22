@@ -134,12 +134,12 @@ local VIEW_ACTIONS = {
 
     end,
     
-    ['{_'] = function (code, langenv)
+    ['{_'] = function (code)
       local code = code:trim()
       local ret = ""
       
       --return ('_result[#_result+1] = "%s"'):format(ret)
-      return '_result[#_result+1] = translate("'..code..'", "'..langenv..'")'
+      return '_result[#_result+1] = translate("'..code..'")'
     end,
     
 
@@ -169,7 +169,8 @@ local View = Object:extend {
     local tmpl
     if not name then return '' end
     
-    local langenv = i18n.langcode(req)
+    -- call this to calc languageEnv to i18n.
+    i18n.langcode(req)
     
     if bamboo.config.PRODUCTION then
       -- if cached
@@ -191,7 +192,7 @@ local View = Object:extend {
         tmpl = io.loadFile(tmpl_dir, name)
       end
       tmpl = self.preprocess(tmpl)
-      view = self.compileView(tmpl, name, langenv)
+      view = self.compileView(tmpl, name)
       -- add to cache
       bamboo.compiled_views[name] = view
       return view
@@ -207,7 +208,7 @@ local View = Object:extend {
           assert(tmpl, "Template " + tmpl_dir + name + " does not exist.")
         end
         tmpl = self.preprocess(tmpl)
-        return self.compileView(tmpl, name, langenv)(params)
+        return self.compileView(tmpl, name)(params)
       end
     end
   end;
@@ -239,7 +240,7 @@ local View = Object:extend {
   -- @param name:  template file name
   -- @return: middle rendering function
   ------------------------------------------------------------------------
-  compileView = function (tmpl, name, langenv)
+  compileView = function (tmpl, name)
     local tmpl = ('%s{{""}}'):format(tmpl)
     local code = {'local _result, _children = {}, {}\n'}
 
@@ -250,7 +251,7 @@ local View = Object:extend {
 
       if act then
         code[#code+1] = '_result[#_result+1] = [==[' + text + ']==]'
-        code[#code+1] = act(block:sub(3,-3), langenv)
+        code[#code+1] = act(block:sub(3,-3))
       elseif #block > 2 then
         code[#code+1] = '_result[#_result+1] = [==[' + text + block + ']==]'
       else

@@ -2,8 +2,9 @@
 local _M = {}
 
 
-_M['translate'] = function (sentence, lang_code)
-	local ret
+_M['translate'] = function (sentence)
+    local ret
+    local lang_code = _G.languageEnv or 'zh-cn'
     local tranelem = bamboo.i18n[sentence]
     if tranelem then
         ret = bamboo.i18n[sentence][lang_code]
@@ -19,13 +20,20 @@ end
 _M['langcode'] = function (req)
     -- here, we like req is a local variable
     -- get the language specified
+    local langenv = ''
+    --
     local accept_language = req.headers['accept-language'] or req.headers['Accept-Language']
-    if not accept_language then return '' end
+    if not accept_language then return langenv = '' end
 
-    -- first_lang, such as  zh-cn, en-us, zh-tw, zh-hk
-    local langenv = accept_language:match('(%a%a%-%a%a)'):lower();
+    if langenv == '' then
+    	-- such as  zh-cn, en-us, zh-tw, zh-hk
+    	langenv = accept_language:match('(%a%a%-%a%a)'):lower();
+    end
+
+    -- currently, we define this language environment global variable
+    _G.languageEnv = langenv
     
-    return langenv or ''
+    return langenv
 end
 
 
