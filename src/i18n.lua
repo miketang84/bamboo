@@ -23,7 +23,7 @@ _M['langcode'] = function (req)
     local langenv = ''
     --
     local accept_language = req.headers['accept-language'] or req.headers['Accept-Language']
-    if not accept_language then return langenv = '' end
+    if not accept_language then langenv = '' end
 
     if langenv == '' then
     	-- such as  zh-cn, en-us, zh-tw, zh-hk
