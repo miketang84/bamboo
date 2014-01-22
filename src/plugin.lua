@@ -4,6 +4,8 @@ local cmsgpack = require 'cmsgpack'
 
 local PLUGIN_ARGS_DBKEY = "_plugin_args:%s:%s"
 
+
+--[[
 local function collectUpvalues(func)
 	local upvalues = {}
 	for i=1, math.huge do
@@ -129,31 +131,33 @@ function table2model(tbl)
 	return tbl
 end
 
-function persist(plugin_name, args)
-	assert(plugin_name, "[Error] @ plugin persist - missing plugin_name.")
-	assert(type(args) == 'table', "[Error] @plugin persist - #2 args should be table.")
-	assert(type(args._tag) == 'string', "[Error] @plugin persist - args._tag should be string.")
+--]]
 
+function persist(plugin_name, tag, args)
+	assert(plugin_name, "[Error] @ plugin persist - missing plugin_name.")
+	assert(type(tag) == 'string', "[Error] @plugin persist - #2 tag should be string.")
+	assert(type(args) == 'table', "[Error] @plugin persist - #3 args should be table.")
+	
 	-- use cmsgpack to persist
 	-- here, must use deepCopy to remove all the metatables in args
-	local buf = cmsgpack.pack(deepCopyWithModelName(args))
+	--local buf = cmsgpack.pack(deepCopyWithModelName(args))
+	local buf = cmsgpack.pack(args)
 	if not buf then 
 		return print(format('[Warning] plugin %s: arguments persisting failed.', plugin_name))
 	end
 	-- store to db
 	local db = BAMBOO_DB
-	local key = format(PLUGIN_ARGS_DBKEY, plugin_name, args._tag)
-	db:set(key, buf)
-	db:expire(key, bamboo.config.plugin_args_life or bamboo.PLUGIN_ARGS_LIFE)
+	db:hset(plugin_name, tag, buf)
 	
+	return true
 end
 
-function unpersist(plugin_name, _tag)
+function unpersist(plugin_name, tag)
 	assert(plugin_name, "[Error] @ plugin unpersist - missing plugin_name.")
-	assert(type(_tag) == 'string', "[Error] @plugin unpersist - #2 _tag should be string.")
+	assert(type(tag) == 'string', "[Error] @plugin unpersist - #2 tag should be string.")
 
 	local db = BAMBOO_DB
-	local buf = db:get(format(PLUGIN_ARGS_DBKEY, plugin_name, _tag))
+	local buf = db:hget(plugin_name, tag)
 	if not buf then return {} end
 	
 	local tbl = cmsgpack.unpack(buf)
@@ -162,7 +166,7 @@ function unpersist(plugin_name, _tag)
 	end
 	
 	assert(type(tbl) == 'table', "[Error] @plugin unpersist - unpersisted result should be table.")
-	tbl = table2model(tbl)
+	--tbl = table2model(tbl)
 
 	return tbl
 end
