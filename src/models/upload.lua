@@ -54,7 +54,7 @@ local function savefile(file_obj, ajax, dest_dir, prefix, postfix, rename_func)
   
   -- if upload in html5 way
   if ajax then
-    filename = file_obj.filename or ''
+    filename = file_obj.headers['x-file-name'] or file_obj.PARAMS.filename or ''
     body = file_obj.body or ''
   else
     -- Notice: the filename in the form string are quoted by ""
@@ -63,7 +63,8 @@ local function savefile(file_obj, ajax, dest_dir, prefix, postfix, rename_func)
     filename = file_obj['content-disposition'].filename:sub(2, -2):match('\\?([^\\]-%.%w+)$')
     body = file_obj.body or ''
   end
-  
+  --fptable(file_obj) 
+  --print('filename body', filename, #body) 
   if isFalse(filename) or isFalse(body) then return nil, nil end
   if not ajax then
     filename = http.encodeURL(filename)
@@ -114,12 +115,14 @@ end;
 
 
 
-local processFile = function (params, ajax, dest_dir, prefix, postfix, rename_func)
+local processFile = function (req, ajax, dest_dir, prefix, postfix, rename_func)
 
   -- if upload in html5 way
   if ajax then
+    -- when use ajax upload file, params is req object
     -- stored to disk
-    local name, path, export_path, oldname = savefile (params, true, dest_dir, prefix, postfix, rename_func )    
+    local name, path, export_path, oldname = savefile (req, true, dest_dir, prefix, postfix, rename_func )    
+    --print('--->2', name, path, export_path, oldname)
     if not path then return nil end
     
     return {
@@ -133,7 +136,7 @@ local processFile = function (params, ajax, dest_dir, prefix, postfix, rename_fu
     -- for uploading in html4 way
     -- here, in formal html4 form, req.POST always has value in, 
     assert(#params > 0, '[Error] No valid file data contained.')
-    local files = batch ( params, dest_dir, prefix, postfix, rename_func )
+    local files = batch ( req.PARAMS, dest_dir, prefix, postfix, rename_func )
     if files:isEmpty() then return nil end
     
     if #files == 1 then
@@ -196,8 +199,10 @@ local Upload = Model:extend {
     local ajax = options.ajax
     
     -- save file to disk
+    --print('-->', t, ajax, dest_dir, prefix, postfix, rename_func)
     local file = processFile(t, ajax, dest_dir, prefix, postfix, rename_func)
-    if not file then return nil end
+    --print('file', file)
+    if not file then return self end
     
     if #file == 0 then
       self.name = file.name
@@ -209,7 +214,6 @@ local Upload = Model:extend {
       self.cate = t.cate or ''
       self.oldname = file.oldname
       
-      return self
     else
       local files = List()
       for i, v in ipairs(file) do
@@ -224,9 +228,10 @@ local Upload = Model:extend {
           oldname = v.oldname
         })
       end
-      
-      return files
+      self.files = files
     end
+    --fptable(self) 
+    return self
   end;
   
   -- deprecated, compatible with old version.
@@ -235,7 +240,7 @@ local Upload = Model:extend {
 		assert(web, '[Error] Upload input parameter: "web" must be not nil.')
 		assert(req, '[Error] Upload input parameter: "req" must be not nil.')
 
-    return self(req.PARAMS, {
+    return self(req, {
       ajax = req.ajax,
       dest_dir = dest_dir, 
       prefix = prefix, 

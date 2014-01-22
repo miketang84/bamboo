@@ -16,16 +16,16 @@ _M['translate'] = function (sentence, lang_code)
 	
 end
 
-_M['langCode'] = function (req)
+_M['langcode'] = function (req)
     -- here, we like req is a local variable
     -- get the language specified
     local accept_language = req.headers['accept-language'] or req.headers['Accept-Language']
-    if not accept_language then return nil end
+    if not accept_language then return '' end
 
     -- first_lang, such as  zh-cn, en-us, zh-tw, zh-hk
-    local first_lang = accept_language:match('(%a%a%-%a%a)'):lower();
+    local langenv = accept_language:match('(%a%a%-%a%a)'):lower();
     
-    return first_lang
+    return langenv or ''
 end
 
 

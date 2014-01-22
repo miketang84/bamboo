@@ -1,6 +1,7 @@
 module(..., package.seeall)
 local lgstring = require "lgstring"
 local i18n = require 'bamboo.i18n'
+local translate = i18n.translate
 
 local function getlocals(context, depth)
   local i = 1
@@ -133,16 +134,12 @@ local VIEW_ACTIONS = {
 
     end,
     
-    ['{_'] = function (code)
+    ['{_'] = function (code, langenv)
       local code = code:trim()
       local ret = ""
-      -- get the language code of client evironment
-      local first_lang = i18n.langCode(req)
-      if first_lang and #first_lang > 0 then
-          ret = i18n.translate(code, first_lang)
-      end
       
-      return ('_result[#_result+1] = "%s"'):format(ret)
+      --return ('_result[#_result+1] = "%s"'):format(ret)
+      return '_result[#_result+1] = translate("'..code..'", "'..langenv..'")'
     end,
     
 
@@ -172,6 +169,8 @@ local View = Object:extend {
     local tmpl
     if not name then return '' end
     
+    local langenv = i18n.langcode(req)
+    
     if bamboo.config.PRODUCTION then
       -- if cached
       -- NOTE: here, 5 is an empiric value
@@ -192,7 +191,7 @@ local View = Object:extend {
         tmpl = io.loadFile(tmpl_dir, name)
       end
       tmpl = self.preprocess(tmpl)
-      view = self.compileView(tmpl, name)
+      view = self.compileView(tmpl, name, langenv)
       -- add to cache
       bamboo.compiled_views[name] = view
       return view
@@ -208,7 +207,7 @@ local View = Object:extend {
           assert(tmpl, "Template " + tmpl_dir + name + " does not exist.")
         end
         tmpl = self.preprocess(tmpl)
-        return self.compileView(tmpl, name)(params)
+        return self.compileView(tmpl, name, langenv)(params)
       end
     end
   end;
@@ -240,7 +239,7 @@ local View = Object:extend {
   -- @param name:  template file name
   -- @return: middle rendering function
   ------------------------------------------------------------------------
-  compileView = function (tmpl, name)
+  compileView = function (tmpl, name, langenv)
     local tmpl = ('%s{{""}}'):format(tmpl)
     local code = {'local _result, _children = {}, {}\n'}
 
@@ -251,7 +250,7 @@ local View = Object:extend {
 
       if act then
         code[#code+1] = '_result[#_result+1] = [==[' + text + ']==]'
-        code[#code+1] = act(block:sub(3,-3))
+        code[#code+1] = act(block:sub(3,-3), langenv)
       elseif #block > 2 then
         code[#code+1] = '_result[#_result+1] = [==[' + text + block + ']==]'
       else
