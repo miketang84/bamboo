@@ -1,7 +1,7 @@
 module(..., package.seeall)
 local lgstring = require "lgstring"
 local i18n = require 'bamboo.i18n'
-local translate = i18n.translate
+_G.translate = i18n.translate
 
 local function getlocals(context, depth)
   local i = 1
