@@ -376,15 +376,16 @@ end
 --    cmd = 'clear_view_cache'
 -- }
 local cmd_dispatcher = function (sub_sock, data)
+  print('in cmd_dispatcher. cmd is:', data)
   local dispatcher = config.commandDispatcher
-  if dispatcher and type(config.commandDispatcher) == 'function' and bamboo.ch_cmd_pub then
-    if type(data) == 'table' and data.cmd == 'clear_view_cache' then
+  if data == '_cmd_clear_view_cache_' then
+      print('ready to clear view cache.')
       -- clear view cache
       bamboo.compiled_views = {}
       bamboo.compiled_views_tmpls = {}
-    else
+      bamboo.compiled_views_locales = {}
+  elseif dispatcher and type(dispatcher) == 'function' and bamboo.ch_cmd_pub then
       dispatcher(bamboo.ch_cmd_pub, data)
-    end
   end
 end
 
@@ -421,6 +422,7 @@ local function run(config)
     if bamboo.config.cmd_sub_addr 
     and bamboo.config.cmd_pub_addr
     then
+      print('have pub and sub addr.')
       local cmd_pub = ctx:pub()
       cmd_pub:connect(bamboo.config.cmd_pub_addr)
       bamboo.ch_cmd_pub = cmd_pub
@@ -429,6 +431,9 @@ local function run(config)
       cmd_sub:sub("")
       cmd_sub:connect(bamboo.config.cmd_sub_addr)
       bamboo.ch_cmd_sub = cmd_sub
+
+      --fptable(cmd_pub)
+      --fptable(cmd_sub)
       
     end
     -- libev default main loop
