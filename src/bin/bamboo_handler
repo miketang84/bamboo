@@ -384,6 +384,11 @@ local cmd_dispatcher = function (sub_sock, data)
       bamboo.compiled_views = {}
       bamboo.compiled_views_tmpls = {}
       bamboo.compiled_views_locales = {}
+  elseif data == '_cmd_reload_settings_' then
+      -- reload config 
+      local config = utils.readSettings(bamboo.config)
+      bamboo.config = config
+  
   elseif dispatcher and type(dispatcher) == 'function' and bamboo.ch_cmd_pub then
       dispatcher(bamboo.ch_cmd_pub, data)
   end
