@@ -27,7 +27,12 @@ _M['langcode'] = function (req)
 
     if langenv == '' and accept_language then
     	-- such as  zh-cn, en-us, zh-tw, zh-hk
-    	langenv = accept_language:match('(%a%a%-%a%a)'):lower();
+    	langenv = accept_language:match('(%a%a%-%a%a)')
+	if langenv then
+		langenv = langenv:lower()
+	else
+		langenv = 'zh-cn'
+	end
     end
 
     -- currently, we define this language environment global variable
