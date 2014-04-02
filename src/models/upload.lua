@@ -135,7 +135,7 @@ local processFile = function (req, ajax, dest_dir, prefix, postfix, rename_func)
   else
     -- for uploading in html4 way
     -- here, in formal html4 form, req.POST always has value in, 
-    assert(#params > 0, '[Error] No valid file data contained.')
+    assert(#req.PARAMS > 0, '[Error] No valid file data contained.')
     local files = batch ( req.PARAMS, dest_dir, prefix, postfix, rename_func )
     if files:isEmpty() then return nil end
     
