@@ -389,6 +389,11 @@ local cmd_dispatcher = function (sub_sock, data)
       local config = utils.readSettings(bamboo.config)
       bamboo.config = config
   
+  elseif data == '_cmd_exit_' then
+      -- reload config 
+	  print('receive _cmd_exit_, ready to exit.')
+	  os.exit()
+
   elseif dispatcher and type(dispatcher) == 'function' and bamboo.ch_cmd_pub then
       dispatcher(bamboo.ch_cmd_pub, data)
   end

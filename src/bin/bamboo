@@ -308,6 +308,55 @@ local startProcesses = function (settings)
 
 end
 
+local function sendExitCmdViaChannel ()
+
+local zmq = require'bamboo.lib.zmqev'
+local ev = require'ev'
+local loop = ev.Loop.default
+require 'lglib'
+local ctx = zmq.init(loop, 1)
+local posix = require 'posix'
+dofile('settings.lua')
+
+-- define response handler
+--[[
+local function handle_msg(sock, data)
+  print("server response:\n", data)
+end
+--]]
+
+--cmd_pub_addr = 'tcp://127.0.0.1:1236'
+--cmd_sub_addr = 'tcp://127.0.0.1:1237'
+local client_pub = cmd_sub_addr
+--local client_sub = cmd_pub_addr
+print('client_pub', client_pub)
+local cmd_pub = ctx:pub()
+cmd_pub:bind(client_pub)
+--[[
+local cmd_sub = ctx:sub(handle_msg)
+cmd_sub:sub("")
+cmd_sub:bind(client_sub)
+--]]
+local cb = function ()
+  -- send requssage.
+  print('---> _cmd_exit_')
+  cmd_pub:send('_cmd_exit_')
+  
+  posix.sleep(1)
+  os.exit()
+end
+
+-- 先停1秒钟，等zmq通道准备好
+local timer = ev.Timer.new(cb, 1)
+timer:start(loop)
+loop:loop()
+print('== Done ==')
+
+
+
+end
+
+
 
 COMMANDS = {
     help = function(settings)
@@ -346,8 +395,10 @@ COMMANDS = {
     end,
 
     restart = function (settings)
-		killProcesses(settings)
-		startProcesses(settings)
+		-- killProcesses(settings)
+		-- send exit directive to procedures now working, it will reborn automatically
+		sendExitCmdViaChannel()
+		--startProcesses(settings)
     end
 }
 
