@@ -20,19 +20,19 @@ end
 _M['langcode'] = function (req)
     -- here, we like req is a local variable
     -- get the language specified
-    local langenv = ''
+    local langenv = nil
     --
     local accept_language = req.headers['accept-language'] or req.headers['Accept-Language']
-    if not accept_language then langenv = '' end
-
-    if langenv == '' and accept_language then
+    if not accept_language then 
+		langenv = 'zh-cn'
+	else
     	-- such as  zh-cn, en-us, zh-tw, zh-hk
     	langenv = accept_language:match('(%a%a%-%a%a)')
-	if langenv then
-		langenv = langenv:lower()
-	else
-		langenv = 'zh-cn'
-	end
+		if langenv then
+			langenv = langenv:lower()
+		else
+			langenv = 'zh-cn'
+		end
     end
 
     -- currently, we define this language environment global variable
