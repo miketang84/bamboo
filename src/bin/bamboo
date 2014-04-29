@@ -252,7 +252,8 @@ local killProcesses = function (settings)
 			os.execute(('kill -9 %s'):format(pid))
 		end
 	end
-	
+
+	--[[
 	for _, part in ipairs(cmd_output) do
 		pid = part:match(pattern1)
 		print('===>>>>', pid)
@@ -260,6 +261,8 @@ local killProcesses = function (settings)
 			os.execute(('kill -9 %s'):format(pid))
 		end
 	end
+	--]]
+	
 	
 end
 
@@ -280,23 +283,25 @@ local startProcesses = function (settings)
 	local function runit()
 		local targets = assert(posix.glob(app))
 
-		for _, script in ipairs(targets) do
+--[[
+--		for _, script in ipairs(targets) do
 			if not script_times[script] then
 				script_times[script] = os.time() 
 			end
 		end
+--]]
 
 		run_app(app_dir, targets, num)
 		local script, pid = wait_on_children(app_dir, targets)
-		local tick = os.time()
+--		local tick = os.time()
 
-		if tick - script_times[script] < 1 then
-			print("SCRIPT " .. script .. " RESTARTING TOO FAST. Pausing while you fix stuff.")
-			posix.sleep(10)
-			tick = os.time()
-		end
+--		if tick - script_times[script] < 1 then
+--			print("SCRIPT " .. script .. " RESTARTING TOO FAST. Pausing while you fix stuff.")
+			posix.sleep(2)
+--			tick = os.time()
+--		end
 
-		script_times[script] = tick
+--		script_times[script] = tick
 	end
 	
 	if config.PRODUCTION then
@@ -391,7 +396,10 @@ COMMANDS = {
     end,
 
     stop = function (settings)
+		-- 先杀掉管理进程
 		killProcesses()
+		-- 再给子进程发送退出信号
+		sendExitCmdViaChannel()
     end,
 
     restart = function (settings)
