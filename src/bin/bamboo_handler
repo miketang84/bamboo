@@ -3,6 +3,7 @@
 -- ATTEN: this file is not a module
 package.path = './?.lua;./?/init.lua;./?/src/init.lua;/usr/local/share/lua/5.1/?.lua;/usr/local/share/lua/5.1/?/init.lua;' .. package.path
 
+require 'signal'
 require 'posix'
 require 'lglib'
 require 'bamboo'
@@ -22,6 +23,10 @@ bamboo.internal.loop = loop
 
 local ctx = zmq.init(loop, 1)
 
+signal.signal("SIGTERM", function (...)
+	print('bamboo_handler receive SIGTERM, os.exit')
+	os.exit()
+end)
 
 -- ==============================================================
 -- Global variables delarations: in top project code, we can see these variables

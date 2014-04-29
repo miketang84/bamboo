@@ -18,6 +18,10 @@ signal.signal("SIGINT", function (...)
     end
 end)
 
+signal.signal("SIGTERM", function (...)
+	print('receive SIGTERM, os.exit()')
+	os.exit()
+end)
 -- signal.signal("SIGCLD", 'ignore')
 
 ------------------------------------------------------------------------------
@@ -249,7 +253,7 @@ local killProcesses = function (settings)
 		pid = part:match(pattern0)
 		print('===>>>>', pid)
 		if pid then
-			os.execute(('kill -9 %s'):format(pid))
+			os.execute(('kill -15 %s'):format(pid))
 		end
 	end
 
@@ -258,7 +262,7 @@ local killProcesses = function (settings)
 		pid = part:match(pattern1)
 		print('===>>>>', pid)
 		if pid then
-			os.execute(('kill -9 %s'):format(pid))
+			os.execute(('kill -15 %s'):format(pid))
 		end
 	end
 	--]]
