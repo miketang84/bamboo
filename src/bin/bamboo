@@ -3,13 +3,12 @@
 require 'posix'
 require 'signal'
 require 'bamboo'
-local redis = require 'bamboo-redis'
+require 'daemon'
+
 
 local readSettings = require('bamboo.utils').readSettings
 
-local env = {}
 SCRIPT_PIDS = {}
-BAMBOO_DB = nil
 
 
 signal.signal("SIGINT", function (...)
@@ -301,8 +300,13 @@ end
 
 local startProcesses = function (settings)
 	readSettings(config)
-	local appname = config.project_name
-	local lgserver_dir = config.lgserver_dir
+
+	if config.daemon then
+		daemon.daemonize('nochdir,nostdfds,noumask0')
+	end
+
+
+	local appname = config.project
    
 	--for i,v in pairs(settings) do print(i,v) end
 	-- here, app is a directory pattern string, for glob
@@ -435,7 +439,7 @@ COMMANDS = {
 		sendExitCmdViaChannel()
     end,
     
-	kill = function (settings)
+    kill = function (settings)
 		-- 杀掉所有进程
 		killAllProcesses()
     end,
@@ -471,6 +475,7 @@ end
 
 local cmd, settings = parse_args(arg)
 if not cmd then print('No cmd input.'); return  end
+
 
 run(cmd, settings)
 

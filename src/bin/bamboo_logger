@@ -1,0 +1,84 @@
+#!/usr/bin/env lua
+
+require 'signal'
+--require 'posix'
+
+local zmq = require'bamboo.lib.zmqev'
+local ev = require'ev'
+local loop = ev.Loop.default
+local ctx = zmq.init(loop, 1)
+
+local utils = require 'bamboo.utils'
+local config = utils.readSettings({})
+
+-- logging file
+local file_log_driver = require "logging.file"
+local log_dir = config.log_dir or '/tmp'
+local appname = assert(config.project, '[Error] missing param project.')
+--local pid = posix.getpid('pid')
+--local ctime = os.date("%H%M%S", os.time())
+local logfile = log_dir.."/bamboo_"..appname.."_%s"..".log"
+-- bambooapp date time pid
+logger = file_log_driver(logfile, "%Y-%m-%d")
+
+signal.signal("SIGTERM", function (...)
+	        print('bamboo_handler receive SIGTERM, os.exit')
+		        os.exit()
+		end)
+-- 0: debug
+-- 1: info
+-- 2: warn
+-- 3: error
+-- 4: fatal
+local LEVELS = {
+	[0] = 'debug',
+	[1] = 'info',
+	[2] = 'warn',
+	[3] = 'error',
+	[4] = 'fatal'
+}
+
+local pull_handler = function (zsock, data)
+	--print('data-->', data)
+	
+	local level = tonumber(data:match('^(%d):'))
+	if type(level) ~= 'number' or level > 4 then
+		level = 1
+		data = data
+	else
+		-- remove the heading two characters
+		data = data:sub(3)
+	end
+	
+	-- write log
+	logger[ LEVELS[level] ](logger, data)
+
+end
+
+local pull_channel = config.log_addr or 'ipc:///tmp/bamboo_'..appname..'_log'
+print(pull_channel)
+-- create pull channel
+local zpull = ctx:pull(pull_handler)
+zpull:bind(pull_channel)
+
+
+local cmd_dispatcher = function (sub_sock, data)
+  	if data == '_cmd_exit_' then
+	        -- reload config 
+		print('receive _cmd_exit_, ready to exit.')
+		os.exit()
+	end
+end
+
+
+-- create cmd sub channel
+if config.cmd_sub_addr then
+	local cmd_sub = ctx:sub(cmd_dispatcher)
+	cmd_sub:sub("")
+	cmd_sub:connect(config.cmd_sub_addr)
+end
+
+print('bamboo logger start.')
+print('log file: ', logfile)
+loop:loop()
+

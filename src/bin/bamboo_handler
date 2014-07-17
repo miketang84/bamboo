@@ -67,7 +67,7 @@ package.path = package.path + (";%s/?.lua;%s/?/init.lua;"):format(PROJECT_DIR, P
 -- read config from settings file
 local config = utils.readSettings(bamboo.config)
 bamboo.config = config
-
+assert(config.project, '[Error] missing param project.')
 -- ==============================================================
 
 config.route = config.route or '/'
@@ -111,15 +111,57 @@ local URLS = childenv.URLS
 
 
 -- logging file
+--[=[
 local file_log_driver = require "logging.file"
-local log_dir = config.log_dir or '/var/tmp/logs/'
-local appname = config.appname or config.project_name or 'bambooapp'
+local log_dir = config.log_dir or '/tmp/'
+local appname = config.project or 'bambooapp'
 local pid = posix.getpid('pid')
 local ctime = os.date("%H%M%S", os.time())
 local logfile = log_dir.."/"..appname.."_%s_"..ctime.."_"..pid..".log"
 -- bambooapp date time pid
 bamboo.logger = file_log_driver(logfile, "%Y-%m-%d")
+--]=]
 
+local oprint = print
+local LEVELS = {
+	['debug'] = 0,
+	['info'] = 1,
+	['warn'] = 2,
+	['error'] = 3,
+	['fatal'] = 4
+}
+
+local push_channel = config.log_addr or 'ipc:///tmp/bamboo_'..config.project..'_log'
+print('push_channel', push_channel)
+local zpush = ctx:push()
+zpush:connect(push_channel)
+assert(zpush, '[Error] log push channel init failed.')
+-- reload print
+print = function (...)
+	local params = {...}
+	for i, v in ipairs(params) do
+		v = tostring(v)   
+		params[i] = v
+	end
+	local level = LEVELS[ params[1] or '']
+	local sent_str
+	if level then
+		table.remove(params, 1)
+		local info_str = table.concat(params, '\t');
+		sent_str =  string.format('%s:%s', level, info_str)	
+	else
+		local info_str = table.concat(params, '\t');
+		sent_str =  string.format('1:%s', info_str)
+		level = 1
+	end
+	local minimal_level = LEVELS[config.log_level or 'info']
+	-- if log level small than minimal_level, ignore it
+	if level >= minimal_level then
+		-- oprint('level, minimal_level', level, minimal_level)
+		--zpush:send(sent_str, zmq.NOBLOCK)	
+		zpush:send(sent_str)	
+	end
+end
 
 
 -- ==============================================================
@@ -360,7 +402,7 @@ local webserver_request = function (zsock, data)
       else
         
         print(("req %s: %s"):format(config.route, req.meta.conn_id), os.date(), req.path, req.method)
-        bamboo.logger:info(("req %s: %s\t%s\t%s"):format(config.route, req.meta.conn_id, req.path, req.method))
+        --bamboo.logger:info(("req %s: %s\t%s\t%s"):format(config.route, req.meta.conn_id, req.path, req.method))
         -- add some other attributes
         preprocessRequest(req)
         -- inject req.GET, req.POST, req.PARAMS
