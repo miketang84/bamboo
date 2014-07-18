@@ -122,7 +122,6 @@ local logfile = log_dir.."/"..appname.."_%s_"..ctime.."_"..pid..".log"
 bamboo.logger = file_log_driver(logfile, "%Y-%m-%d")
 --]=]
 
-local oprint = print
 local LEVELS = {
 	['debug'] = 0,
 	['info'] = 1,
@@ -137,32 +136,34 @@ local zpush = ctx:push()
 zpush:connect(push_channel)
 assert(zpush, '[Error] log push channel init failed.')
 -- reload print
-print = function (...)
-	local params = {...}
-	for i, v in ipairs(params) do
-		v = tostring(v)   
-		params[i] = v
-	end
-	local level = LEVELS[ params[1] or '']
-	local sent_str
-	if level then
-		table.remove(params, 1)
-		local info_str = table.concat(params, '\t');
-		sent_str =  string.format('%s:%s', level, info_str)	
-	else
-		local info_str = table.concat(params, '\t');
-		sent_str =  string.format('1:%s', info_str)
-		level = 1
-	end
-	local minimal_level = LEVELS[config.log_level or 'info']
-	-- if log level small than minimal_level, ignore it
-	if level >= minimal_level then
-		-- oprint('level, minimal_level', level, minimal_level)
-		--zpush:send(sent_str, zmq.NOBLOCK)	
-		zpush:send(sent_str)	
+if config.async_log then
+	local oprint = print
+	print = function (...)
+		local params = {...}
+		for i, v in ipairs(params) do
+			v = tostring(v)   
+			params[i] = v
+		end
+		local level = LEVELS[ params[1] or '']
+		local sent_str
+		if level then
+			table.remove(params, 1)
+			local info_str = table.concat(params, '\t');
+			sent_str =  string.format('%s:%s', level, info_str)	
+		else
+			local info_str = table.concat(params, '\t');
+			sent_str =  string.format('1:%s', info_str)
+			level = 1
+		end
+		local minimal_level = LEVELS[config.log_level or 'info']
+		-- if log level small than minimal_level, ignore it
+		if level >= minimal_level then
+			-- oprint('level, minimal_level', level, minimal_level)
+			--zpush:send(sent_str, zmq.NOBLOCK)	
+			zpush:send(sent_str)	
+		end
 	end
 end
-
 
 -- ==============================================================
 -- helper functions

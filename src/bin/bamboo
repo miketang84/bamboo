@@ -3,7 +3,6 @@
 require 'posix'
 require 'signal'
 require 'bamboo'
-require 'daemon'
 
 
 local readSettings = require('bamboo.utils').readSettings
@@ -302,6 +301,7 @@ local startProcesses = function (settings)
 	readSettings(config)
 
 	if config.daemon then
+		require 'daemon'
 		daemon.daemonize('nochdir,nostdfds,noumask0')
 	end
 
