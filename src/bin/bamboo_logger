@@ -21,6 +21,13 @@ local logfile = log_dir.."/bamboo_"..appname.."_%s"..".log"
 -- bambooapp date time pid
 logger = file_log_driver(logfile, "%Y-%m-%d")
 
+
+print('bamboo logger start, use file:', logfile)
+require 'daemon'
+daemon.daemonize('nochdir,nostdfds,noumask0')
+
+
+
 signal.signal("SIGTERM", function (...)
 	        print('bamboo_handler receive SIGTERM, os.exit')
 		        os.exit()
@@ -78,7 +85,5 @@ if config.cmd_sub_addr then
 	cmd_sub:connect(config.cmd_sub_addr)
 end
 
-print('bamboo logger start.')
-print('log file: ', logfile)
 loop:loop()
 
