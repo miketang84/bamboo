@@ -1,5 +1,9 @@
 #!/usr/bin/env lua
 
+require 'daemon'
+print('bamboo logger started.')                                                                                                                        
+daemon.daemonize('nochdir,nostdfds,noumask0')
+
 require 'signal'
 --require 'posix'
 
@@ -20,12 +24,6 @@ local appname = assert(config.project, '[Error] missing param project.')
 local logfile = log_dir.."/bamboo_"..appname.."_%s"..".log"
 -- bambooapp date time pid
 logger = file_log_driver(logfile, "%Y-%m-%d")
-
-
-print('bamboo logger start, use file:', logfile)
-require 'daemon'
-daemon.daemonize('nochdir,nostdfds,noumask0')
-
 
 
 signal.signal("SIGTERM", function (...)
