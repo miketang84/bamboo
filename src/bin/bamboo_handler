@@ -68,6 +68,7 @@ package.path = package.path + (";%s/?.lua;%s/?/init.lua;"):format(PROJECT_DIR, P
 local config = utils.readSettings(bamboo.config)
 bamboo.config = config
 assert(config.project, '[Error] missing param project.')
+local appname = config.project or 'bambooapp'
 -- ==============================================================
 
 config.route = config.route or '/'
@@ -111,17 +112,6 @@ local URLS = childenv.URLS
 
 
 -- logging file
---[=[
-local file_log_driver = require "logging.file"
-local log_dir = config.log_dir or '/tmp/'
-local appname = config.project or 'bambooapp'
-local pid = posix.getpid('pid')
-local ctime = os.date("%H%M%S", os.time())
-local logfile = log_dir.."/"..appname.."_%s_"..ctime.."_"..pid..".log"
--- bambooapp date time pid
-bamboo.logger = file_log_driver(logfile, "%Y-%m-%d")
---]=]
-
 local LEVELS = {
 	['debug'] = 0,
 	['info'] = 1,
@@ -130,7 +120,7 @@ local LEVELS = {
 	['fatal'] = 4
 }
 
-local push_channel = config.log_addr or 'ipc:///tmp/bamboo_'..config.project..'_log'
+local push_channel = config.log_addr or 'ipc:///tmp/bamboo_'..appname..'_log'
 print('push_channel', push_channel)
 local zpush = ctx:push()
 zpush:connect(push_channel)
@@ -149,10 +139,10 @@ if config.async_log then
 		if level then
 			table.remove(params, 1)
 			local info_str = table.concat(params, '\t');
-			sent_str =  string.format('%s:%s', level, info_str)	
+			sent_str =  string.format('%s:%s:%s', level, appname, info_str)	
 		else
 			local info_str = table.concat(params, '\t');
-			sent_str =  string.format('1:%s', info_str)
+			sent_str =  string.format('1:%s:%s', appname, info_str)
 			level = 1
 		end
 		local minimal_level = LEVELS[config.log_level or 'info']
