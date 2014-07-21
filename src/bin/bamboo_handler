@@ -121,7 +121,7 @@ local LEVELS = {
 }
 
 local push_channel = config.log_addr or 'ipc:///tmp/bamboo_'..appname..'_log'
-print('push_channel', push_channel)
+print('log_push_channel', push_channel)
 local zpush = ctx:push()
 zpush:connect(push_channel)
 assert(zpush, '[Error] log push channel init failed.')
@@ -368,7 +368,7 @@ local webserver_request = function (zsock, data)
   if req and req.meta then
     _G['req'] = req
     if req.meta.type == 'disconnect' then
-      print("DISCONNECT", req.meta.conn_id)
+      --print("DISCONNECT", req.meta.conn_id)
       if disconnect then disconnect(req) end
     elseif not DEFAULT_ALLOWED_METHODS[req.method] then
       print('Not allowed method', req.method)

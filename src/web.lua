@@ -108,7 +108,7 @@ local Web = Object:extend {
   end;
 
   error = function (self, data, code, status, headers)
-      self:page(data or 'error', 500, 'Internal Error', headers or {['content-type'] = false})
+      self:page(data or 'error', code or 500, status or 'Internal Error', headers or {['content-type'] = false})
       return self:close()
   end;
 
