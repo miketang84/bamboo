@@ -22,6 +22,11 @@ local loop = ev.Loop.default
 bamboo.internal.loop = loop
 
 local ctx = zmq.init(loop, 1)
+bamboo.ctx = ctx;
+bamboo.getZmqContext = function ()
+    return bamboo.ctx;
+end
+
 
 signal.signal("SIGTERM", function (...)
 	print('bamboo_handler receive SIGTERM, os.exit')
