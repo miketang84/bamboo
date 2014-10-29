@@ -170,7 +170,7 @@ local View = Object:extend {
     if not name then return '' end
     
     -- call this to calc languageEnv to i18n.
-    i18n.langcode(req)
+    if req then i18n.langcode(req) end
     
     if bamboo.config.PRODUCTION then
       -- if cached
