@@ -32,10 +32,9 @@ end
 
 local find = function (self, ns, query, fieldsToReturn, nToSkip, nToReturn, queryOptions, batchSize)
     assert(type(ns) == 'string')
-    assert(type(query) == 'string')
     
     local cursor, err = self.conn:query(self.db..'.'..ns, query, nToReturn, nToSkip, fieldsToReturn, queryOptions, batchSize)
-    if err then error(err) end
+    if err then print(err) end
 
     addAttachMethod2Cursor(cursor)
 
@@ -59,7 +58,7 @@ local insert = function (self, ns, doc)
     local ok, err = self.conn:insert(ns, doc)
     
     -- XXX: need disturb or continue??
-    if err then error(err) end
+    if err then print(err) end
 
     return ok
 
@@ -71,7 +70,7 @@ local insert_batch = function (self, ns, docs)
     local ok, err = self.conn:insert_batch(ns, docs)
     
     -- XXX: need disturb or continue??
-    if err then error(err) end
+    if err then print(err) end
 
     return ok
 
@@ -83,7 +82,7 @@ local update = function (self, ns, query, modifier, upsert, multi)
     local ok, err = self.conn:update(ns, query, modifier, upsert, multi)
 
     -- XXX: need disturb or continue??
-    if err then error(err) end
+    if err then print(err) end
 
     return ok
 end
@@ -93,7 +92,7 @@ local remove = function (self, ns, query, justOne)
     local ok, err = self.conn:remove(ns, query, justOne)
 
     -- XXX: need disturb or continue??
-    if err then error(err) end
+    if err then print(err) end
 
     return ok
 end
@@ -104,7 +103,7 @@ local count = function (self, ns, query)
     local count, err = self.conn:count(ns, query)
     
     -- XXX: need disturb or continue??
-    if err then error(err) end
+    if err then print(err) end
 
     return count
 end
@@ -137,8 +136,6 @@ end
 
 function _connect_replica_set(config)
     assert(type(config) == 'table', 'missing config in mongo.connect')
-    local host = config.host
-    local port = config.port
     local dbname = config.db
     -- ensure replicaset is a host:port array
     local replicaset = config.replicaset
@@ -147,6 +144,10 @@ function _connect_replica_set(config)
     local conn = mongo.ReplicaSet.New(dbname, replicaset)
     assert( conn ~= nil, 'unable to create mongo.ReplicaSetConnection' )
     assert( conn:connect(), 'unable to forcefully connect to mongo instance' )
+    
+    print(conn, type(conn))
+    print(config.user)
+    print(config.password)
 
     if config.user then
         assert( conn:auth { dbname = 'admin', username = config.user, password = config.password } == true, "unable to auth to db" )
@@ -171,9 +172,9 @@ local _mt_db = {
 
 function connect (config)
     assert(type(config) == 'table', 'missing config in mongo.connect')
-    local config.host = config.host or '127.0.0.1'
-    local config.port = config.port or '27017'
-    local config.db = config.db or 'test'
+    config.host = config.host or '127.0.0.1'
+    config.port = config.port or '27017'
+    config.db = config.db or 'test'
     local replicaset = config.replicaset
     
 
@@ -181,13 +182,15 @@ function connect (config)
     -- attach all methods to db
     setmetatable(db, { __index = _mt_db })
     local conn
-    if replicaset == true then
+    if replicaset then
         conn = _connect_replica_set(config)
     else
         conn = _connect(config)
     end
     
-    table.update(db, config)
+    for k, v in pairs(config) do
+        db[k] = v
+    end
     -- add db instance to db
     db.conn = conn
     
