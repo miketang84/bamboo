@@ -16,6 +16,10 @@ local normalizePath = require('lglib.path').normalize
 
 local cmsgpack = require 'cmsgpack'
 
+require 'zmq'
+local ctx = zmq.init(1)
+
+
 require 'zmq.poller'
 local poller = zmq.poller(128)
 bamboo.poller = poller
@@ -101,19 +105,8 @@ bamboo.registerModule(childenv)
 -- hook the disconnect handler
 config.disconnect = childenv.disconnect
 config.commandDispatcher = childenv.commandDispatcher
---config.clusterSubHandler = childenv.clusterSubHandler
---
---local cluster_listener = function ()
---  local ch_sub = webserver_conn.cluster_channel_sub
---  local msg = ch_sub:recv()
---  if childenv.clusterSubHandler then
---    childenv.clusterSubHandler(cmsgpack.unpack(msg))
---  end
---end
-
 
 local URLS = childenv.URLS
-
 
 -- logging file
 local LEVELS = {
@@ -126,7 +119,7 @@ local LEVELS = {
 
 local push_channel = config.log_addr or 'ipc:///tmp/bamboo_'..appname..'_log'
 print('log_push_channel', push_channel)
-local zpush = ctx:push()
+local zpush = ctx:socket(zmq.PUSH)
 zpush:connect(push_channel)
 assert(zpush, '[Error] log push channel init failed.')
 -- reload print
@@ -351,23 +344,14 @@ end
 
 
 -- main loop
-local webserver_request = function (zsock, data)
+local webserver_request = function (sock, revents)
   local disconnect = config.disconnect
   local req, path
-
-  -- for test 
-  if is_testing then
-    -- zsock is fake conn, data is nil
-    local conn = zsock
-    req = conn:recv()
-
-  else
-    -- Get a message from the webserver, if have no, block to wait
-    --req = webserver_conn:recv()
-    -- update the latest request object to global request reference
-    req = cmsgpack.unpack(data)
-    
-  end
+  
+  -- Get a message from the webserver, if have no, block to wait
+  local data = sock:recv()
+  -- update the latest request object to global request reference
+  req = cmsgpack.unpack(data)
 
   if req and req.meta then
     _G['req'] = req
@@ -413,11 +397,10 @@ local webserver_request = function (zsock, data)
   end
 end
 
--- data is a table
--- {
---    cmd = 'clear_view_cache'
--- }
-local cmd_dispatcher = function (sub_sock, data)
+-- data is a string, such as
+--   '_clear_view_cache_'
+local cmd_dispatcher = function (sock, revents)
+  local data = ch_sub:recv()
   print('in cmd_dispatcher. cmd is:', data)
   local dispatcher = config.commandDispatcher
   if data == '_cmd_clear_view_cache_' then
@@ -457,39 +440,45 @@ local function run(config)
     print('Enter main loop.')
     assert(config.pull_addr, 'missing pull_addr in settings.lua')
     assert(config.pub_addr, 'missing pub_addr in settings.lua')
-    -- create pull and pub channels
-    local zpull = ctx:pull(webserver_request)
-    zpull:connect(config.pull_addr)
 
-    local zpub = ctx:pub()
+    -- create pull and pub channels
+    local zpull = ctx:socket(zmq.PULL)
+    zpull:connect(config.pull_addr)
+    local zpub = ctx:socket(zmq.PUB)
     zpub:connect(config.pub_addr)
 
     bamboo.ch_recv = zpull
     bamboo.ch_send = zpub
     print('ch_recv', bamboo.ch_recv)
     print('ch_send', bamboo.ch_send)
-    
-    
+   
+    poller:add(zpull, zmq.POLLIN, webserver_request)
+    -- add the main lgserver request to poll
+    --     -- lgserver_conn.channel_req is the socket pull from lgserver
+    --         poller:add(lgserver_conn.channel_req, zmq.POLLIN, lgserver_request)
+    --
+
+
+
     -- if set cmd channel, create it
-    if bamboo.config.cmd_sub_addr 
-    and bamboo.config.cmd_push_addr
-    then
-      print('have pub and sub addr.')
-      local cmd_push = ctx:push()
-      cmd_push:connect(bamboo.config.cmd_push_addr)
-      bamboo.ch_cmd_push = cmd_push
-    
-      local cmd_sub = ctx:sub(cmd_dispatcher)
-      cmd_sub:sub("")
+    if bamboo.config.cmd_sub_addr then
+      print('have cmd sub addr.')
+      local cmd_sub = ctx:socket(zmq.SUB)
+      cmd_sub:setopt(zmq.SUBSCRIBE, "")
       cmd_sub:connect(bamboo.config.cmd_sub_addr)
       bamboo.ch_cmd_sub = cmd_sub
-
-      --fptable(cmd_pub)
-      --fptable(cmd_sub)
       
+      poller:add(cmd_sub, zmq.POLLIN, cmd_dispatcher)
     end
-    -- libev default main loop
-    loop:loop()
+    if  bamboo.config.cmd_push_addr then
+      print('have cmd push addr.')
+      local cmd_push = ctx:socket(zmq.PUSH)
+      cmd_push:connect(bamboo.config.cmd_push_addr)
+      bamboo.ch_cmd_push = cmd_push
+    end
+
+    print('Enter polling....')
+    poller:start()
     print('Bamboo main loop aborted!')
   end
   
