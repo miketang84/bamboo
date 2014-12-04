@@ -16,16 +16,15 @@ local normalizePath = require('lglib.path').normalize
 
 local cmsgpack = require 'cmsgpack'
 
-local zmq = require'bamboo.lib.zmqev'
-local ev = require'ev'
-local loop = ev.Loop.default
-bamboo.internal.loop = loop
+require 'zmq.poller'
+local poller = zmq.poller(128)
+bamboo.poller = poller
 
-local ctx = zmq.init(loop, 1)
-bamboo.ctx = ctx;
-bamboo.getZmqContext = function ()
-    return bamboo.ctx;
-end
+-- local ctx = zmq.init(loop, 1)
+-- bamboo.ctx = ctx;
+-- bamboo.getZmqContext = function ()
+--    return bamboo.ctx;
+-- end
 
 
 signal.signal("SIGTERM", function (...)
