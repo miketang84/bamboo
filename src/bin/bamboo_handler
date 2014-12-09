@@ -19,7 +19,6 @@ local cmsgpack = require 'cmsgpack'
 require 'zmq'
 local ctx = zmq.init(1)
 
-
 require 'zmq.poller'
 local poller = zmq.poller(128)
 bamboo.poller = poller
