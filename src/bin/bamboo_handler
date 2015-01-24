@@ -443,7 +443,8 @@ local function run(config)
     -- create pull and pub channels
     local zpull = ctx:socket(zmq.PULL)
     zpull:connect(config.pull_addr)
-    local zpub = ctx:socket(zmq.PUB)
+--    local zpub = ctx:socket(zmq.PUB)
+    local zpub = ctx:socket(zmq.PUSH)
     zpub:connect(config.pub_addr)
 
     bamboo.ch_recv = zpull
