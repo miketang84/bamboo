@@ -105,7 +105,7 @@ Prototype = Object:extend {
 Text = Prototype:extend {
 	init = function(self)
 			   self.template = table.copy(self.template)
-			   self.template.widget = [[<input type="text" id="$id" class="$class" name="$field" $attr value="$value"/>]]
+			   self.template.widget = [[<input type="text" id="$id" class="$class" name="$field" $attr value="$value" />]]
 			   return self
 		   end,
 }

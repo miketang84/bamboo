@@ -1,0 +1,249 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+	"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+
+<head>
+<title>model.md</title>
+
+</head>
+
+<body>
+
+<h1> </h1>
+
+<p>In many cases, web applications need to interact with databases, traditionally, we use SQL sentences. But in bamboo, we use model to do the interaction, which increases the robustness.  </p>
+
+<h1>Configuring the database</h1>
+
+<p>In settings.lua, WHICH_DB tells bamboo which database of redis you want to use. Defaultly, it is 0. <br />
+If you want to use datebase 10, just write <code>WHICH_DB = 10</code>.  </p>
+
+<h1>Your first model</h1>
+
+<p>Go to your project direction, then <code>cd models</code>, run <code>bamboo createmodel Mymodel</code>, you will find a file nemed <code>mymodel.lua</code> is generated like below.  </p>
+
+<pre><code>module(..., package.seeall)
+
+local Model = require 'bamboo.model'
+
+local Mymodel = Model:extend {
+__tag = 'Bamboo.Model.Mymodel';
+__name = 'Mymodel';
+__desc = 'Generitic Mymodel definition';
+__indexfd = 'name',
+__fields = { 
+    ['name'] = {},  
+
+};  
+
+init = function (self, t)
+    if not t then return self end 
+
+    self.name = t.name
+
+    return self
+end;
+
+}
+
+return Mymodel
+</code></pre>
+
+<p><code>local Mymodel = Model:extend{...}</code> means Mymodel inherit from Model, the details of this oop feature is shown in Appendix A. <code>__tag</code> shows the inheriting order of Mymodel, <code>__name</code>, <code>__desc</code> shows the name and some description. <code>__indexfd</code> indicates the index field used by <code>getIdByIndex</code> and <code>getByIndex</code>(Pay attention, a field is set to <code>__indexfd</code> means the value of this field must be unique). <code>__fields</code> is a table cantains the field information of this model, <code>['name'] = {}</code> means field's name is 'name', <code>{}</code> is a table containing information about field <code>name</code> called FDT short for Field Describe Table. <code>init</code> function is like the a constructor. <br />
+We want to add some fields, so we edit <code>__fields</code> like this:</p>
+
+<pre><code>__fields = { 
+    ['name'] = {},  
+    ['age'] = {},
+    ['gender'] = {},
+};
+</code></pre>
+
+<p>Note: Each model has a primary key <code>id</code> auto-incremented.</p>
+
+<h1>Use the model</h1>
+
+<p>To use this model, open <code>app/handler_entry.lua</code>, and add following sentences.  </p>
+
+<pre><code>Mymodel = require 'models.mymodel'
+registerModel(Mymodel)
+</code></pre>
+
+<p>Note: In each module using Mymodel, <code>Mymodel = require 'models.mymodel'</code> is required. <br />
+To use Mymodel to create an instance is like this: <code>inst = Mymodel{name='Young'}</code>. Then we can save it to the database by <code>inst:save()</code>, update it by <code>inst:update('gender', 'male')</code>. To delete the instance from database, use <code>inst:del()</code>.
+To get this instance from database, just use <code>inst_got = Mymodel:getByIndex('Young')</code>, then we get this instance. 
+More model and instance methods are shown at the end of this file.  </p>
+
+<h1>Foreign field</h1>
+
+<p>In many cases, a model has a field linking to another instance. For example, a student model has a field <code>school</code> linking to a school model, on the other hand, the school model has a field <code>students</code> linking to the student model, they should be written in bamboo like this:  </p>
+
+<pre><code>Student = Model:extend {
+    ...
+    __fields = {
+        ...
+        ['school'] = {foreign='School', st='ONE'},
+        ...
+    },
+    ...
+}
+
+School = Model:extend {
+    ...
+    __fields = {
+        ...
+        ['students'] = {foreign='Student', st='MANY'},
+        ...
+    },
+    ...
+}
+</code></pre>
+
+<p>As we see, the FDT of <code>Student</code>'s field <code>school</code> tells bamboo that this field is a foreign field linking to the <code>School</code> model, <code>st='ONE'</code> means a school instance is linked to a student instance. <code>st='MANY'</code> in the FDT of <code>School</code>'s field <code>students</code> means many student instances are linked to a school instance. <br />
+Suppose that <code>stu_inst</code> is an instance of <code>Student</code>, <code>sch_inst</code> is an instance of <code>School</code>, you can add instance to a foreign field by <code>stu_inst:addForeign('school', sch_inst)</code> and <code>sch_inst:addForeign('students', stu_inst)</code>, delete by <code>stu_inst:delForeign('school', sch_inst)</code> and <code>sch_inst:delForeign('students', stu_inst)</code>. <br />
+To get foreign instances, use <code>sch_inst_got = stu_inst:getForeign('school')</code>. Note that for <code>st='MANY'</code> condition, <code>sch_inst:getForeign('students')</code> returns a QuerySet(more information in Appendix A) of instances.</p>
+
+<h1>Query</h1>
+
+<p>To get instances from database, you can use <code>model:getById(id)</code>, which is the basic function. Also, you can use <code>model:getByIndex(index)</code>, <code>model:all(is_rev)</code>, <code>model:filter(query, is_rev, starti, length, dir)</code>, those functions all call <code>model:getById(id)</code>. <br />
+To query from database, you can use <code>model:get(query, is_rev, starti, length, dir)</code> or <code>model:filter(query, is_rev, starti, length, dir)</code>, where <code>query</code> is a table contains the query parameters. For example, to get the instances of <code>Mymodel</code> whose <code>gender</code> equals <code>male</code> and <code>age</code> is greater than 20, you can use <code>insts = Mymodel:filter({gender='male', age=gt(20)})</code>, <code>insts</code> is what you want.  </p>
+
+<p>Note: <code>query</code> is not available for field <code>id</code>.</p>
+
+<h1>API</h1>
+
+<p>Class methods can be used by classes inheriting from Model.
+Instance methods can be used by the instances of classes inheriting from Model.</p>
+
+<h2>Class methods</h2>
+
+<h3><code>model_obj:getIdByIndex (index)</code></h3>
+
+<p>Return the id of instance whose index field equals <code>index</code>. <br />
+Index field is declared by <code>model_obj.__indexfd</code>. If undeclared, it is the id field.  </p>
+
+<h3><code>model_obj:getIndexById (id)</code></h3>
+
+<p>Return the <code>index</code> of instance whose id equals <code>id</code>. <br />
+Index field is declared by <code>model_obj.__indexfd</code>. If undeclared, it is the id field.  </p>
+
+<h3><code>model_obj:getById (id)</code></h3>
+
+<p>Return the instance whose id equals <code>id</code>.</p>
+
+<h3><code>model_obj:getByIndex (index)</code></h3>
+
+<p>Return the instance whose index field equals <code>index</code>.</p>
+
+<h3><code>model_obj:allIds (is_rev)</code></h3>
+
+<p>Return all instance ids. Reversed when <code>is_rev</code> equals 'rev'.  </p>
+
+<h3><code>model_obj:sliceIds (start, stop, is_rev)</code></h3>
+
+<p>Return a slice of instance ids from <code>start</code> to <code>stop</code>. Reversed when <code>is_rev</code> equals 'rev'. <br />
+<code>start</code> is optional, can be positive bigger than 0 or negetive. <br />
+<code>stop</code> is optional, can be positive bigger than 'start' or negetive.</p>
+
+<h3><code>model_obj:all (is_rev)</code></h3>
+
+<p>Return all instances. Reversed when <code>is_rev</code> equals 'rev'.</p>
+
+<h3><code>model_obj:slice (start, stop, is_rev)</code></h3>
+
+<p>Return a slice of instances from <code>start</code> to <code>stop</code>. Reversed when <code>is_rev</code> equals 'rev'. <br />
+<code>start</code> is optional, can be positive bigger than 0 or negetive. <br />
+<code>stop</code> is optional, can be positive bigger than <code>start</code> or negetive.</p>
+
+<h3><code>model_obj:numbers ()</code></h3>
+
+<p>Return the number of all instances of <code>model_obj</code>.</p>
+
+<h3><code>model_obj:get (query, is_rev)</code></h3>
+
+<p>Return the first(last when <code>is_rev</code> equals 'rev') instance which matches the condition <em>query</em>. </p>
+
+<h3><code>model_obj:filter (query, is_rev, starti, length, dir)</code></h3>
+
+<p>Return instances which matches the condition <code>query</code>. Reversed when <code>is_rev</code> equals 'rev'. <br />
+<em>starti</em> is optional, means the beginning of query range. <br />
+<code>length</code> is optional, means the range length of query range. <br />
+<code>dir</code> is optional, 1 means query from <code>starti</code> to <code>starti</code>+<code>length</code>, -1 means query from <code>starti</code> to <code>starti</code>-<code>length</code>.</p>
+
+<h3><code>model_obj:setCustom (key, val, st)</code></h3>
+
+<p>Store a key-value pair to redis. <br />
+<code>key</code>, <code>val</code> mean the key and value of the pair.
+<code>st</code> means the storage type of value. If <code>st</code> equals 'LIST', <code>val</code> should be a LIST, else, <code>val</code> should be a string.</p>
+
+<h3><code>model_obj:getCustom (key, st)</code></h3>
+
+<p>Return the value of <code>key</code> set by <code>model_obj:setCustom (key, val, st)</code>. <br />
+<code>st</code> means the storage type of value. If value is a LIST, <code>st</code> should equal 'LIST'.</p>
+
+<h3><code>model_obj:delCustom (key)</code></h3>
+
+<p>Delete the key-value pair set by <code>model_obj:setCustom (key, val, st)</code>.  </p>
+
+<h3><code>model_obj:updateCustom (key, val)</code></h3>
+
+<p>Update the value of <code>key</code> to <code>val</code> set by <code>model_obj:setCustom (key, val, st)</code>.   </p>
+
+<h3><code>model_obj:validate (params)</code></h3>
+
+<p>Return true when <code>params</code> is valid, else, return false, err_msg. <br />
+<code>params</code> is a key-value table, usually generated by <code>Form:parse(req)</code>. <br />
+<code>err\_msg</code> is a table contains the error messages.</p>
+
+<p>====================================================================== </p>
+
+<h2>Instance methods</h2>
+
+<h3><code>instance_obj:save ()</code></h3>
+
+<p>Save <code>instance_obj</code> to database. <br />
+Return <code>instance_obj</code>.</p>
+
+<h3><code>instance_obj:update (field, new_value)</code></h3>
+
+<p>Update <code>field</code> of <code>instance_obj</code> to new_value. <br />
+Return <code>instance_obj</code>. <br />
+Note： This function cannot be used to foreign fields.</p>
+
+<h3><code>instance_obj:del ()</code></h3>
+
+<p>Delete <code>instance_obj</code> from database. <br />
+Note: To delete an instance from database, you should firstly get the instance from database.</p>
+
+<h3><code>instance_obj:addForeign(field, new_obj)</code></h3>
+
+<p>Add foreign instance <code>new_obj</code> to <code>field</code>. <code>instance_obj.__fields.field</code> must contains foreign attrs. <br />
+Return <code>instance_obj</code>. <br />
+Note: Foreign field only save the id of foreign instance, to input the instance increase the reliability.</p>
+
+<h3><code>instance_obj:getForeign (field, start, stop, is_rev)</code></h3>
+
+<p>Return instances in <code>field</code> of <code>instance_obj</code> from 'start' to <code>stop</code>. Reversed when <code>is_rev</code> equals 'rev'.</p>
+
+<h3><code>instance_obj:delForeign (field, fr_obj)</code></h3>
+
+<p>Delete <code>fr_obj</code> from <code>field</code> of <code>instance_obj</code>.
+Return <code>instance_obj</code>.</p>
+
+<h3><code>instance_obj:numForeign (field)</code></h3>
+
+<p>Return the number of foreign instances in <code>field</code> of <code>instance_obj</code>.</p>
+
+<h3><code>instance_obj:toHtml(params)</code></h3>
+
+<p>Return the html output of <code>instance_obj</code>. <br />
+<code>params</code> is a parameter table, available keys contain <code>field</code>, <code>filters</code>, <code>attached</code>, <code>format</code>. <br />
+<code>field</code> means which field you want to generate html element, all fields when <code>nil</code>. <br />
+<code>filters</code> means which fields you want to generate html elements, all fields when <code>nil</code>. <br />
+<code>attached</code> means extra information adding to field describe table. <br />
+<code>format</code> means how the html elements will be generated, such as <code>'$label: $widget$help'</code></p>
+
+</body>
+</html>

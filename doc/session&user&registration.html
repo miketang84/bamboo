@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+	"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+
+<head>
+<title>session&user&registration.md</title>
+
+</head>
+
+<body>
+
+<h1>Session&amp;User&amp;Registration</h1>
+
+<h2>Session</h2>
+
+<p>To use session, firstly you should require the module <code>local Session = require 'bamboo.session'</code>. <br />
+To store the data, use <code>Session:setKey(key, value)</code>. <br />
+To get the data, use <code>value = Session:getKey(key)</code>. <br />
+Each session has a expiration time, you can add <code>expiration = 1800</code> in <code>settings.lua</code> to set the expiration time to 30 minutes.</p>
+
+<h2>User &amp; Registration</h2>
+
+<p>User is a special model, bamboo provides a User model, and you can use it by <code>local User = require 'bamboo.models.user'</code>. Also, you can define your own model by extending User model. <br />
+To register the User model, you'd better user <code>bamboo.registerMainUser(User)</code> instead <code>bamboo.registerModel(User)</code>. Only in this way can you use the <a href="https://github.com/littlehaker/bamboo_admin">bamboo admin interface</a>. <br />
+<code>User.encrypt</code> is a function to describe how the password is encrypted, by default md5. This function is used when generating the user instance and authenticating.  </p>
+
+<h3>Login &amp; Logout</h3>
+
+<p>To login, use <code>User:login{username='username', password='password'}</code>. Always, <code>username</code> and <code>password</code> will be submitted, so we can use <code>User:login(Form:parse(req))</code> to handle this. <br />
+To logout, just use <code>User:logout()</code>. <br />
+Note: In fact, the information of logined or not is stored to session.</p>
+
+<h3>Registration</h3>
+
+<p>To register, use <code>User:register{username='username', password='password'}</code>. Always, <code>username</code> and <code>password</code> will be submitted, so we can use <code>User:register(Form:parse(req))</code> to handle this.  </p>
+
+</body>
+</html>
